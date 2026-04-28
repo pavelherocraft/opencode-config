@@ -113,7 +113,7 @@ Simple bug fixes use the straightforward pipeline with triage, implementation, c
 
 ### BUGFIX DEEP
 
-bugfix-triage -> plan-bug -> execute-bug -> dev-reviewer -> rework -> utility
+bugfix-triage -> plan-bug -> execute-bug -> dev-reviewer -> rework -> consistency-checker -> utility
 
 Complex bug fixes include planning, execution, review, and rework cycles.
 
@@ -128,7 +128,7 @@ Simple development tasks go from implementation to consistency check to validati
 ### DEV COMPLEX
 
 
-dev-planner -> dev-professor -> dev-reviewer -> rework -> utility
+dev-planner -> dev-professor -> dev-reviewer -> rework -> consistency-checker -> utility
 
 
 Complex development tasks include planning, guidance, review, and rework.
