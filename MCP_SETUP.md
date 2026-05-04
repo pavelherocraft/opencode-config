@@ -549,6 +549,146 @@ Some agents have specific permission configurations that differ from defaults:
 
 > **Important:** `devops-reviewer` has `bash: allow` specifically for **read-only git operations** (git status, git log, git diff, git show). This is required to verify commits and pushes without modifying the repository.
 
+### Agent Models Reference
+
+| Agent | Model | Notes |
+|-------|-------|-------|
+| **orchestrator** | `alibaba-coding-plan/glm-5` | Primary agent for operational tasks |
+| **plankestrator** | `alibaba-coding-plan/glm-5` | Primary agent for planning |
+| **worker** | `alibaba-coding-plan/qwen3.6-plus` | Simple development tasks |
+| **devops-reviewer** | `alibaba-coding-plan/qwen3.6-plus` | DevOps verification |
+| **devops-agent** | `minimax-coding-plan/MiniMax-M2.7` | DevOps execution |
+| **devops-readonly** | `minimax-coding-plan/MiniMax-M2.7` | Read-only operations |
+| **devops** | `minimax-coding-plan/MiniMax-M2.7` | DevOps tasks |
+| **utility** | `minimax-coding-plan/MiniMax-M2.7` | Validation tools |
+| **bugfix-triage** | `alibaba-coding-plan/qwen3.6-plus` | Bug analysis |
+| **plan-bug** | `alibaba-coding-plan/qwen3.6-plus` | Bug fix planning |
+| **dev-planner** | `alibaba-coding-plan/qwen3.6-plus` | Development planning |
+| **docs-writer** | `alibaba-coding-plan/glm-5` | Documentation |
+| **mcp-github** | `minimax-coding-plan/MiniMax-M2.7` | GitHub operations |
+| **mcp-read** | `minimax-coding-plan/MiniMax-M2.7` | Web reading |
+| **mcp-search** | `minimax-coding-plan/MiniMax-M2.7` | Web search |
+| **summarizer** | `minimax-coding-plan/MiniMax-M2.7` | Summarization |
+| **dev-reviewer** | `kimi-for-coding/k2p6` | Code review |
+| **research-reviewer** | `kimi-for-coding/k2p6` | Research review |
+| **plan-reviewer-complex** | `kimi-for-coding/k2p6` | Complex plan review |
+| **dev-professor** | `zai-coding-plan/glm-5.1` | Development guidance |
+| **execute-bug** | `zai-coding-plan/glm-5.1` | Bug fix execution |
+| **rework** | `zai-coding-plan/glm-5.1` | Rework on feedback |
+| **plan-writer-complex** | `zai-coding-plan/glm-5.1` | Complex planning |
+| **research-writer-complex** | `zai-coding-plan/glm-5.1` | Complex research |
+
+> **Note:** Models must be configured in **both** locations:
+> 1. Agent `.md` file frontmatter (`model:` field) — **takes priority**
+> 2. `opencode.json` agent config (`model` field) — fallback
+
+### devops-reviewer Rules
+
+**Purpose:** Validate DevOps operations after devops-agent execution.
+
+**Permissions:**
+```yaml
+permission:
+  edit: deny      # Cannot modify files
+  write: deny     # Cannot create files  
+  read: allow     # Can read files and logs
+  bash: allow     # Can run READ-ONLY git commands
+```
+
+**Allowed bash commands (read-only):**
+| Command | Purpose |
+|---------|---------|
+| `git status` | Verify clean working tree |
+| `git log -N` | Check recent commits |
+| `git diff` | Verify staged changes |
+| `git show` | Review commit content |
+| `git branch` | List branches |
+| `git remote -v` | Verify remote config |
+| `ls`, `cat` | Verify created files |
+
+**Forbidden bash commands:**
+| Command | Reason |
+|---------|--------|
+| `git commit` | Would modify repository |
+| `git push` | Would modify remote |
+| `git reset` | Would modify history |
+| `git checkout` | Would change branch |
+| `git merge` | Would modify history |
+| Any write command | Reviewer is read-only |
+
+**Verification checklist:**
+1. Check git status — should be clean after commit
+2. Check git log — commit should exist with correct message
+3. Check git diff — no unexpected staged changes
+4. Check remote sync — no unpushed commits (if applicable)
+5. Verify created files — expected files should exist
+6. Check exit codes — all commands should return 0
+7. Review output logs — no errors or warnings
+
+### Serena Usage Rules (MAXIMUM PRIORITY)
+
+**⚠️ MANDATORY: Serena tools are PRIMARY for all code operations**
+
+**Tool Priority Matrix:**
+
+| Task | PRIMARY (Serena) | SECONDARY (Built-in) | Use Built-in ONLY When |
+|------|------------------|---------------------|------------------------|
+| Find symbol by name | `serena_find_symbol` | `grep` | Serena fails or pattern unknown |
+| Find all references | `serena_find_referencing_symbols` | `grep` | Serena fails |
+| File structure overview | `serena_get_symbols_overview` | `read` (entire file) | Serena fails |
+| Rename across files | `serena_rename_symbol` | `edit` (regex replace) | Serena fails |
+| Delete unused code | `serena_safe_delete_symbol` | `edit` | Serena fails |
+| Replace function body | `serena_replace_symbol_body` | `edit` | Serena fails |
+| Insert after symbol | `serena_insert_after_symbol` | `edit` (line numbers) | Serena fails |
+
+**Permission Configuration:**
+
+```json
+{
+  "permission": {
+    "serena_find_symbol": "allow",
+    "serena_find_referencing_symbols": "allow",
+    "serena_get_symbols_overview": "allow",
+    "serena_rename_symbol": "allow",
+    "serena_safe_delete_symbol": "allow",
+    "serena_replace_symbol_body": "allow",
+    "serena_insert_after_symbol": "allow",
+    "grep": "ask",
+    "edit": "ask",
+    "read": { "*.py": "ask", "*.ts": "ask", "*.js": "ask", "*": "allow" }
+  }
+}
+```
+
+**Behavior:**
+- Serena tools → **auto-approved** → agent can use immediately
+- Built-in tools (grep, edit, read for code files) → **asks user** → nudges agent to try Serena first
+
+**AGENTS.md Integration:**
+
+Add this section to your project's `AGENTS.md`:
+
+```markdown
+## Serena MCP Rules
+
+### ⚠️ MANDATORY: Serena tools are PRIMARY for code operations
+
+**DO NOT use built-in tools (grep, read, glob, edit) for:**
+- Finding symbols/classes/functions → USE `serena_find_symbol`
+- Finding references/usages → USE `serena_find_referencing_symbols`
+- Understanding file structure → USE `serena_get_symbols_overview`
+- Renaming across files → USE `serena_rename_symbol`
+- Deleting code → USE `serena_safe_delete_symbol`
+- Editing function/class body → USE `serena_replace_symbol_body`
+- Inserting code → USE `serena_insert_after_symbol`
+
+**Built-in tools are SECONDARY - use ONLY when:**
+- Serena tool fails or is unavailable
+- Searching for unknown text patterns (not symbol names)
+- Reading specific file content at known locations
+- Simple single-line edits where symbol boundaries are unclear
+```
+
 ### orchestrator.md Content Summary
 
 ```markdown
