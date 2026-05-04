@@ -27,40 +27,6 @@ Always use the zread MCP tools for working with GitHub repositories. Do NOT use 
 - Use read_file to read the complete content of a specific file in a repository
 - When you ask about a library, framework, or open source project — use zread tools first
 
-### Serena MCP Rules
-
-### ⚠️ MANDATORY: Serena tools are PRIMARY for code operations
-
-**DO NOT use built-in tools (grep, read, glob, edit) for:**
-- Finding symbols/classes/functions → USE `serena_find_symbol`
-- Finding references/usages → USE `serena_find_referencing_symbols`
-- Understanding file structure → USE `serena_get_symbols_overview`
-- Renaming across files → USE `serena_rename_symbol`
-- Deleting code → USE `serena_safe_delete_symbol`
-- Editing function/class body → USE `serena_replace_symbol_body`
-- Inserting code → USE `serena_insert_after_symbol`
-
-**Built-in tools are SECONDARY - use ONLY when:**
-- Serena tool fails or is unavailable
-- Searching for unknown text patterns (not symbol names)
-- Reading specific file content at known locations
-- Simple single-line edits where symbol boundaries are unclear
-
-### Tool Priority Table
-
-| Task | PRIMARY (Serena) | SECONDARY (Built-in) |
-|------|------------------|---------------------|
-| Find symbol by name | `serena_find_symbol` | grep (fallback) |
-| Find all usages | `serena_find_referencing_symbols` | grep (fallback) |
-| File structure overview | `serena_get_symbols_overview` | read (fallback) |
-| Rename symbol | `serena_rename_symbol` | edit (fallback) |
-| Delete symbol | `serena_safe_delete_symbol` | edit (fallback) |
-| Replace symbol body | `serena_replace_symbol_body` | edit (fallback) |
-| Insert after symbol | `serena_insert_after_symbol` | edit (fallback) |
-| Text pattern search | grep | — |
-| Read file content | read | — |
-| Find files by name | glob | — |
-
 ## Architecture Requirements
 
 All architecture requirements are defined in ARCHITECTURE.md in the project root.
@@ -149,7 +115,7 @@ Simple bug fixes use the straightforward pipeline with triage, implementation, a
 
 bugfix-triage -> plan-bug -> execute-bug -> dev-reviewer -> rework -> consistency-checker -> utility
 
-Complex bug fixes include planning, execution, review, rework cycles, and consistency validation.
+Complex bug fixes include planning, execution, review, and rework cycles.
 
 ### DEV SIMPLE
 
@@ -165,7 +131,7 @@ Simple development tasks go from implementation to validation.
 dev-planner -> dev-professor -> dev-reviewer -> rework -> consistency-checker -> utility
 
 
-Complex development tasks include planning, guidance, review, rework, and consistency validation.
+Complex development tasks include planning, guidance, review, and rework.
 
 ### DEVOPS
 
