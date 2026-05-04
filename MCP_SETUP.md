@@ -533,6 +533,22 @@ Step 0 — IDENTITY PROBE (MANDATORY FIRST STEP):
 
 > **Note:** The table above shows primary and key auxiliary agents. All agents from the routing tables in Section 3 must have corresponding `.md` files.
 
+### Key Agent Permissions
+
+Some agents have specific permission configurations that differ from defaults:
+
+| Agent | Permission | Reason |
+|-------|------------|--------|
+| orchestrator | `edit: deny`, `write: deny`, `bash: deny` | Primary agent only routes tasks, doesn't execute |
+| plankestrator | `edit: deny`, `write: deny`, `bash: deny` | Primary agent only plans, doesn't execute |
+| devops-agent | `bash: allow` | Executes commands, creates files |
+| devops-reviewer | `bash: allow`, `read: allow`, `edit: deny`, `write: deny` | **Reviewers need bash for git read-only commands** (`git status`, `git log`, `git diff`) |
+| worker | `edit: allow`, `write: allow`, `bash: allow` | Implements code changes |
+| utility | `bash: allow` | Runs syntax checks, formatting tools |
+| devops-readonly | `bash: deny`, `read: allow` | Pure read-only operations |
+
+> **Important:** `devops-reviewer` has `bash: allow` specifically for **read-only git operations** (git status, git log, git diff, git show). This is required to verify commits and pushes without modifying the repository.
+
 ### orchestrator.md Content Summary
 
 ```markdown
@@ -1448,3 +1464,33 @@ This document provides complete instructions for replicating the OpenCode infras
 For detailed plugin documentation, see `PLUGIN.md`.
 For architecture requirements, see `ARCHITECTURE.md`.
 For project rules, see `AGENTS.md`.
+
+---
+
+## Recent Updates (2026-05-04)
+
+### Added
+- **Serena MCP Server** — Complete integration with OpenCode
+- **Serena Language Configuration** — Support for 40+ languages
+- **Serena MCP Rules** in AGENTS.md — Tool priority guidelines
+- **Key Agent Permissions** section — Permission configurations for reviewers
+
+### Changed
+- **devops-reviewer** — `bash: deny` → `bash: allow` (for git read-only operations)
+- **worker** — Model changed to `alibaba-coding-plan/qwen3.6-plus`
+- **devops-reviewer** — Model changed to `alibaba-coding-plan/qwen3.6-plus`
+- **orchestrator permission** — Added `serena_*: allow` for Serena tools
+- **orchestrator prompt** — Added Tool Priority section
+
+### Fixed
+- **Workflow Enforcement Plugin** — Routing fallback for agent detection
+- **TypeScript errors** — Type casts for plugin validation
+- **JSON field inconsistency** — Removed `state` and `pipeline_step` from orchestrator prompt
+
+### Deployment Checklist Update
+
+After pulling latest changes, ensure:
+1. Update agent `.md` files with correct models (worker, devops-reviewer)
+2. Update `.serena/project.yml` with languages for your project
+3. Review permission changes in `opencode.json`
+4. Test Serena integration with `/mcps` command
