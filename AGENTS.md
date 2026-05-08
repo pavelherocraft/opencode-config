@@ -1,4 +1,4 @@
-# Project Rules
+﻿# Project Rules
 
 ## MCP Tools Rules
 
@@ -60,6 +60,44 @@ Always use the zread MCP tools for working with GitHub repositories. Do NOT use 
 | Text pattern search | grep | — |
 | Read file content | read | — |
 | Find files by name | glob | — |
+
+## Unity MCP Rules
+
+### ⚠ MANDATORY: Unity operations MUST use Unity MCP
+
+**For Unity projects, ALWAYS use official Unity MCP tools (from `com.unity.ai.assistant` package) instead of built-in tools:**
+
+| Task | Unity MCP Tool | Do NOT Use |
+|------|----------------|------------|
+| Create/Find/Modify/Delete GameObjects | `Unity.ManageGameObject` | edit (manual) |
+| Load/Save/Create scenes, query hierarchy | `Unity.ManageScene` | bash (manual) |
+| Asset management operations | `Unity.ManageAsset` | bash (manual) |
+| Create C# scripts | `Unity.CreateScript` | write (manual) |
+| Delete C# scripts | `Unity.DeleteScript` | bash (manual) |
+| CRUD operations on C# scripts | `Unity.ManageScript` | edit (manual) |
+| Advanced script editing | `Unity.ScriptApplyEdits` | edit (manual) |
+| Validate C# scripts | `Unity.ValidateScript` | bash (manual) |
+| Apply text edits to C# scripts | `Unity.ApplyTextEdits` | edit (manual) |
+| CRUD operations on shader files | `Unity.ManageShader` | edit (manual) |
+| Read/clear Unity Editor console logs | `Unity.ReadConsole` | read (log files) |
+| Compile and execute C# scripts | `Unity.RunCommand` | bash (manual) |
+| Import external models/assets | `Unity.ImportExternalModel` | bash (manual) |
+| Execute/list/refresh menu items | `Unity.ManageMenuItem` | bash (manual) |
+| Control/query Editor state, Tags, Layers | `Unity.ManageEditor` | edit (manual) |
+| Get SHA256 for C# scripts | `Unity.GetSHA` | bash (manual) |
+| List and read project files | `Unity.ResourceTools` | read/glob (manual) |
+
+**Built-in tools for Unity projects - use ONLY when:**
+- Unity MCP is unavailable or not connected
+- Unity Editor is not running
+- Non-Unity files (README, config, etc.)
+
+**Prerequisites:**
+- Unity 6 (6000.0) or later
+- `com.unity.ai.assistant` package installed via Unity Package Manager
+- Unity Editor must be running (Unity Bridge must show Running)
+- Relay binary at %USERPROFILE%\\.unity\\relay\\relay_win.exe
+- First-time connection must be approved in Unity Editor
 
 ## Architecture Requirements
 

@@ -1,4 +1,4 @@
-# Architecture Requirements
+﻿# Architecture Requirements
 
 This file is the single source of truth for the OpenCode dual-primary-agent architecture. All other files must be consistent with this document.
 
@@ -17,7 +17,7 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 | 7 | rework | Rework on feedback |
 | 8 | mcp-read | File reading |
 | 9 | utility | Syntax checking, formatting |
-| 10 | devops | DevOps tasks |
+| 10 | devops-agent | DevOps tasks |
 | 11 | bugfix-triage | Initial bug analysis |
 | 12 | plan-bug | Bug fix planning |
 | 13 | devops-agent | DevOps operations |
@@ -52,6 +52,36 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 | **Grand Total** | **29** | **31** |
 
 Note: 29 unique subagents + 2 primary agents = 31 unique agents total.
+## Subagent Models
+
+| Agent | Model |
+|-------|-------|
+| worker | alibaba-coding-plan/qwen3.6-plus |
+| bugfix-triage | alibaba-coding-plan/qwen3.6-plus |
+| bugfix | alibaba-coding-plan/qwen3.6-plus |
+| plan-bug | alibaba-coding-plan/qwen3.6-plus |
+| execute-bug | zai-coding-plan/glm-5.1 |
+| dev-planner | alibaba-coding-plan/qwen3.6-plus |
+| dev-professor | zai-coding-plan/glm-5.1 |
+| dev-reviewer | kimi-for-coding/k2p6 |
+| rework | zai-coding-plan/glm-5.1 |
+| consistency-checker | alibaba-coding-plan/qwen3.6-plus |
+| docs-writer | alibaba-coding-plan/glm-5 |
+| utility | minimax-coding-plan/MiniMax-M2.7 |
+| mcp-github | minimax-coding-plan/MiniMax-M2.7 |
+| mcp-read | minimax-coding-plan/MiniMax-M2.7 |
+| mcp-search | minimax-coding-plan/MiniMax-M2.7 |
+| summarizer | minimax-coding-plan/MiniMax-M2.7 |
+| devops-agent | alibaba-coding-plan/qwen3.6-plus |
+| devops-reviewer | alibaba-coding-plan/qwen3.6-plus |
+
+### Permission Notes
+
+| Agent | Special Permissions |
+|-------|-------------------|
+| devops-reviewer | `read: allow` in addition to `bash: allow` |
+| devops-agent | `bash: allow` only |
+
 
 ## 2. Pipelines
 

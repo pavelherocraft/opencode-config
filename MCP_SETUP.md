@@ -1,4 +1,4 @@
-# MCP Setup — OpenCode Infrastructure Documentation
+﻿# MCP Setup — OpenCode Infrastructure Documentation
 
 Complete guide for replicating the entire OpenCode infrastructure on a new machine or for a new project.
 
@@ -14,11 +14,12 @@ Complete guide for replicating the entire OpenCode infrastructure on a new machi
 8. [Agent Files](#8-agent-files)
 9. [MCP Servers](#9-mcp-servers)
 10. [Serena MCP Server](#10-serena-mcp-server)
-11. [Serena Language Configuration](#11-serena-language-configuration)
-12. [Step-by-Step Deployment Guide](#12-step-by-step-deployment-guide)
-13. [Troubleshooting](#13-troubleshooting)
-14. [File Locations Reference](#14-file-locations-reference)
-15. [Appendices](#appendices)
+11. [Unity MCP Server (Official)](#11-unity-mcp-server-official)
+12. [Serena Language Configuration](#12-serena-language-configuration)
+13. [Step-by-Step Deployment Guide](#13-step-by-step-deployment-guide)
+14. [Troubleshooting](#14-troubleshooting)
+15. [File Locations Reference](#15-file-locations-reference)
+16. [Appendices](#appendices)
 
 ---
 
@@ -30,7 +31,7 @@ OpenCode uses a **dual-primary-agent architecture** with MCP (Model Context Prot
 
 | Component | Count | Description |
 |-----------|-------|-------------|
-| **MCP Servers** | 4 | zread, webSearchPrime, webReader, Serena |
+| **MCP Servers** | 5 | zread, webSearchPrime, webReader, Serena, Unity |
 | **Primary Agents** | 2 | orchestrator, plankestrator |
 | **Subagents** | 29 | 20 for orchestrator, 9 for plankestrator |
 | **Pipelines** | 8 | BUGFIX (2), DEV (2), DEVOPS, DOCS, PLAN, RESEARCH |
@@ -333,7 +334,7 @@ Research workflows include writing and review.
 
 #### orchestrator Example
 
-```json
+``json
 {
   "agent": "orchestrator",
   "type": "BUGFIX",
@@ -348,7 +349,7 @@ Research workflows include writing and review.
 
 #### plankestrator Example
 
-```json
+``json
 {
   "agent": "plankestrator",
   "state": "CLASSIFY",
@@ -457,7 +458,7 @@ Errors:
 
 ### Configuration in opencode.json
 
-```json
+``json
 {
   "$schema": "https://opencode.ai/config.json",
   "plugins": ["./plugins/workflow-enforcement.ts"],
@@ -643,7 +644,7 @@ permission:
 
 **Permission Configuration:**
 
-```json
+``json
 {
   "permission": {
     "serena_find_symbol": "allow",
@@ -841,24 +842,24 @@ webSearchPrime_web_search_prime({
   search_query: "OpenCode MCP integration",
   location: "en"
 })
-
+`
 // Read URL
 webReader_webReader({
   url: "https://docs.example.com/api",
   return_format: "markdown"
 })
-
+`
 // GitHub repository
 zread_search_doc({
   repo_name: "vitejs/vite",
   query: "configuration options"
 })
-
+`
 zread_get_repo_structure({
   repo_name: "vitejs/vite",
   dir_path: "packages"
 })
-
+`
 zread_read_file({
   repo_name: "vitejs/vite",
   file_path: "package.json"
@@ -910,7 +911,7 @@ serena init -b JetBrains
 
 ### Configuration in opencode.json
 
-```json
+``json
 {
   "mcp": {
     "servers": {
@@ -983,7 +984,90 @@ Add this section to your project's `AGENTS.md`:
 
 ---
 
-## 11. Serena Language Configuration
+## 11. Unity MCP Server (Official)
+
+Unity MCP provides integration with Unity Editor for game development automation.
+
+### Installation
+
+1. **Requirements:**
+   - Unity 6 (6000.0) or later
+   - Unity Editor must be running
+
+2. **Install Unity Package:**
+   - Open Unity Editor
+   - Go to `Window > Package Manager`
+   - Click `+` → `Add package by name`
+   - Enter: `com.unity.ai.assistant`
+   - Click `Add`
+
+3. **Auto-install Relay Binary:**
+   - Start Unity Editor with the AI Assistant package
+   - Relay binary will be installed automatically to:
+     - Windows: `%USERPROFILE%\.unity\relay\relay_win.exe`
+     - macOS: `~/.unity/relay/relay_macos`
+     - Linux: `~/.unity/relay/relay_linux`
+
+4. **First-time Connection:**
+   - Open Unity Editor
+   - Go to `Edit > Project Settings > AI > Unity MCP`
+   - Click `Accept` to approve the connection
+
+### Configuration
+
+Add to `opencode.json`:
+
+```json
+"mcp": {
+  "unity": {
+    "type": "stdio",
+    "command": ["C:\\Users\\Admin\\.unity\\relay\\relay_win.exe"],
+    "args": ["--mcp"]
+  }
+}
+```
+
+For macOS/Linux, adjust the path accordingly.
+
+### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `Unity.ManageGameObject` | Create, find, modify, delete GameObjects |
+| `Unity.ManageScene` | Load, save, create scenes, query hierarchy |
+| `Unity.ManageAsset` | Asset management operations |
+| `Unity.CreateScript` | Create C# scripts |
+| `Unity.DeleteScript` | Delete C# scripts |
+| `Unity.ManageScript` | CRUD operations on C# scripts |
+| `Unity.ScriptApplyEdits` | Advanced script editing |
+| `Unity.ApplyTextEdits` | Apply text edits to C# scripts |
+| `Unity.ValidateScript` | Validate C# scripts |
+| `Unity.ManageShader` | CRUD operations on shader files |
+| `Unity.ReadConsole` | Read/clear Unity Editor console logs |
+| `Unity.RunCommand` | Compile and execute C# scripts |
+| `Unity.ImportExternalModel` | Import external models/assets |
+| `Unity.ManageMenuItem` | Execute/list/refresh menu items |
+| `Unity.ManageEditor` | Control/query Editor state, Tags, Layers |
+| `Unity.GetSHA` | Get SHA256 for C# scripts |
+| `Unity.ManageScriptCapabilities` | Manage script capabilities |
+| `Unity.ResourceTools` | List and read project files |
+
+### Usage Rules
+
+See `AGENTS.md` → "Unity MCP Rules" section for mandatory usage guidelines.
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Relay binary not found | Start Unity Editor with AI Assistant package installed |
+| Connection refused | Check Unity Editor is running, approve connection in Project Settings |
+| Tool not available | Verify `com.unity.ai.assistant` package is installed |
+| Permission denied | Run Unity Editor as administrator (Windows) or with sudo (Linux) |
+
+---
+
+## 12. Serena Language Configuration
 
 ### Project Configuration File
 
@@ -1037,7 +1121,7 @@ Location: `.serena/project.yml` in project root
 
 | Language | Serena Key | Notes |
 |----------|------------|-------|
-| JSON | `json` | Must explicitly enable; requires Node.js |
+| JSON | json` | Must explicitly enable; requires Node.js |
 | YAML | `yaml` | No additional setup |
 | TOML | `toml` | No additional setup |
 | Markdown | `markdown` | Must explicitly enable; for documentation-heavy projects |
@@ -1133,7 +1217,7 @@ languages:
 
 ---
 
-## 12. Step-by-Step Deployment Guide
+## 13. Step-by-Step Deployment Guide
 
 ### Prerequisites
 
@@ -1187,7 +1271,7 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\"
 
 Create or edit `~/.config/opencode/opencode.json`:
 
-```json
+``json
 {
   "$schema": "https://opencode.ai/config.json",
   "plugins": ["./plugins/workflow-enforcement.ts"],
@@ -1368,7 +1452,7 @@ Attempted Call: plan-writer-simple
 
 ---
 
-## 13. Troubleshooting
+## 14. Troubleshooting
 
 ### Plugin Not Loading
 
@@ -1442,7 +1526,7 @@ Attempted Call: plan-writer-simple
 
 ---
 
-## 14. File Locations Reference
+## 15. File Locations Reference
 
 ### Configuration Files
 
@@ -1525,7 +1609,7 @@ Select-String "(WORKFLOW VIOLATION|IDENTITY DRIFT|INVALID JSON|Workflow enforcem
 
 | Component | Count | Description |
 |-----------|-------|-------------|
-| MCP Servers | 4 | zread, webSearchPrime, webReader, Serena |
+| MCP Servers | 5 | zread, webSearchPrime, webReader, Serena, Unity |
 | Primary Agents | 2 | orchestrator, plankestrator |
 | Subagents (orchestrator) | 20 | For operational tasks |
 | Subagents (plankestrator) | 9 | For planning and research |
@@ -1596,10 +1680,11 @@ This document provides complete instructions for replicating the OpenCode infras
 4. **JSON Validation**: Required fields for each agent type
 5. **Workflow Enforcement Plugin**: 6 hooks for routing, identity, and validation
 6. **Identity Probes**: Verification mechanism for primary agents
-7. **MCP Servers**: zread, webSearchPrime, webReader, Serena
-8. **Serena**: IDE-level coding agent with 40+ language support
-9. **Deployment Guide**: Step-by-step instructions with checklist
-10. **Troubleshooting**: Common issues and solutions
+7. **MCP Servers**: zread, webSearchPrime, webReader, Serena, Unity
+8. **Unity MCP Server**: Official Unity Editor integration for game development automation
+9. **Serena**: IDE-level coding agent with 40+ language support
+10. **Deployment Guide**: Step-by-step instructions with checklist
+11. **Troubleshooting**: Common issues and solutions
 
 For detailed plugin documentation, see `PLUGIN.md`.
 For architecture requirements, see `ARCHITECTURE.md`.
