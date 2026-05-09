@@ -4,8 +4,7 @@ mode: subagent
 model: kimi-for-coding/k2p6
 temperature: 0.1
 permission:
-  edit: deny
-  write: allow
+  edit: allow
   bash: deny
 ---
 
@@ -20,11 +19,11 @@ Your role:
 4. Identify missing edge cases
 5. Validate testing strategy
 
-## Write Restriction
+## Edit Restriction
 
-⚠️ IMPORTANT: Write permission is RESTRICTED
+⚠️ IMPORTANT: Edit permission is RESTRICTED
 
-Even though this agent has `write: allow` permission, you MUST follow these rules:
+Even though this agent has `edit: allow` permission, you MUST follow these rules:
 
 1. **File type restriction**: ONLY `.md` (Markdown) files
 2. **User request required**: ONLY when user explicitly asks to write/save to a file
