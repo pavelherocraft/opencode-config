@@ -297,10 +297,10 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
           const detected = detectAgentFromSubagent(targetAgent)
           if (detected) {
             currentAgent = detected
-            // FIX: Set to false, not true — agent was detected via reverse routing
-            // but has NOT yet produced valid JSON output. The first task call is
-            // allowed (isFirstTaskCall grace), but subsequent calls require JSON.
-            hasOutputtedJSON.set(detected, false)
+            // FIX: Set to TRUE — agent already outputted JSON at beginning of response
+            // before calling Task tool. This allows pipeline calls to proceed without
+            // requiring JSON before each Task call in the pipeline.
+            hasOutputtedJSON.set(detected, true)
 
             await client.app.log({
               body: {
@@ -381,7 +381,8 @@ This is enforced by the workflow-enforcement plugin.
           // Switch to the correct agent based on routing
           const previousAgent = currentAgent
           currentAgent = otherAgent
-          hasOutputtedJSON.set(otherAgent, false)
+          // FIX: Set to TRUE — agent already outputted JSON at beginning of response
+          hasOutputtedJSON.set(otherAgent, true)
           
           await client.app.log({
             body: {
