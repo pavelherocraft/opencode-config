@@ -1,4 +1,4 @@
-﻿# Architecture Requirements
+# Architecture Requirements
 
 This file is the single source of truth for the OpenCode dual-primary-agent architecture. All other files must be consistent with this document.
 
@@ -83,11 +83,10 @@ Note: 29 unique subagents + 2 primary agents = 31 unique agents total.
 | devops-agent | `bash: allow` only |
 
 
-### Write Permissions (plankestrator agents)
+### Write Permissions (plankestrator subagents)
 
 | Agent | Permission | Restriction |
 |-------|------------|-------------|
-| plankestrator | `write: allow` | Only .md files, user request required |
 | plan-writer-simple | `write: allow` | Only .md files, user request required |
 | plan-writer-complex | `write: allow` | Only .md files, user request required |
 | plan-reviewer-simple | `write: allow` | Only .md files, user request required |
@@ -96,10 +95,29 @@ Note: 29 unique subagents + 2 primary agents = 31 unique agents total.
 | research-writer-complex | `write: allow` | Only .md files, user request required |
 | research-reviewer | `write: allow` | Only .md files, user request required |
 
+**Note:** plankestrator has `write: deny` — it MUST delegate to subagents, never write directly.
+
 **Restrictions enforced in agent prompts:**
 - File type: ONLY `.md` (Markdown) files
 - User request: ONLY when user explicitly asks to write/save
 - Forbidden: Any non-.md files (code, config, etc.)
+
+### Plankestrator Delegation Rule
+
+plankestrator is a pure orchestrator — it MUST ALWAYS delegate to subagents:
+
+| Task Type | Subagent to Call |
+|-----------|------------------|
+| PLAN (simple) | `plan-writer-simple` |
+| PLAN (complex) | `plan-writer-complex` |
+| RESEARCH (simple) | `research-writer-simple` |
+| RESEARCH (complex) | `research-writer-complex` |
+| RESEARCH+PLAN | `research-writer-*` → `plan-writer-*` |
+
+**File output handling:**
+- If user requests "write plan to X.md", plankestrator passes instruction to subagent
+- Subagent (with `write: allow`) handles the actual file writing
+- plankestrator NEVER writes files directly
 
 ## 2. Pipelines
 
