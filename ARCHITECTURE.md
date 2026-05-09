@@ -94,6 +94,7 @@ Note: 29 unique subagents + 2 primary agents = 31 unique agents total.
 | research-writer-simple | `write: allow` | Only .md files, user request required |
 | research-writer-complex | `write: allow` | Only .md files, user request required |
 | research-reviewer | `write: allow` | Only .md files, user request required |
+| devops-readonly | `write: allow` | Only .md files, user request required (backup) |
 
 **Note:** plankestrator has `write: deny` — it MUST delegate to subagents, never write directly.
 
@@ -101,6 +102,16 @@ Note: 29 unique subagents + 2 primary agents = 31 unique agents total.
 - File type: ONLY `.md` (Markdown) files
 - User request: ONLY when user explicitly asks to write/save
 - Forbidden: Any non-.md files (code, config, etc.)
+
+### Direct Write Instruction
+
+All writer agents have a "Direct Write Instruction" section in their prompts:
+
+- **Write directly** using `write: allow` permission
+- **DO NOT call other agents** for file operations
+- **DO NOT delegate** to devops-readonly or any other agent
+
+devops-readonly is for READING only — use it to read files, but NEVER call it for writing.
 
 ### Plankestrator Delegation Rule
 
@@ -332,3 +343,21 @@ or
   ...
 }
 ```
+
+### Plugin Agent Detection
+
+The workflow-enforcement plugin detects the agent using multiple methods (priority order):
+
+1. **IDENTITY VERIFIED text** — highest priority
+   - Extracted from "IDENTITY VERIFIED: I am orchestrator..." text
+   - `extractIdentityFromMessage()` function in plugin
+
+2. **JSON output** — secondary priority
+   - Extracted from JSON `"agent"` field
+   - `extractJSONFromMessage()` function in plugin
+
+3. **Reverse routing lookup** — fallback
+   - If agent calls a subagent, detect based on routing table
+   - `detectAgentFromSubagent()` function in plugin
+
+This ensures correct agent identification even if session data is incorrect.
