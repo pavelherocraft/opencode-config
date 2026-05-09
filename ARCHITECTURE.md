@@ -83,6 +83,45 @@ Note: 29 unique subagents + 2 primary agents = 31 unique agents total.
 | devops-agent | `bash: allow` only |
 
 
+### Conditional Write Permissions (plankestrator subagents)
+
+| Agent | Permission | Conditions |
+|-------|------------|------------|
+| research-writer-complex | `write: ask` | Only .md files, user request required |
+| research-reviewer | `write: ask` | Only .md files, user request required |
+| plan-writer-complex | `write: ask` | Only .md files, user request required |
+| plan-reviewer-complex | `write: ask` | Only .md files, user request required |
+
+**Rules:**
+- File type restriction: Only `.md` (Markdown) files
+- User request required: User must explicitly ask to write/save documentation
+- Approval required: Agent must ask for permission before writing
+
+### File I/O Pipeline Behavior
+
+When user requests to write plan/research to a .md file:
+
+**Writer agents (plan-writer-complex, research-writer-complex):**
+1. Ask for write permission (`write: ask`)
+2. Write content to specified .md file
+3. Output JSON: `{ "plan_file": "path", "plan_written": true }` or `{ "research_file": "path", "research_written": true }`
+
+**Reviewer agents (plan-reviewer-complex, research-reviewer):**
+1. Check previous agent output for `plan_written: true` or `research_written: true`
+2. If found, read content from file path
+3. If not found, read from conversation context
+
+**JSON output format:**
+```json
+{
+  "plan_file": "path/to/PLAN.md",
+  "plan_written": true,
+  "next_action": "reviewer should read from plan_file"
+}
+```
+
+
+
 ## 2. Pipelines
 
 ### BUGFIX (SIMPLE)
