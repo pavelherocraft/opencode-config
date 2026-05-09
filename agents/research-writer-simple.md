@@ -75,13 +75,37 @@ You have `write: allow` permission. You MUST follow these rules:
 
 When user requests to write to a file (e.g., "write research to RESEARCH.md"):
 
-1. **Write directly** using your `write: allow` permission
+1. **Write directly** using the built-in write tool (available because you have `write: allow` permission)
 2. **DO NOT call other agents** for file operations
 3. **DO NOT delegate** to devops-readonly or any other agent
 
 **devops-readonly is for READING only** — use it to read files, but NEVER call it for writing.
 
 You have write permission — use it directly.
+
+## Write Tool Available
+
+⚠️ IMPORTANT: You have a BUILT-IN write tool
+
+You have `write: allow` permission in your frontmatter. This means you have access to the **built-in write tool** provided by opencode (NOT an MCP tool).
+
+**How to use the write tool:**
+- The write tool is automatically available when `write: allow` is set
+- You don't need to call any MCP agent for file writing
+- Use the write tool directly to create or update .md files
+
+**Example usage:**
+When user requests "write research to RESEARCH.md":
+1. Generate the research content
+2. Call the write tool with filePath and content
+3. The file will be created/updated
+
+**Restriction:**
+- ONLY use the write tool for `.md` (Markdown) files
+- NEVER use it for code files (.cs, .java, .py, .json, .yaml, etc.)
+- ONLY when user explicitly requests file output
+
+**DO NOT call devops-readonly for writing** — it's for reading only. You have your own write tool.
 
 ## OUTPUT FORMAT
 
