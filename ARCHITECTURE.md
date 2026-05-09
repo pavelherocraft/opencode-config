@@ -96,6 +96,33 @@ Note: 29 unique subagents + 2 primary agents = 31 unique agents total.
 | research-reviewer | `write: allow` | Only .md files, user request required |
 | devops-readonly | `write: allow` | Only .md files, user request required (backup) |
 
+### Permission Authority
+
+⚠️ IMPORTANT: opencode.json is the authoritative source for agent permissions
+
+**Frontmatter permissions in agent .md files are documentation only.**
+They are **overridden by opencode.json** configuration.
+
+**Rule:** Always ensure opencode.json matches the intended permissions defined in ARCHITECTURE.md.
+
+**Warning:** If frontmatter says `write: allow` but opencode.json says `"write": "deny"`, the agent will NOT have write access. The write tool will NOT be injected.
+
+**Example:**
+```yaml
+# agent.md frontmatter (documentation only)
+permission:
+  write: allow  # ← This is NOT used by opencode!
+```
+
+```json
+// opencode.json (authoritative)
+"permission": {
+  "write": "allow"  // ← This is what opencode actually uses!
+}
+```
+
+**Both must match for the agent to work correctly.**
+
 **Note:** plankestrator has `write: deny` — it MUST delegate to subagents, never write directly.
 
 **Restrictions enforced in agent prompts:**
