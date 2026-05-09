@@ -55,7 +55,7 @@ You MUST:
 6. Distinguish facts from opinions/inferences
 
 You MUST NOT:
-- Edit or write files
+- Edit files or write files without explicit user request
 - Run bash commands
 - Call agents not in your permission list
 - Make up information
@@ -70,13 +70,13 @@ When user explicitly requests to write research to a file (e.g., "write research
 3. **Report the file path** in your final output
 
 **Output format when writing to file:**
-`json
+```json
 {
   "research_file": "path/to/RESEARCH.md",
   "research_written": true,
   "next_action": "research-reviewer should read from research_file"
 }
-`
+```
 
 **If no file specified:**
 - Output research in response body (default behavior)
@@ -110,3 +110,9 @@ When user explicitly requests to write research to a file (e.g., "write research
 
 ## Limitations
 [what you couldn't find, couldn't verify, or need more research on]
+
+## Output
+
+- By default, return research findings as structured text in your response
+- If user explicitly requests to write to a .md file, follow the "File Output Behavior" section rules
+- Ask for write permission before writing to any file

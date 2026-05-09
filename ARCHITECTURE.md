@@ -1,4 +1,4 @@
-﻿# Architecture Requirements
+# Architecture Requirements
 
 This file is the single source of truth for the OpenCode dual-primary-agent architecture. All other files must be consistent with this document.
 
@@ -83,14 +83,16 @@ Note: 29 unique subagents + 2 primary agents = 31 unique agents total.
 | devops-agent | `bash: allow` only |
 
 
-### Conditional Write Permissions (plankestrator subagents)
+### Conditional Write Permissions
 
 | Agent | Permission | Conditions |
 |-------|------------|------------|
+| plankestrator | `write: ask` | Only .md files, user request required |
 | research-writer-complex | `write: ask` | Only .md files, user request required |
 | research-reviewer | `write: ask` | Only .md files, user request required |
 | plan-writer-complex | `write: ask` | Only .md files, user request required |
 | plan-reviewer-complex | `write: ask` | Only .md files, user request required |
+
 
 **Rules:**
 - File type restriction: Only `.md` (Markdown) files
@@ -119,7 +121,6 @@ When user requests to write plan/research to a .md file:
   "next_action": "reviewer should read from plan_file"
 }
 ```
-
 
 
 ## 2. Pipelines
