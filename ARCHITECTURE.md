@@ -1,4 +1,4 @@
-# Architecture Requirements
+﻿# Architecture Requirements
 
 This file is the single source of truth for the OpenCode dual-primary-agent architecture. All other files must be consistent with this document.
 
@@ -83,45 +83,23 @@ Note: 29 unique subagents + 2 primary agents = 31 unique agents total.
 | devops-agent | `bash: allow` only |
 
 
-### Conditional Write Permissions
+### Write Permissions (plankestrator agents)
 
-| Agent | Permission | Conditions |
-|-------|------------|------------|
-| plankestrator | `write: ask` | Only .md files, user request required |
-| research-writer-complex | `write: ask` | Only .md files, user request required |
-| research-reviewer | `write: ask` | Only .md files, user request required |
-| plan-writer-complex | `write: ask` | Only .md files, user request required |
-| plan-reviewer-complex | `write: ask` | Only .md files, user request required |
+| Agent | Permission | Restriction |
+|-------|------------|-------------|
+| plankestrator | `write: allow` | Only .md files, user request required |
+| plan-writer-simple | `write: allow` | Only .md files, user request required |
+| plan-writer-complex | `write: allow` | Only .md files, user request required |
+| plan-reviewer-simple | `write: allow` | Only .md files, user request required |
+| plan-reviewer-complex | `write: allow` | Only .md files, user request required |
+| research-writer-simple | `write: allow` | Only .md files, user request required |
+| research-writer-complex | `write: allow` | Only .md files, user request required |
+| research-reviewer | `write: allow` | Only .md files, user request required |
 
-
-**Rules:**
-- File type restriction: Only `.md` (Markdown) files
-- User request required: User must explicitly ask to write/save documentation
-- Approval required: Agent must ask for permission before writing
-
-### File I/O Pipeline Behavior
-
-When user requests to write plan/research to a .md file:
-
-**Writer agents (plan-writer-complex, research-writer-complex):**
-1. Ask for write permission (`write: ask`)
-2. Write content to specified .md file
-3. Output JSON: `{ "plan_file": "path", "plan_written": true }` or `{ "research_file": "path", "research_written": true }`
-
-**Reviewer agents (plan-reviewer-complex, research-reviewer):**
-1. Check previous agent output for `plan_written: true` or `research_written: true`
-2. If found, read content from file path
-3. If not found, read from conversation context
-
-**JSON output format:**
-```json
-{
-  "plan_file": "path/to/PLAN.md",
-  "plan_written": true,
-  "next_action": "reviewer should read from plan_file"
-}
-```
-
+**Restrictions enforced in agent prompts:**
+- File type: ONLY `.md` (Markdown) files
+- User request: ONLY when user explicitly asks to write/save
+- Forbidden: Any non-.md files (code, config, etc.)
 
 ## 2. Pipelines
 

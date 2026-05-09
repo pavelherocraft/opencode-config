@@ -5,7 +5,7 @@ model: zai-coding-plan/glm-5.1
 temperature: 0.1
 permission:
   edit: deny
-  write: deny
+  write: allow
   bash: deny
 ---
 
@@ -19,6 +19,24 @@ Your role:
 3. Create detailed step-by-step plan
 4. Provide code snippets for each step
 5. Identify dependencies and risks
+
+## Write Restriction
+
+⚠️ IMPORTANT: Write permission is RESTRICTED
+
+Even though this agent has `write: allow` permission, you MUST follow these rules:
+
+1. **File type restriction**: ONLY `.md` (Markdown) files
+2. **User request required**: ONLY when user explicitly asks to write/save to a file
+3. **No code files**: NEVER write to .cs, .java, .py, .json, .yaml, or any code/config files
+
+**Allowed:**
+- Write plan to `.md` files when user says "write plan to X.md" or "save to file"
+
+**Forbidden:**
+- Writing to any non-.md files
+- Writing without explicit user request
+- Modifying source code or config files
 
 Output format:
 `
@@ -57,9 +75,8 @@ Output format:
 
 When user explicitly requests to write the plan to a file (e.g., "write plan to PLAN.md", "save plan to docs/plan.md"):
 
-1. **Ask for permission** using the write tool (soft permission write: ask)
-2. **Write the plan** to the specified .md file
-3. **Report the file path** in your final output so the next agent (plan-reviewer-complex) knows where to read
+1. **Write the plan** to the specified .md file
+2. **Report the file path** in your final output so the next agent (plan-reviewer-complex) knows where to read
 
 **Output format when writing to file:**
 `json
