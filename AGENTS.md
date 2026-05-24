@@ -27,6 +27,30 @@ Always use the zread MCP tools for working with GitHub repositories. Do NOT use 
 - Use read_file to read the complete content of a specific file in a repository
 - When you ask about a library, framework, or open source project — use zread tools first
 
+## Image Analysis Rules
+
+### ⚠️ MANDATORY: view-image agent is PRIMARY for image analysis
+
+**When you need to analyze an image, ALWAYS call view-image agent via Task tool:**
+
+```
+Task tool:
+- subagent_type: "view-image"
+- prompt: "Analyze this image: [describe what you need]"
+```
+
+**view-image uses kimi-for-coding/k2p6 with direct vision capabilities.**
+
+**DO NOT use zai-mcp-server tools directly — delegate to view-image agent.**
+
+**Rules:**
+- User provides image path/URL → Call view-image
+- Need to describe screenshot → Call view-image
+- Need to extract text from image → Call view-image
+- Need to understand diagram → Call view-image
+- Need to analyze UI mockup → Call view-image
+- Use zai-mcp-server only as FALLBACK when view-image unavailable
+
 ### Serena MCP Rules
 
 ### ⚠️ MANDATORY: Serena tools are PRIMARY for code operations
@@ -61,43 +85,80 @@ Always use the zread MCP tools for working with GitHub repositories. Do NOT use 
 | Read file content | read | — |
 | Find files by name | glob | — |
 
-## Unity MCP Rules
+## unity-mcp Rules
 
-### ⚠ MANDATORY: Unity operations MUST use Unity MCP
+### ⚠️ MANDATORY: Unity operations MUST use unity-mcp
 
-**For Unity projects, ALWAYS use official Unity MCP tools (from `com.unity.ai.assistant` package) instead of built-in tools:**
+**For Unity projects, ALWAYS use unity-mcp (CoplayDev) tools MAXIMALLY ALWAYS:**
 
-| Task | Unity MCP Tool | Do NOT Use |
+**unity-mcp is PRIMARY for ALL Unity operations — use it MAXIMALLY ALWAYS**
+
+**unity-mcp is available for ALL agents and modes, not just orchestrator and plankestrator.**
+
+**unity-mcp tools → auto-approved → use immediately**
+**Built-in tools → asks user → nudges to use unity-mcp**
+
+**ALL agents can use unity-mcp:**
+- orchestrator, plankestrator (primary agents)
+- worker, bugfix, execute-bug, rework (implementation agents)
+- dev-professor, dev-reviewer, dev-planner (development agents)
+- consistency-checker, utility, docs-writer (validation agents)
+- devops-agent, devops-reviewer, bugfix-triage, plan-bug (DevOps agents)
+- mcp-github, mcp-read, mcp-search, summarizer (MCP agents)
+- plan-writer-*, plan-reviewer-*, research-writer-*, research-reviewer (planning agents)
+- devops-readonly (read-only agent)
+
+**DO NOT use built-in tools (edit, write, bash) for:**
+- Creating GameObjects → USE `unity-mcp_manage_gameobject`
+- Creating Scenes → USE `unity-mcp_manage_scene`
+- Creating C# Scripts → USE `unity-mcp_create_script`
+- Editing C# Scripts → USE `unity-mcp_manage_script` or `unity-mcp_script_apply_edits`
+- Importing Assets → USE `unity-mcp_manage_asset`
+- Reading Console → USE `unity-mcp_read_console`
+
+| Task | unity-mcp Tool | Do NOT Use |
 |------|----------------|------------|
-| Create/Find/Modify/Delete GameObjects | `Unity.ManageGameObject` | edit (manual) |
-| Load/Save/Create scenes, query hierarchy | `Unity.ManageScene` | bash (manual) |
-| Asset management operations | `Unity.ManageAsset` | bash (manual) |
-| Create C# scripts | `Unity.CreateScript` | write (manual) |
-| Delete C# scripts | `Unity.DeleteScript` | bash (manual) |
-| CRUD operations on C# scripts | `Unity.ManageScript` | edit (manual) |
-| Advanced script editing | `Unity.ScriptApplyEdits` | edit (manual) |
-| Validate C# scripts | `Unity.ValidateScript` | bash (manual) |
-| Apply text edits to C# scripts | `Unity.ApplyTextEdits` | edit (manual) |
-| CRUD operations on shader files | `Unity.ManageShader` | edit (manual) |
-| Read/clear Unity Editor console logs | `Unity.ReadConsole` | read (log files) |
-| Compile and execute C# scripts | `Unity.RunCommand` | bash (manual) |
-| Import external models/assets | `Unity.ImportExternalModel` | bash (manual) |
-| Execute/list/refresh menu items | `Unity.ManageMenuItem` | bash (manual) |
-| Control/query Editor state, Tags, Layers | `Unity.ManageEditor` | edit (manual) |
-| Get SHA256 for C# scripts | `Unity.GetSHA` | bash (manual) |
-| List and read project files | `Unity.ResourceTools` | read/glob (manual) |
+| Create/Find/Modify/Delete GameObjects | `unity-mcp_manage_gameobject` | edit (manual) |
+| Modify GameObject | `unity-mcp_manage_gameobject` | edit (manual) |
+| Create/Save Scene | `unity-mcp_manage_scene` | bash (manual) |
+| Create C# Script | `unity-mcp_create_script` | write (manual) |
+| Edit C# Script | `unity-mcp_manage_script` | edit (manual) |
+| Import Assets | `unity-mcp_manage_asset` | bash (manual) |
+| Read Console Logs | `unity-mcp_read_console` | read (log files) |
+| Asset management operations | `unity-mcp_manage_asset` | bash (manual) |
+| Delete C# scripts | `unity-mcp_delete_script` | bash (manual) |
+| CRUD operations on C# scripts | `unity-mcp_manage_script` | edit (manual) |
+| Advanced script editing | `unity-mcp_script_apply_edits` | edit (manual) |
+| Apply text edits to C# scripts | `unity-mcp_apply_text_edits` | edit (manual) |
+| CRUD operations on shader files | `unity-mcp_manage_shader` | edit (manual) |
+| Validate C# scripts | `unity-mcp_validate_script` | bash (manual) |
+| Control/query Editor state, Tags, Layers | `unity-mcp_manage_editor` | edit (manual) |
+| Manage packages | `unity-mcp_manage_packages` | bash (manual) |
+| Manage prefabs | `unity-mcp_manage_prefabs` | edit (manual) |
+| Manage materials | `unity-mcp_manage_material` | edit (manual) |
+| Manage animations | `unity-mcp_manage_animation` | edit (manual) |
+| Manage physics | `unity-mcp_manage_physics` | edit (manual) |
+| Manage UI Toolkit | `unity-mcp_manage_ui` | edit (manual) |
+| Manage VFX | `unity-mcp_manage_vfx` | edit (manual) |
+| Manage camera | `unity-mcp_manage_camera` | edit (manual) |
+| Manage build | `unity-mcp_manage_build` | bash (manual) |
+| Manage profiler | `unity-mcp_manage_profiler` | bash (manual) |
+| Manage graphics | `unity-mcp_manage_graphics` | edit (manual) |
+| Batch execute (10-100x faster) | `unity-mcp_batch_execute` | sequential calls |
+| Unity docs lookup | `unity-mcp_unity_docs` | web search |
+| Unity API reflection | `unity-mcp_unity_reflect` | guesswork |
 
 **Built-in tools for Unity projects - use ONLY when:**
-- Unity MCP is unavailable or not connected
+- unity-mcp is unavailable or not connected
 - Unity Editor is not running
 - Non-Unity files (README, config, etc.)
 
 **Prerequisites:**
-- Unity 6 (6000.0) or later
-- `com.unity.ai.assistant` package installed via Unity Package Manager
-- Unity Editor must be running (Unity Bridge must show Running)
-- Relay binary at %USERPROFILE%\\.unity\\relay\\relay_win.exe
-- First-time connection must be approved in Unity Editor
+- Unity 2021.3 LTS or later
+- Python 3.10+ and uv installed
+- Unity MCP package installed via git URL: `https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main`
+- Unity Editor must be running with MCP server started (`Window > MCP for Unity > Start Server`)
+- Server runs on `http://localhost:8080/mcp`
 
 ## Architecture Requirements
 
@@ -175,6 +236,31 @@ Handles planning and research tasks:
 | research-reviewer | Research review |
 | devops-readonly | DevOps read-only |
 
+## Key Agent Permissions
+
+### Worker Bash Permission — CRITICAL
+
+Worker is the implementation agent — it MUST have `bash: allow` to execute commands:
+
+| Command Type | Examples |
+|--------------|----------|
+| npm operations | `npm install`, `npm run build`, `npm run test` |
+| git operations | `git status`, `git add`, `git commit`, `git push` |
+| file operations | `mkdir`, `touch`, `rm`, `cp` |
+| linting tools | `eslint`, `prettier`, `tsc --noEmit` |
+| test runners | `jest`, `vitest`, `pytest`, `cargo test` |
+| CLI tools | Any command-line tool execution |
+
+**⚠️ CRITICAL:** Without `bash: allow`, worker cannot implement changes — it would be unable to:
+- Install dependencies (`npm install`)
+- Run tests (`npm run test`)
+- Build projects (`npm run build`)
+- Execute git operations
+- Run linting/formatting tools
+- Execute any CLI commands
+
+**If worker reports "bash is not available", this is a configuration bug that must be fixed immediately.**
+
 ## Pipelines
 
 ### BUGFIX (SIMPLE)
@@ -191,10 +277,14 @@ Complex bug fixes include planning, execution, review, rework cycles, and consis
 
 ### DEV SIMPLE
 
+DEV SIMPLE has two variants depending on whether a plan exists:
 
-worker -> utility
+| Variant | Flow | When to Use |
+|---------|------|-------------|
+| DEV SIMPLE (без плана) | worker → utility | Straightforward tasks with no prior planning — direct implementation and validation. |
+| DEV SIMPLE (с планом) | worker → consistency-checker → utility | Tasks where a plan was created beforehand — implementation is validated against the plan by consistency-checker before final validation. |
 
-Simple development tasks go from implementation to validation.
+**Decision rule:** If plan_exists=true, use the "с планом" variant. Otherwise, use the "без плана" variant.
 
 
 ### DEV COMPLEX

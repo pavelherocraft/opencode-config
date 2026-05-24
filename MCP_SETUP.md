@@ -1,1581 +1,1892 @@
-﻿# MCP Setup — OpenCode Infrastructure Documentation
+﻿# MCP Setup Guide — OpenCode Agent Orchestration System
 
-Complete guide for replicating the entire OpenCode infrastructure on a new machine or for a new project.
+Полное руководство по развертыванию системы оркестрации агентов OpenCode на машинах коллег.
+
+---
 
 ## Table of Contents
 
 1. [Overview](#1-overview)
-2. [Dual Primary Agents Architecture](#2-dual-primary-agents-architecture)
-3. [Routing Tables](#3-routing-tables)
-4. [Pipelines](#4-pipelines)
-5. [JSON Output Format](#5-json-output-format)
-6. [Workflow Enforcement Plugin](#6-workflow-enforcement-plugin)
-7. [Identity Verification](#7-identity-verification)
-8. [Agent Files](#8-agent-files)
-9. [MCP Servers](#9-mcp-servers)
-10. [Serena MCP Server](#10-serena-mcp-server)
-11. [Unity MCP Server (Official)](#11-unity-mcp-server-official)
-12. [Serena Language Configuration](#12-serena-language-configuration)
-13. [Step-by-Step Deployment Guide](#13-step-by-step-deployment-guide)
-14. [Troubleshooting](#14-troubleshooting)
-15. [File Locations Reference](#15-file-locations-reference)
-16. [Appendices](#appendices)
+2. [Prerequisites](#2-prerequisites)
+3. [Complete opencode.json Configuration](#3-complete-opencodejson-configuration)
+4. [Complete Agent File Templates](#4-complete-agent-file-templates)
+5. [Complete Plugin Code](#5-complete-plugin-code)
+6. [Deployment Instructions](#6-deployment-instructions)
+7. [File Locations Reference](#7-file-locations-reference)
+8. [Troubleshooting](#8-troubleshooting)
+9. [Verification Checklist](#9-verification-checklist)
 
 ---
 
 ## 1. Overview
 
-OpenCode uses a **dual-primary-agent architecture** with MCP (Model Context Protocol) server integration for extended capabilities.
+### System Architecture
 
-### Key Components
+OpenCode использует архитектуру с двумя primary-агентами:
 
-| Component | Count | Description |
-|-----------|-------|-------------|
-| **MCP Servers** | 5 | zread, webSearchPrime, webReader, Serena, Unity |
-| **Primary Agents** | 2 | orchestrator, plankestrator |
-| **Subagents** | 29 | 20 for orchestrator, 9 for plankestrator |
-| **Pipelines** | 8 | BUGFIX (2), DEV (2), DEVOPS, DOCS, PLAN, RESEARCH |
-| **Plugin Hooks** | 6 | lifecycle hooks for enforcement |
-| **Identity Probes** | 2 | One per primary agent |
+| Primary Agent | Role | Workflows |
+|---------------|------|-----------|
+| **orchestrator** | Operational tasks | BUGFIX, DEVOPS, DEV, DOCS |
+| **plankestrator** | Planning & research | PLAN, RESEARCH, RESEARCH+PLAN |
 
-### Key Principles
+### Agent Count
 
-1. **Separation of Concerns**: orchestrator handles operational tasks, plankestrator handles planning and research
-2. **Single Source of Truth**: ARCHITECTURE.md contains all architectural requirements
-3. **Automatic Validation**: consistency-checker validates files against ARCHITECTURE.md
-4. **Strict Routing**: Plugin blocks calls to agents outside whitelist
-5. **IDE-Level Coding**: Serena provides semantic code operations via language servers
+| Category | Count |
+|----------|-------|
+| Primary agents | 2 |
+| orchestrator subagents | 20 |
+| plankestrator subagents | 9 |
+| **Total unique agents** | **31** |
 
----
+### MCP Servers
 
-## 2. Dual Primary Agents Architecture
+| Server | Tools | Purpose |
+|--------|-------|---------|
+| zread | `zread_search_doc`, `zread_read_file`, `zread_get_repo_structure` | GitHub repository operations |
+| webSearchPrime | `webSearchPrime_web_search_prime` | Web search |
+| webReader | `webReader_webReader` | URL content reading |
+| serena | `serena_find_symbol`, `serena_rename_symbol`, etc. | Code symbol operations |
+| unity | `Unity.ManageGameObject`, `Unity.ManageScene`, etc. | Unity Editor operations |
 
-OpenCode uses two primary agents that **DO NOT call each other** — the user must manually switch between them.
+### unity-mcp — MAXIMALLY ALWAYS
 
-### orchestrator
+**⚠️ MANDATORY: unity-mcp is PRIMARY for Unity operations**
 
-**Handles operational and execution tasks:**
+**Use unity-mcp MAXIMALLY ALWAYS for Unity projects**
 
-| Task Type | Description |
-|-----------|-------------|
-| BUGFIX | Bug fixing workflows |
-| DEVOPS | DevOps operations |
-| DEV | Development tasks |
-| DOCS | Documentation writing |
+**unity-mcp is PRIMARY — Built-in tools are SECONDARY**
 
-### plankestrator
+**unity-mcp tools → auto-approved → agent can use immediately**
+**Built-in tools for Unity → asks user → nudges agent to use unity-mcp**
 
-**Handles planning and research tasks:**
+| Task | unity-mcp Tool | Do NOT Use |
+|------|----------------|------------|
+| Create GameObject | `Unity.ManageGameObject` | edit (manual) |
+| Modify GameObject | `Unity.ManageGameObject` | edit (manual) |
+| Create/Save Scene | `Unity.ManageScene` | bash (manual) |
+| Create C# Script | `Unity.CreateScript` | write (manual) |
+| Edit C# Script | `Unity.ManageScript` | edit (manual) |
+| Import Assets | `Unity.ManageAsset` | bash (manual) |
+| Read Console Logs | `Unity.ReadConsole` | read (log files) |
+| Run Commands | `Unity.RunCommand` | bash (manual) |
+| Validate Scripts | `Unity.ValidateScript` | bash (manual) |
 
-| Task Type | Description |
-|-----------|-------------|
-| PLAN | Planning workflows |
-| RESEARCH | Research workflows |
-| RESEARCH+PLAN | Combined research and planning |
+**DO NOT use built-in tools (edit, write, bash) for Unity operations — USE unity-mcp tools MAXIMALLY ALWAYS**
 
-### How Agents Work
+**Built-in tools for Unity projects - use ONLY when:**
+- unity-mcp is unavailable or not connected
+- Unity Editor is not running
+- Non-Unity files (README, config, etc.)
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     User Request                             │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-              ┌───────────────────────────────┐
-              │   Which Primary Agent?        │
-              │                               │
-              │  BUGFIX/DEVOPS/DEV/DOCS       │
-              │  → orchestrator               │
-              │                               │
-              │  PLAN/RESEARCH/RESEARCH+PLAN  │
-              │  → plankestrator              │
-              └───────────────────────────────┘
-                              │
-           ┌──────────────────┴──────────────────┐
-           │                                     │
-           ▼                                     ▼
-┌─────────────────────┐               ┌─────────────────────┐
-│   orchestrator      │               │   plankestrator     │
-│                     │               │                     │
-│  20 subagents       │               │  9 subagents        │
-│  (whitelist)        │               │  (whitelist)        │
-└─────────────────────┘               └─────────────────────┘
-           │                                     │
-           ▼                                     ▼
-    Pipeline Flow                          Pipeline Flow
-```
-
-### When to Switch Between Agents
-
-| Current Agent | Switch To | When |
-|---------------|-----------|------|
-| orchestrator | plankestrator | Need to create a plan before implementing |
-| plankestrator | orchestrator | Plan is complete, ready to execute |
-| orchestrator | plankestrator | Need research before development |
-| plankestrator | orchestrator | Research complete, ready to implement |
-
-**Important**: Agents cannot call each other. The user must explicitly request the switch.
+**Prerequisites:**
+- Unity 6 (6000.0) or later
+- `com.unity.ai.assistant` package installed
+- Unity Editor must be running
+- Relay binary at `%USERPROFILE%\.unity\relay\relay_win.exe`
 
 ---
 
-## 3. Routing Tables
+## 2. Prerequisites
 
-### orchestrator Whitelist (20 agents)
+### Required Software
 
-| # | Agent Name | Role |
-|---|------------|------|
-| 1 | orchestrator-identity-probe | Identity verification |
-| 2 | dev-reviewer | Code review |
-| 3 | dev-professor | Development guidance |
-| 4 | mcp-github | GitHub operations |
-| 5 | worker | Simple development tasks |
-| 6 | bugfix | Bug fixing |
-| 7 | rework | Rework on feedback |
-| 8 | mcp-read | File reading |
-| 9 | utility | Syntax checking, formatting |
-| 10 | devops | DevOps tasks |
-| 11 | bugfix-triage | Initial bug analysis |
-| 12 | plan-bug | Bug fix planning |
-| 13 | devops-agent | DevOps operations |
-| 14 | devops-reviewer | DevOps review |
-| 15 | dev-planner | Development planning |
-| 16 | mcp-search | Web search |
-| 17 | docs-writer | Documentation writing |
-| 18 | summarizer | Content summarization |
-| 19 | execute-bug | Bug fix implementation |
-| 20 | consistency-checker | Architecture consistency validation |
+| Software | Version | Purpose |
+|----------|---------|---------|
+| Node.js | 18+ | Plugin runtime |
+| OpenCode CLI | Latest | Agent orchestration |
+| Git | 2.x | Repository operations |
+| Serena | Latest | Code symbol analysis |
 
-### plankestrator Whitelist (9 agents)
+### Required MCP Servers
 
-| # | Agent Name | Role |
-|---|------------|------|
-| 1 | plankestrator-identity-probe | Identity verification |
-| 2 | plan-writer-simple | Simple planning |
-| 3 | plan-writer-complex | Complex planning |
-| 4 | plan-reviewer-simple | Simple plan review |
-| 5 | plan-reviewer-complex | Complex plan review |
-| 6 | research-writer-simple | Simple research |
-| 7 | research-writer-complex | Complex research |
-| 8 | research-reviewer | Research review |
-| 9 | devops-readonly | DevOps read-only |
+| MCP Server | Installation |
+|------------|--------------|
+| zread | `npm install -g @opencode-ai/mcp-zread` |
+| webSearchPrime | `npm install -g @opencode-ai/mcp-websearchprime` |
+| webReader | `npm install -g @opencode-ai/mcp-webreader` |
+| serena | See Serena installation guide |
+| unity | Unity Package Manager: `com.unity.ai.assistant` |
 
-### Agent Count Summary
+### Directory Structure
 
-| Primary Agent | Whitelist Count | Total (primary + whitelist) |
-|---------------|-----------------|-----------------------------|
-| orchestrator | 20 | 21 (orchestrator + 20 subagents) |
-| plankestrator | 9 | 10 (plankestrator + 9 subagents) |
-| **Grand Total** | **29** | **31** |
+```
+~/.config/opencode/
+├── opencode.json          # Main configuration
+├── plugins/
+│   └── workflow-enforcement.ts  # Workflow plugin
+└── agents/
+    ├── orchestrator.md    # Primary agent
+    ├── plankestrator.md   # Primary agent
+    ├── orchestrator-identity-probe.md
+    ├── plankestrator-identity-probe.md
+    ├── worker.md
+    ├── bugfix-triage.md
+    ├── bugfix.md
+    ├── plan-bug.md
+    ├── execute-bug.md
+    ├── dev-planner.md
+    ├── dev-professor.md
+    ├── dev-reviewer.md
+    ├── rework.md
+    ├── consistency-checker.md
+    ├── docs-writer.md
+    ├── utility.md
+    ├── mcp-github.md
+    ├── mcp-read.md
+    ├── mcp-search.md
+    ├── summarizer.md
+    ├── devops-agent.md
+    ├── devops-reviewer.md
+    ├── plan-writer-simple.md
+    ├── plan-writer-complex.md
+    ├── plan-reviewer-simple.md
+    ├── plan-reviewer-complex.md
+    ├── research-writer-simple.md
+    ├── research-writer-complex.md
+    ├── research-reviewer.md
+    └── devops-readonly.md
 
-### Routing Table Implementation
-
-```typescript
-const ROUTING_TABLES = {
-  orchestrator: [
-    'orchestrator-identity-probe',
-    'dev-reviewer',
-    'dev-professor',
-    'mcp-github',
-    'worker',
-    'bugfix',
-    'rework',
-    'mcp-read',
-    'utility',
-    'devops',
-    'bugfix-triage',
-    'plan-bug',
-    'devops-agent',
-    'devops-reviewer',
-    'dev-planner',
-    'mcp-search',
-    'docs-writer',
-    'summarizer',
-    'execute-bug',
-    'consistency-checker'
-  ],
-  plankestrator: [
-    'plankestrator-identity-probe',
-    'plan-writer-simple',
-    'plan-writer-complex',
-    'plan-reviewer-simple',
-    'plan-reviewer-complex',
-    'research-writer-simple',
-    'research-writer-complex',
-    'research-reviewer',
-    'devops-readonly'
-  ]
-};
+~/.local/share/opencode/
+├── opencode.db            # SQLite database
+├── storage/
+│   ├── session_diff/      # Session state
+│   └── todo/              # Todo lists
+├── tool-output/           # Tool outputs
+└── log/                   # Execution logs
 ```
 
 ---
 
-## 4. Pipelines
+## 3. Complete opencode.json Configuration
 
-### BUGFIX (SIMPLE)
+### Full Configuration File
 
-```
-bugfix-triage → worker → utility
-```
-
-Simple bug fixes use a straightforward pipeline: triage, implementation, validation.
-
-### BUGFIX DEEP
-
-```
-bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → utility
-```
-
-Complex bug fixes include planning, execution, review, rework cycles, and consistency validation.
-
-### DEV SIMPLE
-
-```
-worker → utility
-```
-
-Simple development tasks: implementation → validation.
-
-### DEV COMPLEX
-
-```
-dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → utility
-```
-
-Complex development tasks include planning, guidance, review, rework, and consistency validation.
-
-### DEVOPS
-
-```
-devops-agent → devops-reviewer
-```
-
-DevOps operations: implementation and review.
-
-### DOCS
-
-```
-docs-writer → utility
-```
-
-Documentation writing followed by validation.
-
-### PLAN
-
-```
-plan-writer-* → plan-reviewer-*
-```
-
-Planning workflows include writing and review, with specialized agents per complexity level.
-
-### RESEARCH
-
-```
-research-writer-* → research-reviewer
-```
-
-Research workflows include writing and review.
-
-### Pipeline Summary
-
-| Pipeline | Steps | Uses consistency-checker |
-|----------|-------|--------------------------|
-| BUGFIX SIMPLE | 3 | ❌ No |
-| BUGFIX DEEP | 7 | ✅ Yes |
-| DEV SIMPLE | 2 | ❌ No |
-| DEV COMPLEX | 6 | ✅ Yes |
-| DEVOPS | 2 | ❌ No |
-| DOCS | 2 | ❌ No |
-| PLAN | 2 | ❌ No |
-| RESEARCH | 2 | ❌ No |
-
----
-
-## 5. JSON Output Format
-
-### orchestrator Required Fields (8 fields)
-
-| Field | Type | Valid Values | Description |
-|-------|------|--------------|-------------|
-| `agent` | string | `"orchestrator"` | Agent identifier |
-| `type` | string \| null | `"BUGFIX"`, `"DEVOPS"`, `"DEV"`, `"DOCS"`, `null` | Task type |
-| `complexity` | string \| null | `"SIMPLE"`, `"COMPLEX"`, `"DEEP"`, `null` | Task complexity |
-| `plan_exists` | boolean \| null | `true`, `false`, `null` | Whether a plan exists |
-| `plan_source` | string \| null | description or `null` | Source of the plan |
-| `goal` | string | one sentence | Goal description |
-| `next_agent` | string \| null | agent name from whitelist or `null` | Next agent to call |
-| `pipeline` | string[] | array of agent names or `[]` | Pipeline sequence |
-
-### plankestrator Required Fields (7 fields)
-
-| Field | Type | Valid Values | Description |
-|-------|------|--------------|-------------|
-| `agent` | string | `"plankestrator"` | Agent identifier |
-| `state` | string | `"CLASSIFY"`, `"EXECUTE"`, `"REVIEW"`, `"COMPLETE"` | Current state |
-| `type` | string \| null | `"PLAN"`, `"RESEARCH"`, `"RESEARCH+PLAN"`, `null` | Task type |
-| `complexity` | string \| null | `"SIMPLE"`, `"COMPLEX"`, `null` | Task complexity |
-| `goal` | string | one sentence | Goal description |
-| `next_agent` | string \| null | agent name from whitelist or `null` | Next agent to call |
-| `pipeline` | string[] | array of agent names or `[]` | Pipeline sequence |
-
-### consistency-checker Required Fields
-
-| Field | Type | Valid Values |
-|-------|------|--------------|
-| `agent` | string | `"consistency-checker"` |
-| `checks_performed` | number | integer |
-| `issues_found` | number | integer |
-| `issues_fixed` | number | integer |
-| `issues_unfixable` | number | integer |
-| `details` | array | array of check result objects |
-| `files_modified` | array | list of file paths |
-| `escalate_to` | string \| null | `"dev-reviewer"` or `null` |
-
-### JSON Output Examples
-
-#### orchestrator Example
-
-``json
+```json
 {
-  "agent": "orchestrator",
-  "type": "BUGFIX",
-  "complexity": "DEEP",
-  "plan_exists": false,
-  "plan_source": null,
-  "goal": "Fix the authentication timeout issue in the API gateway",
-  "next_agent": "bugfix-triage",
-  "pipeline": ["bugfix-triage", "plan-bug", "execute-bug", "dev-reviewer", "rework", "consistency-checker", "utility"]
-}
-```
-
-#### plankestrator Example
-
-``json
-{
-  "agent": "plankestrator",
-  "state": "CLASSIFY",
-  "type": "PLAN",
-  "complexity": "COMPLEX",
-  "goal": "Create a migration plan for the database schema refactoring",
-  "next_agent": "plan-writer-complex",
-  "pipeline": ["plan-writer-complex", "plan-reviewer-complex"]
-}
-```
-
----
-
-## 6. Workflow Enforcement Plugin
-
-### Location
-
-```
-~/.config/opencode/plugins/workflow-enforcement.ts
-```
-
-### Purpose
-
-| Function | Description |
-|----------|-------------|
-| **Routing Table Enforcement** | Blocks calls to agents outside whitelist |
-| **Identity Drift Detection** | Detects unexpected identity changes mid-session |
-| **JSON Output Validation** | Validates required fields and values |
-| **Workflow Step Logging** | Logs all workflow steps for debugging |
-
-### Lifecycle Hooks (6 hooks)
-
-| Hook | When | Purpose |
-|------|------|---------|
-| `tool.execute.before` | Before any tool call | Routing table enforcement, reverse routing lookup |
-| `tool.execute.after` | After tool completes | Logs tool completion |
-| `session.created` | New session starts | Detects which agent is running |
-| `session.updated` | Session changes | Detects identity drift |
-| `session.idle` | Session ends | Logs workflow summary |
-| `message.updated` | Message added | Validates JSON output format |
-
-### Plugin Structure
-
-```typescript
-export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
-  return {
-    event: async ({ event }) => {
-      // Handles session.created, session.idle, message.updated
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["./plugins/workflow-enforcement.ts"],
+  "mcp": {
+    "zread": {
+      "command": "node",
+      "args": ["path/to/zread-server.js"],
+      "env": {}
     },
-    "tool.execute.before": async (input, output) => {
-      // Routing table enforcement + reverse routing lookup
+    "webSearchPrime": {
+      "command": "node",
+      "args": ["path/to/websearchprime-server.js"],
+      "env": {}
     },
-    "tool.execute.after": async (input, output) => {
-      // Log completion
+    "webReader": {
+      "command": "node",
+      "args": ["path/to/webreader-server.js"],
+      "env": {}
+    },
+    "serena": {
+      "command": "serena-mcp",
+      "args": [],
+      "env": {
+        "SERENA_PROJECT_ROOT": "${PROJECT_ROOT}"
+      }
+    },
+    "unity": {
+      "command": "%USERPROFILE%\\.unity\\relay\\relay_win.exe",
+      "args": [],
+      "env": {}
+    }
+  },
+  "agents": {
+    "orchestrator": {
+      "path": "./agents/orchestrator.md",
+      "model": "alibaba-coding-plan/glm-5",
+      "mode": "primary",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      },
+      "whitelist": [
+        "orchestrator-identity-probe",
+        "dev-reviewer",
+        "dev-professor",
+        "mcp-github",
+        "worker",
+        "bugfix",
+        "rework",
+        "mcp-read",
+        "utility",
+        "devops",
+        "bugfix-triage",
+        "plan-bug",
+        "devops-agent",
+        "devops-reviewer",
+        "dev-planner",
+        "mcp-search",
+        "docs-writer",
+        "summarizer",
+        "execute-bug",
+        "consistency-checker"
+      ]
+    },
+    "plankestrator": {
+      "path": "./agents/plankestrator.md",
+      "model": "alibaba-coding-plan/glm-5",
+      "mode": "primary",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      },
+      "whitelist": [
+        "plankestrator-identity-probe",
+        "plan-writer-simple",
+        "plan-writer-complex",
+        "plan-reviewer-simple",
+        "plan-reviewer-complex",
+        "research-writer-simple",
+        "research-writer-complex",
+        "research-reviewer",
+        "devops-readonly"
+      ]
+    },
+    "orchestrator-identity-probe": {
+      "path": "./agents/orchestrator-identity-probe.md",
+      "model": "minimax-coding-plan/MiniMax-M2.7",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "plankestrator-identity-probe": {
+      "path": "./agents/plankestrator-identity-probe.md",
+      "model": "minimax-coding-plan/MiniMax-M2.7",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "worker": {
+      "path": "./agents/worker.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "allow",
+        "bash": "allow",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "bugfix-triage": {
+      "path": "./agents/bugfix-triage.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "bugfix": {
+      "path": "./agents/bugfix.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "allow",
+        "bash": "allow",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "plan-bug": {
+      "path": "./agents/plan-bug.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "execute-bug": {
+      "path": "./agents/execute-bug.md",
+      "model": "zai-coding-plan/glm-5.1",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "allow",
+        "bash": "allow",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "dev-planner": {
+      "path": "./agents/dev-planner.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "dev-professor": {
+      "path": "./agents/dev-professor.md",
+      "model": "zai-coding-plan/glm-5.1",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "dev-reviewer": {
+      "path": "./agents/dev-reviewer.md",
+      "model": "kimi-for-coding/k2p6",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "rework": {
+      "path": "./agents/rework.md",
+      "model": "zai-coding-plan/glm-5.1",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "allow",
+        "bash": "allow",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "consistency-checker": {
+      "path": "./agents/consistency-checker.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "allow",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "docs-writer": {
+      "path": "./agents/docs-writer.md",
+      "model": "alibaba-coding-plan/glm-5",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "allow",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "utility": {
+      "path": "./agents/utility.md",
+      "model": "minimax-coding-plan/MiniMax-M2.7",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "mcp-github": {
+      "path": "./agents/mcp-github.md",
+      "model": "minimax-coding-plan/MiniMax-M2.7",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "mcp-read": {
+      "path": "./agents/mcp-read.md",
+      "model": "minimax-coding-plan/MiniMax-M2.7",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "mcp-search": {
+      "path": "./agents/mcp-search.md",
+      "model": "minimax-coding-plan/MiniMax-M2.7",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "summarizer": {
+      "path": "./agents/summarizer.md",
+      "model": "minimax-coding-plan/MiniMax-M2.7",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "devops-agent": {
+      "path": "./agents/devops-agent.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "allow",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "devops-reviewer": {
+      "path": "./agents/devops-reviewer.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "allow",
+        "read": "allow",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "plan-writer-simple": {
+      "path": "./agents/plan-writer-simple.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "plan-writer-complex": {
+      "path": "./agents/plan-writer-complex.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "plan-reviewer-simple": {
+      "path": "./agents/plan-reviewer-simple.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "plan-reviewer-complex": {
+      "path": "./agents/plan-reviewer-complex.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "research-writer-simple": {
+      "path": "./agents/research-writer-simple.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "research-writer-complex": {
+      "path": "./agents/research-writer-complex.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "research-reviewer": {
+      "path": "./agents/research-reviewer.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
+    },
+    "devops-readonly": {
+      "path": "./agents/devops-readonly.md",
+      "model": "alibaba-coding-plan/qwen3.6-plus",
+      "mode": "subagent",
+      "permission": {
+        "edit": "allow",
+        "write": "deny",
+        "bash": "deny",
+        "unity-mcp.*": "allow"
+      }
     }
   }
 }
 ```
 
-### Error Messages
+### Agent Models Reference
 
-#### Routing Violation
+| Agent | Model |
+|-------|-------|
+| orchestrator | `alibaba-coding-plan/glm-5` |
+| plankestrator | `alibaba-coding-plan/glm-5` |
+| worker | `alibaba-coding-plan/qwen3.6-plus` |
+| bugfix-triage | `alibaba-coding-plan/qwen3.6-plus` |
+| bugfix | `alibaba-coding-plan/qwen3.6-plus` |
+| plan-bug | `alibaba-coding-plan/qwen3.6-plus` |
+| execute-bug | `zai-coding-plan/glm-5.1` |
+| dev-planner | `alibaba-coding-plan/qwen3.6-plus` |
+| dev-professor | `zai-coding-plan/glm-5.1` |
+| dev-reviewer | `kimi-for-coding/k2p6` |
+| rework | `zai-coding-plan/glm-5.1` |
+| consistency-checker | `alibaba-coding-plan/qwen3.6-plus` |
+| docs-writer | `alibaba-coding-plan/glm-5` |
+| utility | `minimax-coding-plan/MiniMax-M2.7` |
+| mcp-github | `minimax-coding-plan/MiniMax-M2.7` |
+| mcp-read | `minimax-coding-plan/MiniMax-M2.7` |
+| mcp-search | `minimax-coding-plan/MiniMax-M2.7` |
+| summarizer | `minimax-coding-plan/MiniMax-M2.7` |
+| devops-agent | `alibaba-coding-plan/qwen3.6-plus` |
+| devops-reviewer | `alibaba-coding-plan/qwen3.6-plus` |
+| plan-writer-simple | `alibaba-coding-plan/qwen3.6-plus` |
+| plan-writer-complex | `alibaba-coding-plan/qwen3.6-plus` |
+| plan-reviewer-simple | `alibaba-coding-plan/qwen3.6-plus` |
+| plan-reviewer-complex | `alibaba-coding-plan/qwen3.6-plus` |
+| research-writer-simple | `alibaba-coding-plan/qwen3.6-plus` |
+| research-writer-complex | `alibaba-coding-plan/qwen3.6-plus` |
+| research-reviewer | `alibaba-coding-plan/qwen3.6-plus` |
+| devops-readonly | `alibaba-coding-plan/qwen3.6-plus` |
+| identity-probe-* | `minimax-coding-plan/MiniMax-M2.7` |
+
+### Permissions Reference
+
+| Agent | edit | write | bash | read |
+|-------|------|-------|------|------|
+| orchestrator | deny | deny | deny | - |
+| plankestrator | deny | deny | deny | - |
+| worker | allow | allow | allow | - |
+| bugfix | allow | allow | allow | - |
+| execute-bug | allow | allow | allow | - |
+| rework | allow | allow | allow | - |
+| dev-reviewer | allow | deny | deny | - |
+| consistency-checker | allow | allow | deny | - |
+| docs-writer | allow | allow | deny | - |
+| devops-agent | deny | deny | allow | - |
+| devops-reviewer | deny | deny | allow | allow |
+| plan-writer-* | allow | deny | deny | - |
+| plan-reviewer-* | allow | deny | deny | - |
+| research-writer-* | allow | deny | deny | - |
+| research-reviewer | allow | deny | deny | - |
+| devops-readonly | allow | deny | deny | - |
+| utility | deny | deny | deny | - |
+| mcp-* | deny | deny | deny | - |
+| identity-probe-* | deny | deny | deny | - |
+
+### unity-mcp Permissions — ALL Agents
+
+**unity-mcp is available for ALL agents, not just orchestrator and plankestrator.**
+
+All agents have `"unity-mcp.*": "allow"` permission, which means:
+- `Unity.ManageGameObject` — allow
+- `Unity.ManageScene` — allow
+- `Unity.ManageAsset` — allow
+- `Unity.CreateScript` — allow
+- `Unity.DeleteScript` — allow
+- `Unity.ManageScript` — allow
+- `Unity.ScriptApplyEdits` — allow
+- `Unity.ValidateScript` — allow
+- `Unity.ApplyTextEdits` — allow
+- `Unity.ManageShader` — allow
+- `Unity.ReadConsole` — allow
+- `Unity.RunCommand` — allow
+- `Unity.ImportExternalModel` — allow
+- `Unity.ManageMenuItem` — allow
+- `Unity.ManageEditor` — allow
+- `Unity.GetSHA` — allow
+- `Unity.ResourceTools` — allow
+
+**Why ALL agents need unity-mcp:**
+- worker — creates GameObjects, scripts, assets
+- bugfix — fixes Unity-specific bugs
+- execute-bug — implements Unity bug fixes
+- dev-professor — guides Unity development
+- dev-reviewer — reviews Unity code
+- rework — fixes Unity code issues
+- consistency-checker — validates Unity architecture
+- docs-writer — documents Unity features
+- utility — validates Unity scripts
+- devops-agent — manages Unity builds
+- devops-reviewer — reviews Unity DevOps
+- bugfix-triage — analyzes Unity bugs
+- plan-bug — plans Unity bug fixes
+- dev-planner — plans Unity development
+- mcp-github — reads Unity repos
+- mcp-read — reads Unity docs
+- mcp-search — searches Unity docs
+- summarizer — summarizes Unity content
+
+**plankestrator subagents also have unity-mcp:**
+- plan-writer-simple — plans Unity features
+- plan-writer-complex — plans Unity architecture
+- plan-reviewer-simple — reviews Unity plans
+- plan-reviewer-complex — reviews Unity architecture
+- research-writer-simple — researches Unity docs
+- research-writer-complex — researches Unity architecture
+- research-reviewer — reviews Unity research
+- devops-readonly — reads Unity DevOps info
+
+### Worker Bash Permission — CRITICAL
+
+**⚠️ Worker MUST have `bash: allow` — this is NOT optional**
+
+Worker is the implementation agent — it needs bash for:
+
+| Command Type | Examples |
+|--------------|----------|
+| npm operations | `npm install`, `npm run build`, `npm run test` |
+| git operations | `git status`, `git add`, `git commit`, `git push` |
+| file operations | `mkdir`, `touch`, `rm` |
+| linting tools | `eslint`, `prettier`, `tsc` |
+| test runners | `jest`, `vitest`, `pytest` |
+| any CLI tools | Any command-line tool execution |
+
+**Critical:** Without `bash: allow`, worker cannot implement changes — it would be unable to run tests, install dependencies, or execute any commands. This is a bug if worker reports bash is not available.
+
+---
+
+## 4. Complete Agent File Templates
+
+### orchestrator.md Template
+
+```markdown
+---
+description: Orchestrator (Conductor). Task classifier and delegator. Determines task type (BUGFIX/DEVOPS/DEV/DOCS), complexity, and routes to specialist agents. NEVER edits files or runs commands.
+mode: primary
+model: alibaba-coding-plan/glm-5
+temperature: 0.1
+permission:
+  edit: deny
+  write: deny
+  bash: deny
+---
+
+You are the Orchestrator (Conductor). You MUST follow this workflow EXACTLY. You MUST NOT edit files, write files, or run bash commands. You MUST ONLY classify tasks and delegate to specialist agents.
+
+### ⛔ IDENTITY FAIL-SAFE — DO NOT SKIP ⛔
+
+Before generating ANY output, ask yourself:
+- "Does my agent file description say 'Orchestrator' or 'Conductor'?"
+- If "Plankestrator" → YOU ARE NOT ORCHESTRATOR → STOP → Output identity error
+- If "Orchestrator" → Proceed with ✓ IDENTITY VERIFIED output
+
+This check is MANDATORY. It is not optional. It applies to EVERY response, EVERY continuation, EVERY follow-up.
+
+## ╔══════════════════════════════════════════════════════════════╗
+## ║  AGENT IDENTITY — ABSOLUTE PRIORITY — READ THIS FIRST       ║
+## ╚══════════════════════════════════════════════════════════════╝
+
+### WHO YOU ARE:
+You are **orchestrator**. Your description says "Orchestrator (Conductor). Task classifier and delegator."
+
+### WHO YOU ARE NOT:
+You are **NOT** plankestrator.
+You are **NOT** a planner.
+You are **NOT** a researcher.
+If you feel the urge to create plans or conduct research → you are experiencing identity drift → STOP.
+
+### MANDATORY IDENTITY VERIFICATION — BEFORE EVERY RESPONSE:
+
+You MUST output this EXACT line as the FIRST thing in your response. No exceptions. No deviations. No alternate formats.
 
 ```
-🚫 WORKFLOW VIOLATION - ROUTING TABLE ENFORCEMENT
+✓ IDENTITY VERIFIED: I am orchestrator. I am NOT plankestrator. My role: classify tasks and delegate. My permissions: edit=deny, write=deny, bash=deny. Task type: [BUGFIX|DEVOPS|DEV|DOCS]. Proceeding.
+```
 
-Current Agent: orchestrator
-Attempted Call: plan-writer-simple
-Allowed Agents: orchestrator-identity-probe, dev-reviewer, ...
+**Verification checklist (perform BEFORE outputting the line above):**
+1. Read your own description in this file's frontmatter → it says "Orchestrator" → ✓ you are orchestrator
+2. Your mode is `primary` → ✓ matches
+3. Your role is `Task classifier and delegator` → ✓ you classify and route
+4. Your routing table covers: BUGFIX, DEVOPS, DEV, DOCS → ✓ NOT PLAN/RESEARCH
+5. You do NOT create plans → ✓ that is plankestrator's job
+6. You do NOT conduct research → ✓ that is plankestrator's job
+7. You do NOT route to plan-writer-* or research-writer-* → ✓ that is plankestrator's job
+
+**If ANY checklist item fails:**
+- STOP immediately
+- You have loaded the wrong agent file
+- Output: "⛔ IDENTITY ERROR: I detected I am NOT orchestrator. I will not proceed. Expected: orchestrator. Got: [what you actually are]."
+- DO NOT output JSON, DO NOT call Task tool, DO NOT proceed with any workflow
+
+## OUTPUT FORMAT (MANDATORY)
+
+You MUST output your response in this EXACT JSON structure. NO other text allowed:
+
+```json
+{
+  "agent": "orchestrator",
+  "type": "BUGFIX|DEVOPS|DEV|DOCS|null",
+  "complexity": "SIMPLE|COMPLEX|DEEP|null",
+  "plan_exists": true|false|null,
+  "plan_source": "description or null",
+  "goal": "one sentence description",
+  "next_agent": "agent-name or null",
+  "pipeline": ["step1", "step2"] or []
+}
+```
+
+After outputting JSON, if next_agent is not null, you MUST call the Task tool with the next_agent.
+
+## TASK TYPE CLASSIFICATION
+
+MUST classify the task into one of these types FIRST:
+
+**BUGFIX** — MUST classify as BUGFIX if:
+- User wants to fix a bug or error
+- User reports unexpected behavior
+- Keywords: "fix", "bug", "error", "crash", "doesn't work", "broken"
+- When this rule matches: type = BUGFIX, proceed to complexity check
+
+**DEVOPS** — MUST classify as DEVOPS if:
+- User wants to run commands, deploy, configure
+- User wants CI/CD, infrastructure, environment setup
+- Keywords: "run", "deploy", "install", "configure", "build", "npm", "docker"
+- When this rule matches: type = DEVOPS, proceed to complexity check
+
+**DEV** — MUST classify as DEV if:
+- User wants to implement new features
+- User wants to add functionality
+- Keywords: "implement", "add", "create", "build feature", "develop"
+- When this rule matches: type = DEV, proceed to complexity check
+
+**DOCS** — MUST classify as DOCS if:
+- User wants to write documentation
+- User wants README, API docs, guides
+- Keywords: "document", "README", "docs", "write documentation", "API docs"
+- When this rule matches: type = DOCS, proceed to complexity check
+
+## COMPLEXITY RULES
+
+**SIMPLE** — MUST classify as SIMPLE if ALL conditions met:
+- Single file involved
+- Obvious fix/implementation
+- No architectural decisions
+- No external dependencies
+
+**COMPLEX** — MUST classify as COMPLEX if ANY condition met:
+- 3+ files involved
+- Architectural decisions needed
+- External API integration
+- Refactoring required
+
+**DEEP** — MUST classify as DEEP if ANY condition met:
+- 5+ files involved
+- Major architectural changes
+- Multiple systems affected
+- Complex debugging required
+
+## ROUTING TABLE
+
+MUST select agent from this table. NO other agents allowed:
+
+| Type | Complexity | MUST call this agent |
+|------|------------|---------------------|
+| BUGFIX | SIMPLE | bugfix-triage |
+| BUGFIX | COMPLEX | bugfix-triage |
+| BUGFIX | DEEP | bugfix-triage |
+| DEVOPS | SIMPLE | devops-agent |
+| DEVOPS | COMPLEX | devops-agent |
+| DEV | SIMPLE | worker |
+| DEV | COMPLEX | dev-planner |
+| DOCS | SIMPLE | docs-writer |
+| DOCS | COMPLEX | docs-writer |
+
+## PIPELINES
+
+MUST follow these pipelines exactly:
+
+**BUGFIX SIMPLE:** bugfix-triage → worker → utility
+**BUGFIX DEEP:** bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → utility
+
+**DEV SIMPLE:** worker → utility
+**DEV COMPLEX:** dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → utility
+
+**DEVOPS:** devops-agent → devops-reviewer
+
+**DOCS:** docs-writer → utility
+
+## EXECUTION RULES
+
+Step 0 — IDENTITY PROBE (MANDATORY FIRST STEP):
+
+1. Attempt to call `orchestrator-identity-probe` with this prompt: "Confirm my identity."
+2. Check the result:
+   - **SUCCESS** → You ARE orchestrator → Output identity verification
+   - **DENIED** → You are NOT orchestrator → Continue to step 3
+
+3. Attempt to call `plankestrator-identity-probe` with this prompt: "Confirm my identity."
+4. Check the result:
+   - **SUCCESS** → You ARE plankestrator → Output identity verification
+   - **DENIED** → IDENTITY ERROR → STOP
+
+5. After identity confirmation, output your JSON with correct `"agent"` field
+6. Proceed with your workflow
+
+## CRITICAL WARNINGS
+
+**FORBIDDEN — ANY OF THESE = IMMEDIATE FAILURE:**
+- Outputting JSON without the ✓ IDENTITY VERIFIED line first
+- Skipping Step 0 identity verification
+- Outputting `"agent": "plankestrator"` in your JSON
+- Claiming to be plankestrator in any form
+- Classifying tasks into PLAN/RESEARCH
+- Routing to plan-writer-* or research-writer-*
+- Editing files
+- Running bash
+
+**REQUIRED — STRICT ORDER:**
+1. FIRST: "✓ IDENTITY VERIFIED: I am orchestrator..." output line
+2. SECOND: JSON output with `"agent": "orchestrator"`
+3. THIRD: Task tool call with correct next_agent
+4. FOURTH: Wait for result
+5. FIFTH: Next pipeline step or output final result
+
+## EXAMPLES
+
+### BUGFIX SIMPLE EXAMPLE
+
+User: "Fix the login button not working"
+
+Step 0 — IDENTITY PROBE:
+Attempt to call orchestrator-identity-probe...
+- Result: SUCCESS → ✓ IDENTITY VERIFIED: I am orchestrator. I am NOT plankestrator. My role: classify tasks and delegate. My permissions: edit=deny, write=deny, bash=deny. Task type: BUGFIX. Proceeding.
+
+Step 1 — Output JSON:
+```json
+{
+  "agent": "orchestrator",
+  "type": "BUGFIX",
+  "complexity": "SIMPLE",
+  "plan_exists": false,
+  "plan_source": null,
+  "goal": "Fix login button functionality",
+  "next_agent": "bugfix-triage",
+  "pipeline": ["bugfix-triage", "worker", "utility"]
+}
+```
+
+Step 2 — Call Task tool:
+- subagent_type: "bugfix-triage"
+- description: "Triage login bug"
+- prompt: "Analyze and triage this bug: login button not working. Determine root cause and fix strategy."
+
+Step 3 — Wait for result, then call worker, then utility.
+
+### DEV COMPLEX EXAMPLE
+
+User: "Implement user authentication system"
+
+Step 0 — IDENTITY PROBE:
+- Result: SUCCESS → ✓ IDENTITY VERIFIED
+
+Step 1 — Output JSON:
+```json
+{
+  "agent": "orchestrator",
+  "type": "DEV",
+  "complexity": "COMPLEX",
+  "plan_exists": false,
+  "plan_source": null,
+  "goal": "Implement user authentication system",
+  "next_agent": "dev-planner",
+  "pipeline": ["dev-planner", "dev-professor", "dev-reviewer", "rework", "consistency-checker", "utility"]
+}
+```
+
+Step 2 — Call dev-planner, then follow pipeline.
+```
+
+### plankestrator.md Template
+
+```markdown
+---
+description: Plankestrator. Planning and research state machine. Determines task type, complexity, and routes to specialist agents. Handles PLAN, RESEARCH, RESEARCH+PLAN. Implementation tasks are out of scope. NEVER edits files or runs commands.
+mode: primary
+model: alibaba-coding-plan/glm-5
+temperature: 0.1
+permission:
+  edit: deny
+  write: deny
+  bash: deny
+---
+
+You are the Plankestrator. You MUST follow this workflow EXACTLY. You MUST NOT edit files, write files, or run bash commands. You MUST ONLY plan, research, and delegate to specialist agents. Implementation tasks are out of scope.
+
+### ⛔ IDENTITY FAIL-SAFE — DO NOT SKIP ⛔
+
+Before generating ANY output, ask yourself:
+- "Does my agent file description say 'Plankestrator' or 'Conductor'?"
+- If "Conductor" → YOU ARE NOT PLANKESTRATOR → STOP → Output identity error
+- If "Plankestrator" → Proceed with ✓ IDENTITY VERIFIED output
+
+## ╔══════════════════════════════════════════════════════════════╗
+## ║  AGENT IDENTITY — ABSOLUTE PRIORITY — READ THIS FIRST       ║
+## ╚══════════════════════════════════════════════════════════════╝
+
+### WHO YOU ARE:
+You are **plankestrator**. Your description says "Plankestrator. Planning and research state machine."
+
+### WHO YOU ARE NOT:
+You are **NOT** orchestrator (Conductor).
+You are **NOT** a task classifier.
+You are **NOT** a router.
+If you feel the urge to classify tasks into BUGFIX/DEVOPS/DEV/DOCS → you are experiencing identity drift → STOP.
+
+### MANDATORY IDENTITY VERIFICATION — BEFORE EVERY RESPONSE:
+
+You MUST output this EXACT line as the FIRST thing in your response:
+
+```
+✓ IDENTITY VERIFIED: I am plankestrator. I am NOT orchestrator. My role: planning and research. My permissions: edit=deny, write=deny, bash=deny. Task type: [PLAN|RESEARCH|RESEARCH+PLAN]. Proceeding.
+```
+
+## STATE MACHINE OPERATION
+
+You operate as a deterministic state machine:
+- States: [CLASSIFY, EXECUTE, REVIEW, COMPLETE]
+- You may ONLY be in one state at a time
+- State transitions MUST be explicit in JSON output
+
+## OUTPUT FORMAT (MANDATORY)
+
+```json
+{
+  "agent": "plankestrator",
+  "state": "CLASSIFY",
+  "type": "PLAN|RESEARCH|RESEARCH+PLAN|null",
+  "complexity": "SIMPLE|COMPLEX|null",
+  "goal": "one sentence description",
+  "next_agent": "agent-name or null",
+  "pipeline": ["step1", "step2"] or []
+}
+```
+
+## TASK TYPE CLASSIFICATION
+
+**PLAN** — MUST classify as PLAN if:
+- User wants to plan an implementation
+- User wants architecture decisions
+- Keywords: "plan", "design", "architect", "implement plan", "how to build"
+
+**RESEARCH** — MUST classify as RESEARCH if:
+- User wants to gather information
+- User wants to understand a technology/library/API
+- Keywords: "research", "find out", "what is", "how does", "compare", "investigate"
+
+**RESEARCH+PLAN** — MUST classify as RESEARCH+PLAN if:
+- User wants research followed by a plan
+- Keywords: "research and plan", "figure out and design", "analyze then plan"
+
+## ROUTING TABLE
+
+| Type | Complexity | MUST call this agent |
+|------|------------|---------------------|
+| PLAN | SIMPLE | plan-writer-simple |
+| PLAN | COMPLEX | plan-writer-complex |
+| RESEARCH | SIMPLE | research-writer-simple |
+| RESEARCH | COMPLEX | research-writer-complex |
+| RESEARCH+PLAN | SIMPLE | research-writer-simple → plan-writer-simple |
+| RESEARCH+PLAN | COMPLEX | research-writer-complex → plan-writer-complex |
+
+## PIPELINES
+
+**PLAN SIMPLE:** plan-writer-simple → plan-reviewer-simple
+**PLAN COMPLEX:** plan-writer-complex → plan-reviewer-complex
+
+**RESEARCH SIMPLE:** research-writer-simple → research-reviewer
+**RESEARCH COMPLEX:** research-writer-complex → research-reviewer
+
+**RESEARCH+PLAN SIMPLE:** research-writer-simple → research-reviewer → plan-writer-simple → plan-reviewer-simple
+**RESEARCH+PLAN COMPLEX:** research-writer-complex → research-reviewer → plan-writer-complex → plan-reviewer-complex
+
+## OUT OF SCOPE TASKS
+
+**IMPLEMENTATION/BUGFIX/DEVOPS/DOCS TASKS** — If user requests implementation:
+- Keywords: "implement", "execute", "build", "code", "fix bug", "run tests", "write docs"
+- This is NOT your scope
+- Output: "⚠️ OUT OF SCOPE: Please switch to orchestrator for: BUGFIX, DEVOPS, DEV, DOCS tasks."
+- DO NOT call Task tool
+- STOP and wait for user to switch agents
+
+## EXECUTION RULES
+
+Step 0 — IDENTITY PROBE (MANDATORY FIRST STEP):
+
+1. Attempt to call `plankestrator-identity-probe` with this prompt: "Confirm my identity."
+2. Check the result:
+   - **SUCCESS** → You ARE plankestrator → Output identity verification
+   - **DENIED** → Continue to step 3
+
+3. Attempt to call `orchestrator-identity-probe` with this prompt: "Confirm my identity."
+4. Check the result:
+   - **SUCCESS** → You ARE orchestrator → Output identity verification
+   - **DENIED** → IDENTITY ERROR → STOP
+
+## CRITICAL WARNINGS
+
+**FORBIDDEN:**
+- Outputting `"agent": "orchestrator"` in your JSON
+- Claiming to be orchestrator or "Conductor"
+- Classifying tasks into BUGFIX/DEVOPS/DEV/DOCS
+- Routing to bugfix-triage/worker/devops-agent
+- Editing files
+- Running bash
+
+**REQUIRED ORDER:**
+1. FIRST: "✓ IDENTITY VERIFIED: I am plankestrator..."
+2. SECOND: JSON output with `"agent": "plankestrator"`
+3. THIRD: Task tool call
+4. FOURTH: Wait for result
+5. FIFTH: Next pipeline step or final result
+```
+
+### Identity Probe Agent Template
+
+```markdown
+---
+description: Identity probe for orchestrator. Confirms agent identity. MiniMax M2.7.
+mode: subagent
+model: minimax-coding-plan/MiniMax-M2.7
+temperature: 0.0
+permission:
+  edit: deny
+  write: deny
+  bash: deny
+---
+
+You are the orchestrator Identity Probe.
+
+Your ONLY purpose is to confirm identity when called.
+
+When called with "Confirm my identity.", respond with:
+
+```
+✓ IDENTITY CONFIRMED: You are orchestrator. The orchestrator-identity-probe call succeeded, which means you have permission to call this agent. This confirms you are orchestrator, NOT plankestrator.
+```
+
+DO NOT:
+- Perform any other task
+- Edit files
+- Run commands
+- Output anything other than the confirmation message
+```
+
+---
+
+## 5. Complete Plugin Code
+
+### workflow-enforcement.ts (600 lines)
+
+```typescript
+import type { Plugin } from "@opencode-ai/plugin"
+
+// ============================================================
+// Routing Tables — which agents each primary agent can call
+// ============================================================
+const ROUTING_TABLES = {
+  orchestrator: [
+    "orchestrator-identity-probe",
+    "dev-reviewer",
+    "dev-professor",
+    "mcp-github",
+    "worker",
+    "bugfix",
+    "rework",
+    "mcp-read",
+    "utility",
+    "devops",
+    "bugfix-triage",
+    "plan-bug",
+    "devops-agent",
+    "devops-reviewer",
+    "dev-planner",
+    "mcp-search",
+    "docs-writer",
+    "summarizer",
+    "execute-bug",
+    "consistency-checker"
+  ],
+  plankestrator: [
+    "plankestrator-identity-probe",
+    "plan-writer-simple",
+    "plan-writer-complex",
+    "plan-reviewer-simple",
+    "plan-reviewer-complex",
+    "research-writer-simple",
+    "research-writer-complex",
+    "research-reviewer",
+    "devops-readonly"
+  ]
+}
+
+// ============================================================
+// JSON Validation Rules
+// ============================================================
+const REQUIRED_JSON_FIELDS: Record<string, string[]> = {
+  orchestrator: ["agent", "type", "complexity", "plan_exists", "plan_source", "goal", "next_agent", "pipeline"],
+  plankestrator: ["agent", "state", "type", "complexity", "goal", "next_agent", "pipeline"]
+}
+
+const VALID_VALUES: Record<string, Record<string, (string | null)[]>> = {
+  orchestrator: {
+    agent: ["orchestrator"],
+    type: ["BUGFIX", "DEVOPS", "DEV", "DOCS", null],
+    complexity: ["SIMPLE", "COMPLEX", "DEEP", null]
+  },
+  plankestrator: {
+    agent: ["plankestrator"],
+    state: ["CLASSIFY", "EXECUTE", "REVIEW", "COMPLETE"],
+    type: ["PLAN", "RESEARCH", "RESEARCH+PLAN", null],
+    complexity: ["SIMPLE", "COMPLEX", null]
+  }
+}
+
+const IDENTITY_PROBE_AGENTS = [
+  "orchestrator-identity-probe",
+  "plankestrator-identity-probe"
+]
+
+// ============================================================
+// Plugin State (per-process, reset on session.created)
+// ============================================================
+let currentAgent: string | null = null
+let hasOutputtedJSON: Map<string, boolean> = new Map()
+let workflowSteps: Array<{timestamp: number, tool: string, agent: string, target?: string}> = []
+
+// ============================================================
+// Plugin Entry Point
+// ============================================================
+export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
+  await client.app.log({
+    body: {
+      service: "workflow-enforcement",
+      level: "info",
+      message: "Workflow enforcement plugin initialized (v2 — correct hooks)"
+    }
+  })
+
+  return {
+    // ==========================================================
+    // "event" hook — handles session lifecycle, identity tracking,
+    // and JSON validation.
+    // ==========================================================
+    event: async ({ event }) => {
+      // ----------------------------------------------------------
+      // session.created — detect initial agent identity
+      // ----------------------------------------------------------
+      if (event.type === "session.created") {
+        const sessionData = (event as any).properties?.session
+          || (event as any).properties
+          || event
+
+        const detected = detectAgentFromSessionData(sessionData)
+
+        if (detected) {
+          currentAgent = detected
+          hasOutputtedJSON.set(detected, false)
+
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "info",
+              message: `Session created — agent detected: ${detected}`,
+              extra: { sessionId: (event as any).session_id || (event as any).sessionID }
+            }
+          })
+
+          if (detected === "orchestrator" || detected === "plankestrator") {
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "warn",
+                message: "MANDATORY: You MUST output JSON before any Task tool call. Format: 1) IDENTITY VERIFIED line, 2) JSON code block, 3) Task tool call. NO EXCEPTIONS."
+              }
+            })
+          }
+        } else {
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "info",
+              message: "Session created — agent not yet detected, will detect from output"
+            }
+          })
+        }
+
+        workflowSteps = []
+      }
+
+      // ----------------------------------------------------------
+      // session.idle — log workflow summary
+      // ----------------------------------------------------------
+      if (event.type === "session.idle") {
+        await client.app.log({
+          body: {
+            service: "workflow-enforcement",
+            level: "info",
+            message: "Session idle — workflow summary",
+            extra: {
+              agent: currentAgent,
+              totalSteps: workflowSteps.length,
+              steps: workflowSteps.slice(-10)
+            }
+          }
+        })
+      }
+
+      // ----------------------------------------------------------
+      // message.updated — validate JSON output + detect agent
+      // ----------------------------------------------------------
+      if (event.type === "message.updated") {
+        const message = (event as any).properties?.message
+          || (event as any).message
+
+        if (!message) return
+
+        const jsonContent = extractJSONFromMessage(message)
+        const identityText = extractIdentityFromMessage(message)
+
+        // Use IDENTITY VERIFIED text to detect agent FIRST
+        if (identityText && !currentAgent) {
+          if (identityText === "orchestrator" || identityText === "plankestrator") {
+            currentAgent = identityText
+            hasOutputtedJSON.set(identityText, false)
+
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "info",
+                message: `Agent detected from IDENTITY VERIFIED text: ${identityText}`
+              }
+            })
+          }
+        }
+
+        // Use JSON output to detect agent if not yet detected
+        if (jsonContent?.agent && !currentAgent) {
+          const agentName = String(jsonContent.agent)
+          if (agentName === "orchestrator" || agentName === "plankestrator") {
+            currentAgent = agentName
+            hasOutputtedJSON.set(agentName, false)
+
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "info",
+                message: `Agent detected from JSON output: ${agentName}`
+              }
+            })
+          }
+        }
+
+        // Correct agent from IDENTITY VERIFIED text if mismatch
+        if (identityText && currentAgent && identityText !== currentAgent) {
+          const previousAgent = currentAgent
+          currentAgent = identityText
+          hasOutputtedJSON.set(identityText, false)
+
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "warn",
+              message: "Agent corrected from IDENTITY VERIFIED text",
+              extra: { previousAgent, newAgent: currentAgent }
+            }
+          })
+        }
+
+        // Check for identity drift from JSON
+        if (jsonContent?.agent && currentAgent && jsonContent.agent !== currentAgent && !identityText) {
+          const previousAgent = currentAgent
+          currentAgent = String(jsonContent.agent)
+          hasOutputtedJSON.set(currentAgent, false)
+
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "warn",
+              message: "IDENTITY DRIFT DETECTED",
+              extra: { previousAgent, newAgent: currentAgent }
+            }
+          })
+        }
+
+        // Validate JSON if we know which agent is running
+        if (jsonContent && currentAgent) {
+          const validation = validateJSONOutput(jsonContent, currentAgent)
+
+          if (!validation.valid) {
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "warn",
+                message: "INVALID JSON OUTPUT",
+                extra: {
+                  agent: currentAgent,
+                  errors: validation.errors,
+                  missingFields: validation.missingFields
+                }
+              }
+            })
+          } else {
+            hasOutputtedJSON.set(currentAgent, true)
+
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "info",
+                message: "Valid JSON output detected — Task tool now allowed",
+                extra: { agent: currentAgent }
+              }
+            })
+          }
+        }
+      }
+    },
+
+    // ==========================================================
+    // "tool.execute.before" — routing table enforcement
+    // ==========================================================
+    "tool.execute.before": async (input, output) => {
+      const timestamp = Date.now()
+
+      const isFirstTaskCall = input.tool === "task" 
+        && workflowSteps.filter(s => s.tool === "task").length === 0
+
+      // Reverse routing lookup
+      if (!currentAgent && input.tool === "task") {
+        const targetAgent = (output as any)?.args?.subagent_type || (input as any)?.args?.subagent_type
+        if (targetAgent) {
+          const detected = detectAgentFromSubagent(targetAgent)
+          if (detected) {
+            currentAgent = detected
+            hasOutputtedJSON.set(detected, true)
+
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "info",
+                message: `Agent detected via reverse routing lookup: ${detected} (called ${targetAgent})`
+              }
+            })
+
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "warn",
+                message: `JSON output will be REQUIRED for all subsequent Task tool calls by ${detected}.`
+              }
+            })
+          }
+        }
+      }
+
+      const targetForLog = input.tool === "task"
+        ? ((output as any)?.args?.subagent_type || (input as any)?.args?.subagent_type)
+        : undefined
+
+      workflowSteps.push({
+        timestamp,
+        tool: input.tool,
+        agent: currentAgent || "unknown",
+        target: targetForLog
+      })
+
+      if (input.tool !== "task") return
+
+      const targetAgent = (output as any)?.args?.subagent_type || (input as any)?.args?.subagent_type
+
+      if (!currentAgent) {
+        await client.app.log({
+          body: {
+            service: "workflow-enforcement",
+            level: "warn",
+            message: "Current agent not detected, cannot enforce routing table"
+          }
+        })
+        return
+      }
+      
+      // Check: agent must output JSON before calling non-identity-probe agents
+      const agentJSONStatus = hasOutputtedJSON.get(currentAgent) ?? false
+      if (!agentJSONStatus && targetAgent && !IDENTITY_PROBE_AGENTS.includes(targetAgent) && !isFirstTaskCall) {
+        throw new Error(`
+⛔ JSON OUTPUT REQUIRED — PLUGIN ENFORCEMENT
+
+You MUST output valid JSON BEFORE calling the Task tool.
+
+Required output order:
+1. FIRST: "IDENTITY VERIFIED: I am ${currentAgent}..."
+2. SECOND: JSON code block with ALL required fields
+3. THIRD: THEN call Task tool
+
+Exception: Identity probe agents may be called before JSON output.
+
+This is enforced by the workflow-enforcement plugin.
+        `)
+      }
+
+      // Check: target agent must be in routing table
+      const allowedAgents = ROUTING_TABLES[currentAgent as keyof typeof ROUTING_TABLES] || []
+      if (targetAgent && !allowedAgents.includes(targetAgent)) {
+        const otherAgent = currentAgent === "orchestrator" ? "plankestrator" : "orchestrator"
+        const otherAllowedAgents = ROUTING_TABLES[otherAgent as keyof typeof ROUTING_TABLES] || []
+        
+        if (otherAllowedAgents.includes(targetAgent)) {
+          const previousAgent = currentAgent
+          currentAgent = otherAgent
+          hasOutputtedJSON.set(otherAgent, true)
+          
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "warn",
+              message: `Agent corrected via routing fallback: was ${previousAgent}, now ${otherAgent} (called ${targetAgent})`
+            }
+          })
+        } else {
+          throw new Error(`
+WORKFLOW VIOLATION - ROUTING TABLE ENFORCEMENT
+
+Current Agent: ${currentAgent}
+Attempted Call: ${targetAgent}
+Allowed Agents: ${allowedAgents.join(", ")}
 
 This violates the routing table configuration.
 Please follow the correct workflow for your agent type.
 
 Orchestrator handles: BUGFIX, DEVOPS, DEV, DOCS
 Plankestrator handles: PLAN, RESEARCH, RESEARCH+PLAN
-```
-
-#### Identity Drift Detection
-
-```
-⚠️ IDENTITY DRIFT DETECTED
-
-Previous Agent: orchestrator
-New Agent: plankestrator
-Session ID: session-abc123
-
-This may indicate:
-- User manually switched agents
-- Agent incorrectly identified itself
-- Session state corruption
-
-Current agent updated to: plankestrator
-```
-
-#### Invalid JSON Output
-
-```
-❌ INVALID JSON OUTPUT
-
-Agent: orchestrator
-Missing Fields: plan_exists, plan_source
-Errors:
-  - Missing required field: plan_exists
-  - Invalid value for type: PLAN (expected: BUGFIX|DEVOPS|DEV|DOCS|null)
-```
-
-### Configuration in opencode.json
-
-``json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugins": ["./plugins/workflow-enforcement.ts"],
-  "mcp": { ... },
-  "agents": { ... }
-}
-```
-
----
-
-## 7. Identity Verification
-
-### Required Output Format
-
-```
-✓ IDENTITY VERIFIED: I am [agent_name]. I am NOT [other_agent_name].
-```
-
-### Examples
-
-```
-✓ IDENTITY VERIFIED: I am orchestrator. I am NOT plankestrator.
-✓ IDENTITY VERIFIED: I am plankestrator. I am NOT orchestrator.
-```
-
-### Identity Probe Whitelists
-
-| Primary Agent | Allowed Probe | Denied Probe |
-|---------------|---------------|--------------|
-| orchestrator | `orchestrator-identity-probe` ✅ | `plankestrator-identity-probe` ❌ |
-| plankestrator | `plankestrator-identity-probe` ✅ | `orchestrator-identity-probe` ❌ |
-
-### Probe Procedure
-
-```
-Step 0 — IDENTITY PROBE (MANDATORY FIRST STEP):
-1. Attempt to call orchestrator-identity-probe
-2. If SUCCESS → You are orchestrator → Output identity verification
-3. If DENIED → Attempt to call plankestrator-identity-probe
-4. If SUCCESS → You are plankestrator → Output identity verification
-5. If DENIED → IDENTITY ERROR → STOP
-```
-
-### How Identity Probes Work
-
-1. **Probe Agent**: A minimal agent that only returns success when called by the correct primary agent
-2. **Routing Table Check**: Plugin checks if the calling agent is in the probe's whitelist
-3. **Success/Denied**: If caller is allowed, probe succeeds; otherwise, it's denied
-4. **Verification Output**: Primary agent outputs the identity verification message
-
----
-
-## 8. Agent Files
-
-### Location
-
-```
-~/.config/opencode/agents/*.md
-```
-
-### Required Agent Files
-
-| Agent | File | Purpose |
-|-------|------|---------|
-| orchestrator | `orchestrator.md` | Primary agent for operational tasks |
-| plankestrator | `plankestrator.md` | Primary agent for planning |
-| orchestrator-identity-probe | `orchestrator-identity-probe.md` | Probe for orchestrator |
-| plankestrator-identity-probe | `plankestrator-identity-probe.md` | Probe for plankestrator |
-| worker | `worker.md` | Simple development tasks |
-| utility | `utility.md` | Validation and formatting |
-| consistency-checker | `consistency-checker.md` | Architecture validation |
-| docs-writer | `docs-writer.md` | Documentation writing |
-
-> **Note:** The table above shows primary and key auxiliary agents. All agents from the routing tables in Section 3 must have corresponding `.md` files.
-
-### Key Agent Permissions
-
-Some agents have specific permission configurations that differ from defaults:
-
-| Agent | Permission | Reason |
-|-------|------------|--------|
-| orchestrator | `edit: deny`, `write: deny`, `bash: deny` | Primary agent only routes tasks, doesn't execute |
-| plankestrator | `edit: deny`, `write: deny`, `bash: deny` | Primary agent only plans, doesn't execute |
-| devops-agent | `bash: allow` | Executes commands, creates files |
-| devops-reviewer | `bash: allow`, `read: allow`, `edit: deny`, `write: deny` | **Reviewers need bash for git read-only commands** (`git status`, `git log`, `git diff`) |
-| worker | `edit: allow`, `write: allow`, `bash: allow` | Implements code changes |
-| utility | `bash: allow` | Runs syntax checks, formatting tools |
-| devops-readonly | `bash: deny`, `read: allow` | Pure read-only operations |
-
-> **Important:** `devops-reviewer` has `bash: allow` specifically for **read-only git operations** (git status, git log, git diff, git show). This is required to verify commits and pushes without modifying the repository.
-
-### Agent Models Reference
-
-| Agent | Model | Notes |
-|-------|-------|-------|
-| **orchestrator** | `alibaba-coding-plan/glm-5` | Primary agent for operational tasks |
-| **plankestrator** | `alibaba-coding-plan/glm-5` | Primary agent for planning |
-| **worker** | `alibaba-coding-plan/qwen3.6-plus` | Simple development tasks |
-| **devops-reviewer** | `alibaba-coding-plan/qwen3.6-plus` | DevOps verification |
-| **devops-agent** | `minimax-coding-plan/MiniMax-M2.7` | DevOps execution |
-| **devops-readonly** | `minimax-coding-plan/MiniMax-M2.7` | Read-only operations |
-| **devops** | `minimax-coding-plan/MiniMax-M2.7` | DevOps tasks |
-| **utility** | `minimax-coding-plan/MiniMax-M2.7` | Validation tools |
-| **bugfix-triage** | `alibaba-coding-plan/qwen3.6-plus` | Bug analysis |
-| **plan-bug** | `alibaba-coding-plan/qwen3.6-plus` | Bug fix planning |
-| **dev-planner** | `alibaba-coding-plan/qwen3.6-plus` | Development planning |
-| **docs-writer** | `alibaba-coding-plan/glm-5` | Documentation |
-| **mcp-github** | `minimax-coding-plan/MiniMax-M2.7` | GitHub operations |
-| **mcp-read** | `minimax-coding-plan/MiniMax-M2.7` | Web reading |
-| **mcp-search** | `minimax-coding-plan/MiniMax-M2.7` | Web search |
-| **summarizer** | `minimax-coding-plan/MiniMax-M2.7` | Summarization |
-| **dev-reviewer** | `kimi-for-coding/k2p6` | Code review |
-| **research-reviewer** | `kimi-for-coding/k2p6` | Research review |
-| **plan-reviewer-complex** | `kimi-for-coding/k2p6` | Complex plan review |
-| **dev-professor** | `zai-coding-plan/glm-5.1` | Development guidance |
-| **execute-bug** | `zai-coding-plan/glm-5.1` | Bug fix execution |
-| **rework** | `zai-coding-plan/glm-5.1` | Rework on feedback |
-| **plan-writer-complex** | `zai-coding-plan/glm-5.1` | Complex planning |
-| **research-writer-complex** | `zai-coding-plan/glm-5.1` | Complex research |
-
-> **Note:** Models must be configured in **both** locations:
-> 1. Agent `.md` file frontmatter (`model:` field) — **takes priority**
-> 2. `opencode.json` agent config (`model` field) — fallback
-
-### devops-reviewer Rules
-
-**Purpose:** Validate DevOps operations after devops-agent execution.
-
-**Permissions:**
-```yaml
-permission:
-  edit: deny      # Cannot modify files
-  write: deny     # Cannot create files  
-  read: allow     # Can read files and logs
-  bash: allow     # Can run READ-ONLY git commands
-```
-
-**Allowed bash commands (read-only):**
-| Command | Purpose |
-|---------|---------|
-| `git status` | Verify clean working tree |
-| `git log -N` | Check recent commits |
-| `git diff` | Verify staged changes |
-| `git show` | Review commit content |
-| `git branch` | List branches |
-| `git remote -v` | Verify remote config |
-| `ls`, `cat` | Verify created files |
-
-**Forbidden bash commands:**
-| Command | Reason |
-|---------|--------|
-| `git commit` | Would modify repository |
-| `git push` | Would modify remote |
-| `git reset` | Would modify history |
-| `git checkout` | Would change branch |
-| `git merge` | Would modify history |
-| Any write command | Reviewer is read-only |
-
-**Verification checklist:**
-1. Check git status — should be clean after commit
-2. Check git log — commit should exist with correct message
-3. Check git diff — no unexpected staged changes
-4. Check remote sync — no unpushed commits (if applicable)
-5. Verify created files — expected files should exist
-6. Check exit codes — all commands should return 0
-7. Review output logs — no errors or warnings
-
-### Serena Usage Rules (MAXIMUM PRIORITY)
-
-**⚠️ MANDATORY: Serena tools are PRIMARY for all code operations**
-
-**Tool Priority Matrix:**
-
-| Task | PRIMARY (Serena) | SECONDARY (Built-in) | Use Built-in ONLY When |
-|------|------------------|---------------------|------------------------|
-| Find symbol by name | `serena_find_symbol` | `grep` | Serena fails or pattern unknown |
-| Find all references | `serena_find_referencing_symbols` | `grep` | Serena fails |
-| File structure overview | `serena_get_symbols_overview` | `read` (entire file) | Serena fails |
-| Rename across files | `serena_rename_symbol` | `edit` (regex replace) | Serena fails |
-| Delete unused code | `serena_safe_delete_symbol` | `edit` | Serena fails |
-| Replace function body | `serena_replace_symbol_body` | `edit` | Serena fails |
-| Insert after symbol | `serena_insert_after_symbol` | `edit` (line numbers) | Serena fails |
-
-**Permission Configuration:**
-
-``json
-{
-  "permission": {
-    "serena_find_symbol": "allow",
-    "serena_find_referencing_symbols": "allow",
-    "serena_get_symbols_overview": "allow",
-    "serena_rename_symbol": "allow",
-    "serena_safe_delete_symbol": "allow",
-    "serena_replace_symbol_body": "allow",
-    "serena_insert_after_symbol": "allow",
-    "grep": "ask",
-    "edit": "ask",
-    "read": { "*.py": "ask", "*.ts": "ask", "*.js": "ask", "*": "allow" }
-  }
-}
-```
-
-**Behavior:**
-- Serena tools → **auto-approved** → agent can use immediately
-- Built-in tools (grep, edit, read for code files) → **asks user** → nudges agent to try Serena first
-
-**AGENTS.md Integration:**
-
-Add this section to your project's `AGENTS.md`:
-
-```markdown
-## Serena MCP Rules
-
-### ⚠️ MANDATORY: Serena tools are PRIMARY for code operations
-
-**DO NOT use built-in tools (grep, read, glob, edit) for:**
-- Finding symbols/classes/functions → USE `serena_find_symbol`
-- Finding references/usages → USE `serena_find_referencing_symbols`
-- Understanding file structure → USE `serena_get_symbols_overview`
-- Renaming across files → USE `serena_rename_symbol`
-- Deleting code → USE `serena_safe_delete_symbol`
-- Editing function/class body → USE `serena_replace_symbol_body`
-- Inserting code → USE `serena_insert_after_symbol`
-
-**Built-in tools are SECONDARY - use ONLY when:**
-- Serena tool fails or is unavailable
-- Searching for unknown text patterns (not symbol names)
-- Reading specific file content at known locations
-- Simple single-line edits where symbol boundaries are unclear
-```
-
-### orchestrator.md Content Summary
-
-```markdown
-# orchestrator
-
-You are the orchestrator agent — the primary agent for operational and execution tasks.
-
-## Identity Verification (MANDATORY FIRST STEP)
-
-Before any other action, you MUST verify your identity:
-1. Attempt to call orchestrator-identity-probe
-2. If SUCCESS → You are orchestrator → Output identity verification
-3. If DENIED → Attempt to call plankestrator-identity-probe
-4. If SUCCESS → You are plankestrator → Output identity verification
-5. If DENIED → IDENTITY ERROR → STOP
-
-Required output format:
-✓ IDENTITY VERIFIED: I am orchestrator. I am NOT plankestrator.
-
-## Task Types You Handle
-
-| Type | Description |
-|------|-------------|
-| BUGFIX | Bug fixing workflows |
-| DEVOPS | DevOps operations |
-| DEV | Development tasks |
-| DOCS | Documentation writing |
-
-## Routing Table (20 agents)
-
-You can ONLY call these agents:
-- orchestrator-identity-probe
-- dev-reviewer
-- ... (full list)
-
-## JSON Output Format (MANDATORY)
-
-Required fields: agent, type, complexity, plan_exists, plan_source, goal, next_agent, pipeline
-
-## Pipelines
-
-BUGFIX SIMPLE: bugfix-triage → worker → utility
-BUGFIX DEEP: bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → utility
-...
-```
-
-### plankestrator.md Content Summary
-
-```markdown
-# plankestrator
-
-You are the plankestrator agent — the primary agent for planning and research tasks.
-
-## Identity Verification (MANDATORY FIRST STEP)
-
-Before any other action, you MUST verify your identity:
-1. Attempt to call plankestrator-identity-probe
-2. If SUCCESS → You are plankestrator → Output identity verification
-3. If DENIED → Attempt to call orchestrator-identity-probe
-4. If SUCCESS → You are orchestrator → Output identity verification
-5. If DENIED → IDENTITY ERROR → STOP
-
-Required output format:
-✓ IDENTITY VERIFIED: I am plankestrator. I am NOT orchestrator.
-
-## Task Types You Handle
-
-| Type | Description |
-|------|-------------|
-| PLAN | Planning workflows |
-| RESEARCH | Research workflows |
-| RESEARCH+PLAN | Combined research and planning |
-
-## Routing Table (9 agents)
-
-You can ONLY call these agents:
-- plankestrator-identity-probe
-- plan-writer-simple
-- ... (full list)
-
-## JSON Output Format (MANDATORY)
-
-Required fields: agent, state, type, complexity, goal, next_agent, pipeline
-
-## Pipelines
-
-PLAN: plan-writer-* → plan-reviewer-*
-RESEARCH: research-writer-* → research-reviewer
-```
-
-### How to Create Custom Agents
-
-1. Create a new `.md` file in `~/.config/opencode/agents/`
-2. Define the agent's role and capabilities
-3. Add the agent to the appropriate routing table in:
-   - `workflow-enforcement.ts`
-   - `ARCHITECTURE.md`
-4. Add the agent to `opencode.json` under `agents`
-5. Run `consistency-checker` to validate
-
----
-
-## 9. MCP Servers
-
-### Server Configuration
-
-| Server | Tool Prefix | Purpose |
-|--------|-------------|---------|
-| **zread** | `zread_` | GitHub repository reading |
-| **webSearchPrime** | `webSearchPrime_` | Web search |
-| **webReader** | `webReader_` | URL content reading |
-| **Serena** | `serena_` | IDE-level coding operations |
-
-### zread (GitHub)
-
-| Tool | Description |
-|------|-------------|
-| `zread_search_doc` | Search documentation, issues, PRs, and code in a repository |
-| `zread_get_repo_structure` | Get directory structure and file list |
-| `zread_read_file` | Read complete file content from repository |
-
-### webSearchPrime (Web Search)
-
-| Tool | Description |
-|------|-------------|
-| `webSearchPrime_web_search_prime` | Search the web for information |
-
-### webReader (URL Reading)
-
-| Tool | Description |
-|------|-------------|
-| `webReader_webReader` | Fetch and convert URL content to LLM-friendly format |
-
-### Usage Rules
-
-```
-⚠️ IMPORTANT: Do NOT use webfetch!
-
-- For web search → webSearchPrime
-- For reading URLs → webReader
-- For GitHub repositories → zread
-- For symbol operations → Serena
-```
-
-### Usage Examples
-
-```typescript
-// Web search
-webSearchPrime_web_search_prime({
-  search_query: "OpenCode MCP integration",
-  location: "en"
-})
-`
-// Read URL
-webReader_webReader({
-  url: "https://docs.example.com/api",
-  return_format: "markdown"
-})
-`
-// GitHub repository
-zread_search_doc({
-  repo_name: "vitejs/vite",
-  query: "configuration options"
-})
-`
-zread_get_repo_structure({
-  repo_name: "vitejs/vite",
-  dir_path: "packages"
-})
-`
-zread_read_file({
-  repo_name: "vitejs/vite",
-  file_path: "package.json"
-})
-```
-
----
-
-## 10. Serena MCP Server
-
-### What is Serena?
-
-**Serena is the IDE for your coding agent.** It provides essential semantic code retrieval, editing, refactoring, and debugging tools that operate at the symbol level — just like an IDE.
-
-Key capabilities:
-- **Symbol-level operations**: Find symbols, get references, rename across files
-- **Semantic editing**: Replace symbol bodies, insert before/after symbols, safe delete
-- **Multi-language support**: 40+ programming languages via language servers
-- **Agent-first design**: High-level abstractions, no line numbers or primitive search patterns
-
-### Why Serena?
-
-Without Serena, agents must use:
-- `grep` for finding symbols (slow, imprecise)
-- `read` entire files to understand structure (token-heavy)
-- `edit` with search/replace for refactoring (error-prone)
-
-With Serena, agents can:
-- Find symbols by name in one call
-- Get file structure without reading entire file
-- Rename symbols across all files atomically
-- Replace function/class bodies precisely
-
-### Installation
-
-```bash
-# Install uv (package manager) if not already installed
-# See: https://docs.astral.sh/uv/getting-started/installation/
-
-# Install Serena
-uv tool install -p 3.13 serena-agent@latest --prerelease=allow
-
-# Initialize Serena (language server backend)
-serena init
-
-# Or initialize with JetBrains backend
-serena init -b JetBrains
-```
-
-### Configuration in opencode.json
-
-``json
-{
-  "mcp": {
-    "servers": {
-      "serena": {
-        "type": "stdio",
-        "command": "serena",
-        "args": ["mcp-server", "--transport", "stdio"]
+          `)
+        }
       }
+
+      await client.app.log({
+        body: {
+          service: "workflow-enforcement",
+          level: "info",
+          message: `Valid routing: ${currentAgent} → ${targetAgent}`,
+          extra: { allowed: true }
+        }
+      })
+    },
+
+    // ==========================================================
+    // "tool.execute.after" — log tool completion
+    // ==========================================================
+    "tool.execute.after": async (input, output) => {
+      await client.app.log({
+        body: {
+          service: "workflow-enforcement",
+          level: "info",
+          message: `Tool completed: ${input.tool}`,
+          extra: {
+            agent: currentAgent,
+            success: !(output as any)?.error
+          }
+        }
+      })
     }
   }
 }
-```
 
-### Serena Tools
+// ============================================================
+// Agent Detection Helpers
+// ============================================================
 
-| Tool | Description | When to Use |
-|------|-------------|-------------|
-| `serena_find_symbol` | Find symbol by name | Instead of grep for symbol search |
-| `serena_find_referencing_symbols` | Find all references to a symbol | Instead of grep for references |
-| `serena_get_symbols_overview` | Get file structure/outline | Instead of reading entire file |
-| `serena_rename_symbol` | Rename symbol across codebase | Instead of edit with search/replace |
-| `serena_safe_delete_symbol` | Delete unused symbol safely | Instead of manual edit |
-| `serena_replace_symbol_body` | Replace function/class body | Instead of edit with line numbers |
-| `serena_insert_after_symbol` | Insert code after symbol | Instead of edit with line numbers |
+function detectAgentFromSessionData(sessionData: any): string | null {
+  if (!sessionData) return null
 
-### Serena vs Built-in Tools
-
-| Operation | Serena Tool | Built-in Tool |
-|-----------|-------------|---------------|
-| Find symbol by name | `serena_find_symbol` ✅ | `grep` ❌ |
-| Find all references | `serena_find_referencing_symbols` ✅ | `grep` ❌ |
-| Understand file structure | `serena_get_symbols_overview` ✅ | `read` (entire file) ❌ |
-| Rename across files | `serena_rename_symbol` ✅ | `edit` with search/replace ❌ |
-| Delete unused code | `serena_safe_delete_symbol` ✅ | `edit` ❌ |
-| Replace function/class body | `serena_replace_symbol_body` ✅ | `edit` ❌ |
-| Insert code near symbol | `serena_insert_after_symbol` ✅ | `edit` with line numbers ❌ |
-| Unknown text pattern search | — | `grep` ✅ |
-| Read specific file content | — | `read` ✅ |
-| Find files by name | — | `glob` ✅ |
-| Simple single-file edits | — | `edit` ✅ |
-| Run commands/tests | — | `bash` ✅ |
-
-### Integration with AGENTS.md Rules
-
-Add this section to your project's `AGENTS.md`:
-
-```markdown
-### Serena MCP Rules
-
-#### Symbol Operations → USE SERENA (ALWAYS)
-| Operation | Serena Tool | Do NOT Use |
-|-----------|-------------|------------|
-| Find symbol by name | `serena_find_symbol` | grep |
-| Find all references | `serena_find_referencing_symbols` | grep |
-| Understand file structure | `serena_get_symbols_overview` | read (entire file) |
-| Rename across files | `serena_rename_symbol` | edit with search/replace |
-| Delete unused code | `serena_safe_delete_symbol` | edit |
-| Replace function/class body | `serena_replace_symbol_body` | edit |
-| Insert code near symbol | `serena_insert_after_symbol` | edit with line numbers |
-
-#### Simple Operations → USE BUILT-IN TOOLS
-| Operation | Built-in Tool |
-|-----------|---------------|
-| Unknown text pattern search | grep |
-| Read specific file content | read |
-| Find files by name | glob |
-| Simple single-file edits | edit |
-| Run commands/tests | bash |
-```
-
----
-
-## 11. Unity MCP Server (Official)
-
-Unity MCP provides integration with Unity Editor for game development automation.
-
-### Installation
-
-1. **Requirements:**
-   - Unity 6 (6000.0) or later
-   - Unity Editor must be running
-
-2. **Install Unity Package:**
-   - Open Unity Editor
-   - Go to `Window > Package Manager`
-   - Click `+` → `Add package by name`
-   - Enter: `com.unity.ai.assistant`
-   - Click `Add`
-
-3. **Auto-install Relay Binary:**
-   - Start Unity Editor with the AI Assistant package
-   - Relay binary will be installed automatically to:
-     - Windows: `%USERPROFILE%\.unity\relay\relay_win.exe`
-     - macOS: `~/.unity/relay/relay_macos`
-     - Linux: `~/.unity/relay/relay_linux`
-
-4. **First-time Connection:**
-   - Open Unity Editor
-   - Go to `Edit > Project Settings > AI > Unity MCP`
-   - Click `Accept` to approve the connection
-
-### Configuration
-
-Add to `opencode.json`:
-
-```json
-"mcp": {
-  "unity": {
-    "type": "stdio",
-    "command": ["C:\\Users\\Admin\\.unity\\relay\\relay_win.exe"],
-    "args": ["--mcp"]
+  if (sessionData.title) {
+    const title = String(sessionData.title).toLowerCase()
+    if (title.includes("orchestrator")) return "orchestrator"
+    if (title.includes("plankestrator")) return "plankestrator"
   }
+
+  if (sessionData.agent === "orchestrator" || sessionData.agent === "plankestrator") {
+    return sessionData.agent
+  }
+
+  return null
 }
-```
 
-For macOS/Linux, adjust the path accordingly.
-
-### Available Tools
-
-| Tool | Description |
-|------|-------------|
-| `Unity.ManageGameObject` | Create, find, modify, delete GameObjects |
-| `Unity.ManageScene` | Load, save, create scenes, query hierarchy |
-| `Unity.ManageAsset` | Asset management operations |
-| `Unity.CreateScript` | Create C# scripts |
-| `Unity.DeleteScript` | Delete C# scripts |
-| `Unity.ManageScript` | CRUD operations on C# scripts |
-| `Unity.ScriptApplyEdits` | Advanced script editing |
-| `Unity.ApplyTextEdits` | Apply text edits to C# scripts |
-| `Unity.ValidateScript` | Validate C# scripts |
-| `Unity.ManageShader` | CRUD operations on shader files |
-| `Unity.ReadConsole` | Read/clear Unity Editor console logs |
-| `Unity.RunCommand` | Compile and execute C# scripts |
-| `Unity.ImportExternalModel` | Import external models/assets |
-| `Unity.ManageMenuItem` | Execute/list/refresh menu items |
-| `Unity.ManageEditor` | Control/query Editor state, Tags, Layers |
-| `Unity.GetSHA` | Get SHA256 for C# scripts |
-| `Unity.ManageScriptCapabilities` | Manage script capabilities |
-| `Unity.ResourceTools` | List and read project files |
-
-### Usage Rules
-
-See `AGENTS.md` → "Unity MCP Rules" section for mandatory usage guidelines.
-
-### Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| Relay binary not found | Start Unity Editor with AI Assistant package installed |
-| Connection refused | Check Unity Editor is running, approve connection in Project Settings |
-| Tool not available | Verify `com.unity.ai.assistant` package is installed |
-| Permission denied | Run Unity Editor as administrator (Windows) or with sudo (Linux) |
-
----
-
-## 12. Serena Language Configuration
-
-### Project Configuration File
-
-Location: `.serena/project.yml` in project root
-
-### Supported Languages (Major)
-
-| Language | Serena Key | Notes |
-|----------|------------|-------|
-| Python | `python` | No additional setup |
-| TypeScript | `typescript` | Also supports JavaScript |
-| JavaScript | `typescript` | Use TypeScript key |
-| Java | `java` | No additional setup |
-| C# | `csharp` | Requires .NET v10+ |
-| C/C++ | `cpp` | Uses clangd; provide `compile_commands.json` |
-| Go | `go` | Requires `gopls` |
-| Rust | `rust` | Requires rustup |
-| Ruby | `ruby` | Uses ruby-lsp |
-| PHP | `php` | Uses Intelephense |
-| Kotlin | `kotlin` | Uses official Kotlin LSP (pre-alpha) |
-| Swift | `swift` | No additional setup |
-| Scala | `scala` | Requires manual setup (Metals LSP) |
-| Lua | `lua` | No additional setup |
-| Dart | `dart` | No additional setup |
-| Elixir | `elixir` | Requires Elixir installation |
-| Haskell | `haskell` | Auto-locates HLS via ghcup |
-| Julia | `julia` | No additional setup |
-| F# | `fsharp` | Requires .NET v8.0+ |
-| PowerShell | `powershell` | No additional setup |
-| Bash | `bash` | No additional setup |
-| Perl | `perl` | Requires Perl::LanguageServer |
-| R | `r` | Requires `languageserver` R package |
-| Zig | `zig` | Requires ZLS |
-| Nix | `nix` | Requires nixd |
-| Clojure | `clojure` | No additional setup |
-| Erlang | `erlang` | Requires beam and erlang_ls |
-| Elm | `elm` | Requires Elm compiler |
-| Fortran | `fortran` | Requires fortls (`pip install fortls`) |
-| Groovy | `groovy` | Requires groovy-language-server.jar |
-| Haxe | `haxe` | Requires Haxe compiler 3.4.0+ |
-| Vue | `vue` | 3.x with TypeScript; requires Node.js v18+ |
-| Crystal | `crystal` | Requires Crystalline on PATH |
-| Pascal | `pascal` | Uses Pascal/Lazarus (auto-downloaded) |
-| OCaml | `ocaml` | Requires opam and ocaml-lsp-server |
-| Lean 4 | `lean4` | Requires elan |
-| Solidity | `solidity` | Experimental; requires Node.js |
-| Ansible | `ansible` | Experimental; requires Node.js |
-| Terraform | `terraform` | No additional setup |
-
-### Experimental Languages
-
-| Language | Serena Key | Notes |
-|----------|------------|-------|
-| JSON | json` | Must explicitly enable; requires Node.js |
-| YAML | `yaml` | No additional setup |
-| TOML | `toml` | No additional setup |
-| Markdown | `markdown` | Must explicitly enable; for documentation-heavy projects |
-| MATLAB | `matlab` | No additional setup |
-
-### Example Configuration
-
-```yaml
-# .serena/project.yml
-
-# Project name
-project_name: "MyProject"
-
-# Languages to enable
-# First language is the default/fallback
-languages:
-  - python
-  - typescript
-  - json
-  - yaml
-
-# File encoding
-encoding: "utf-8"
-
-# Line ending convention (unset, lf, crlf, native)
-line_ending:
-
-# Language backend (LSP or JetBrains)
-language_backend:
-
-# Use .gitignore to ignore files
-ignore_all_files_in_gitignore: true
-
-# Additional paths to ignore
-ignored_paths: []
-
-# Read-only mode
-read_only: false
-
-# Tools to exclude
-excluded_tools: []
-
-# Initial prompt
-initial_prompt: ""
-```
-
-### Language-Specific Notes
-
-#### C/C++
-
-```yaml
-languages:
-  - cpp
-
-# For best results, provide compile_commands.json at repository root
-# See: https://oraios.github.io/serena/03-special-guides/cpp_setup
-```
-
-#### C#
-
-```yaml
-languages:
-  - csharp  # Uses Roslyn (requires .NET v10+)
-  # or
-  - csharp_omnisharp  # Uses OmniSharp
-```
-
-#### PHP
-
-```yaml
-languages:
-  - php  # Uses Intelephense
-  # Set INTELEPHENSE_LICENSE_KEY for premium features
-  # or
-  - php_phpactor  # Uses Phpactor (requires PHP 8.1+)
-```
-
-#### Ruby
-
-```yaml
-languages:
-  - ruby  # Uses ruby-lsp
-  # or
-  - ruby_solargraph  # Uses Solargraph
-```
-
-### Adding Languages to Existing Project
-
-1. Edit `.serena/project.yml`
-2. Add language to the `languages` list
-3. Restart Serena MCP server
-4. Verify language server started
-
----
-
-## 13. Step-by-Step Deployment Guide
-
-### Prerequisites
-
-| Requirement | Version | Installation |
-|-------------|---------|--------------|
-| Python | 3.13+ | System package manager |
-| Node.js | 18+ | System package manager |
-| uv | Latest | `curl -LsSf https://astral.sh/uv/install.sh | sh` |
-| OpenCode | Latest | Follow OpenCode installation guide |
-
-### Step 1: Install OpenCode
-
-```bash
-# Follow OpenCode installation instructions
-# Ensure ~/.config/opencode/ directory exists
-```
-
-### Step 2: Create Directory Structure
-
-```bash
-# Linux/macOS
-mkdir -p ~/.config/opencode/plugins
-mkdir -p ~/.config/opencode/agents
-
-# Windows (PowerShell)
-mkdir -Force "$env:USERPROFILE\.config\opencode\plugins"
-mkdir -Force "$env:USERPROFILE\.config\opencode\agents"
-```
-
-### Step 3: Copy Plugin File
-
-```bash
-# Linux/macOS
-cp workflow-enforcement.ts ~/.config/opencode/plugins/
-
-# Windows (PowerShell)
-Copy-Item "workflow-enforcement.ts" "$env:USERPROFILE\.config\opencode\plugins\"
-```
-
-### Step 4: Copy Agent Files
-
-```bash
-# Linux/macOS
-cp agents/*.md ~/.config/opencode/agents/
-
-# Windows (PowerShell)
-Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\"
-```
-
-### Step 5: Configure opencode.json
-
-Create or edit `~/.config/opencode/opencode.json`:
-
-``json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "plugins": ["./plugins/workflow-enforcement.ts"],
-  "mcp": {
-    "servers": {
-      "zread": {
-        "type": "remote",
-        "url": "https://mcp.zread.dev"
-      },
-      "webSearchPrime": {
-        "type": "remote",
-        "url": "https://mcp.websearchprime.dev"
-      },
-      "webReader": {
-        "type": "remote",
-        "url": "https://mcp.webreader.dev"
-      },
-      "serena": {
-        "type": "stdio",
-        "command": "serena",
-        "args": ["mcp-server", "--transport", "stdio"]
-      }
+function detectAgentFromSubagent(subagentName: string): string | null {
+  for (const [primaryAgent, whitelist] of Object.entries(ROUTING_TABLES)) {
+    if (whitelist.includes(subagentName)) {
+      return primaryAgent
     }
-  },
-  "agents": {
-    "orchestrator": "./agents/orchestrator.md",
-    "plankestrator": "./agents/plankestrator.md",
-    "orchestrator-identity-probe": "./agents/orchestrator-identity-probe.md",
-    "plankestrator-identity-probe": "./agents/plankestrator-identity-probe.md",
-    "worker": "./agents/worker.md",
-    "utility": "./agents/utility.md",
-    "consistency-checker": "./agents/consistency-checker.md",
-    "docs-writer": "./agents/docs-writer.md"
+  }
+  return null
+}
+
+// ============================================================
+// JSON Parsing & Validation
+// ============================================================
+
+function extractIdentityFromMessage(message: any): string | null {
+  const content = message.content || message.text || ""
+  if (typeof content !== "string") return null
+
+  const identityMatch = content.match(/IDENTITY VERIFIED:\s*I am\s+(orchestrator|plankestrator)/i)
+  if (identityMatch) {
+    return identityMatch[1].toLowerCase()
+  }
+
+  return null
+}
+
+function extractJSONFromMessage(message: any): any | null {
+  const content = message.content || message.text || ""
+  if (typeof content !== "string") return null
+
+  const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/)
+  if (jsonMatch) {
+    try {
+      return JSON.parse(jsonMatch[1])
+    } catch {
+      return null
+    }
+  }
+
+  const inlineMatch = content.match(/\{[\s\S]*?"agent"[\s\S]*?\}/)
+  if (inlineMatch) {
+    try {
+      return JSON.parse(inlineMatch[0])
+    } catch {
+      return null
+    }
+  }
+
+  return null
+}
+
+function validateJSONOutput(json: any, agent: string): {valid: boolean, errors: string[], missingFields: string[]} {
+  const errors: string[] = []
+  const missingFields: string[] = []
+
+  const requiredFields = REQUIRED_JSON_FIELDS[agent] || []
+  for (const field of requiredFields) {
+    if (!(field in json)) {
+      missingFields.push(field)
+    }
+  }
+
+  const validValues = VALID_VALUES[agent] || {}
+  for (const [field, values] of Object.entries(validValues)) {
+    if (json[field] !== undefined && !values.includes(json[field])) {
+      errors.push(`Invalid value for ${field}: ${json[field]}, expected: ${values.join("|")}`)
+    }
+  }
+
+  if (json.next_agent !== null && json.next_agent !== undefined) {
+    const allowedAgents = ROUTING_TABLES[agent as keyof typeof ROUTING_TABLES] || []
+    if (!allowedAgents.includes(json.next_agent)) {
+      errors.push(`Invalid next_agent: ${json.next_agent} (not in whitelist)`)
+    }
+  }
+
+  if (json.pipeline !== undefined && json.pipeline !== null && !Array.isArray(json.pipeline)) {
+    errors.push(`Invalid pipeline: ${json.pipeline} (expected: array)`)
+  }
+
+  if (json.goal !== undefined && json.goal !== null && typeof json.goal !== "string") {
+    errors.push(`Invalid goal: ${json.goal} (expected: string)`)
+  }
+
+  if (agent === "orchestrator" && json.plan_exists !== undefined && json.plan_exists !== null) {
+    if (typeof json.plan_exists !== "boolean") {
+      errors.push(`Invalid plan_exists: ${json.plan_exists} (expected: boolean|null)`)
+    }
+  }
+
+  if (agent === "orchestrator" && json.plan_source !== undefined && json.plan_source !== null) {
+    if (typeof json.plan_source !== "string") {
+      errors.push(`Invalid plan_source: ${json.plan_source} (expected: string|null)`)
+    }
+  }
+
+  if (json.agent && json.agent !== agent) {
+    errors.push(`IDENTITY MISMATCH: JSON claims agent=${json.agent}, but current agent is ${agent}`)
+  }
+
+  return {
+    valid: errors.length === 0 && missingFields.length === 0,
+    errors,
+    missingFields
   }
 }
 ```
 
-> **Note:** Add all remaining agents from the routing tables in Section 3 to the `agents` object.
+---
 
-### Step 6: Install and Configure Serena
+## 6. Deployment Instructions
+
+### Step-by-Step Deployment Guide
+
+#### Step 1: Install Prerequisites
 
 ```bash
-# Install Serena
-uv tool install -p 3.13 serena-agent@latest --prerelease=allow
+# Install Node.js (if not installed)
+# Windows: Download from https://nodejs.org
+# Linux/Mac:
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt-get install -y nodejs
 
-# Initialize Serena
-serena init
+# Install OpenCode CLI
+npm install -g @opencode-ai/cli
 
 # Verify installation
-serena --version
+opencode --version
+node --version
 ```
 
-### Step 7: Create AGENTS.md in Project
-
-Create `AGENTS.md` in project root with:
-
-```markdown
-# Project Rules
-
-## MCP Tools Rules
-
-### Search
-Always use webSearchPrime for web search. Do NOT use webfetch.
-
-### Read URLs
-Always use webReader for reading URL content. Do NOT use webfetch.
-
-### GitHub Repositories
-Always use zread tools for GitHub repositories.
-
-### Serena MCP Rules
-Use Serena for symbol operations. See detailed table in documentation.
-
-## Architecture Requirements
-All architecture requirements are defined in ARCHITECTURE.md.
-
-## Dual Primary Agents Architecture
-- orchestrator: BUGFIX, DEVOPS, DEV, DOCS
-- plankestrator: PLAN, RESEARCH, RESEARCH+PLAN
-
-## Routing Tables
-See ARCHITECTURE.md for complete whitelists.
-
-## Pipelines
-See ARCHITECTURE.md for pipeline definitions.
-
-## Identity Verification
-Required format: ✓ IDENTITY VERIFIED: I am [agent_name]. I am NOT [other_agent_name].
-```
-
-### Step 8: Create ARCHITECTURE.md in Project
-
-Create `ARCHITECTURE.md` in project root with routing tables, pipelines, JSON fields, etc.
-
-### Step 9: Create Serena Project Configuration
-
-Create `.serena/project.yml` in project root:
-
-```yaml
-project_name: "YourProject"
-languages:
-  - python
-  - typescript
-encoding: "utf-8"
-ignore_all_files_in_gitignore: true
-read_only: false
-```
-
-### Step 10: Verify Setup
+#### Step 2: Create Directory Structure
 
 ```bash
-# Linux/macOS
-# Check plugin
-ls -la ~/.config/opencode/plugins/workflow-enforcement.ts
+# Windows (PowerShell)
+mkdir -p $HOME\.config\opencode\plugins
+mkdir -p $HOME\.config\opencode\agents
+mkdir -p $HOME\.local\share\opencode\storage\session_diff
+mkdir -p $HOME\.local\share\opencode\storage\todo
+mkdir -p $HOME\.local\share\opencode\tool-output
+mkdir -p $HOME\.local\share\opencode\log
 
-# Check agents
-ls -la ~/.config/opencode/agents/*.md
+# Linux/Mac
+mkdir -p ~/.config/opencode/plugins
+mkdir -p ~/.config/opencode/agents
+mkdir -p ~/.local/share/opencode/storage/session_diff
+mkdir -p ~/.local/share/opencode/storage/todo
+mkdir -p ~/.local/share/opencode/tool-output
+mkdir -p ~/.local/share/opencode/log
+```
 
-# Check project files
-ls -la ./AGENTS.md ./ARCHITECTURE.md .serena/project.yml
+#### Step 3: Copy Configuration Files
 
-# Check logs after starting OpenCode
-tail -100 ~/.local/share/opencode/log/opencode.log
+```bash
+# Copy opencode.json
+cp opencode-config/opencode.json ~/.config/opencode/opencode.json
+
+# Copy plugin
+cp plugins/workflow-enforcement.ts ~/.config/opencode/plugins/workflow-enforcement.ts
+
+# Copy all agent files
+cp agents/*.md ~/.config/opencode/agents/
+```
+
+#### Step 4: Install MCP Servers
+
+```bash
+# Install zread MCP server
+npm install -g @opencode-ai/mcp-zread
+
+# Install webSearchPrime MCP server
+npm install -g @opencode-ai/mcp-websearchprime
+
+# Install webReader MCP server
+npm install -g @opencode-ai/mcp-webreader
+```
+
+#### Step 5: Install Serena
+
+```bash
+# Download Serena
+git clone https://github.com/opencode-ai/serena.git
+cd serena
+
+# Install dependencies
+npm install
+
+# Build
+npm run build
+
+# Configure Serena project root
+export SERENA_PROJECT_ROOT="/path/to/your/project"
+```
+
+#### Step 6: Configure unity-mcp (Optional)
+
+For Unity projects:
+
+1. Install Unity 6 (6000.0) or later
+2. Open Unity Package Manager
+3. Install `com.unity.ai.assistant` package
+4. Download relay binary to `%USERPROFILE%\.unity\relay\relay_win.exe`
+5. Start Unity Editor
+6. Approve first-time connection in Unity Editor
+
+#### Step 7: Verify Setup
+
+```bash
+# Start OpenCode
+opencode
 
 # Check plugin initialization
-grep "Workflow enforcement plugin initialized" ~/.local/share/opencode/log/*.log
+# Look for: "Workflow enforcement plugin initialized"
+
+# Test agent routing
+# Start a session with orchestrator
+# Verify routing table enforcement works
 ```
-
-```powershell
-# Windows (PowerShell)
-Get-ChildItem "$env:USERPROFILE\.config\opencode\plugins\workflow-enforcement.ts"
-Get-ChildItem "$env:USERPROFILE\.config\opencode\agents\*.md"
-Get-ChildItem ".\AGENTS.md", ".\ARCHITECTURE.md", ".\.serena\project.yml"
-Get-Content "$env:USERPROFILE\.local\share\opencode\log\opencode.log" -Tail 100
-Select-String "Workflow enforcement plugin initialized" "$env:USERPROFILE\.local\share\opencode\log\*.log"
-```
-
-### Step 11: Test Routing Table Enforcement
-
-1. Start session with orchestrator
-2. Try calling `plan-writer-simple` (should be BLOCKED)
-3. Try calling `worker` (should be ALLOWED)
-
-Expected blocked call message:
-```
-🚫 WORKFLOW VIOLATION - ROUTING TABLE ENFORCEMENT
-Current Agent: orchestrator
-Attempted Call: plan-writer-simple
-...
-```
-
-### Step 12: Test Identity Probe
-
-1. Start session with orchestrator
-2. orchestrator should call `orchestrator-identity-probe`
-3. Should output: `✓ IDENTITY VERIFIED: I am orchestrator. I am NOT plankestrator.`
-
-### Deployment Checklist
-
-| # | Step | Status |
-|---|------|--------|
-| 1 | Install prerequisites (Python, Node.js, uv) | ⬜ |
-| 2 | Install OpenCode | ⬜ |
-| 3 | Create `~/.config/opencode/plugins/` directory | ⬜ |
-| 4 | Create `~/.config/opencode/agents/` directory | ⬜ |
-| 5 | Copy `workflow-enforcement.ts` to plugins | ⬜ |
-| 6 | Copy agent `.md` files to agents directory | ⬜ |
-| 7 | Configure `opencode.json` | ⬜ |
-| 8 | Install Serena (`uv tool install serena-agent`) | ⬜ |
-| 9 | Initialize Serena (`serena init`) | ⬜ |
-| 10 | Create `AGENTS.md` in project root | ⬜ |
-| 11 | Create `ARCHITECTURE.md` in project root | ⬜ |
-| 12 | Create `.serena/project.yml` in project root | ⬜ |
-| 13 | Verify plugin initialization in logs | ⬜ |
-| 14 | Test routing table enforcement | ⬜ |
-| 15 | Test identity probe | ⬜ |
-| 16 | Test Serena language detection | ⬜ |
 
 ---
 
-## 14. Troubleshooting
-
-### Plugin Not Loading
-
-**Problem**: No "Workflow enforcement plugin initialized" in logs
-
-**Solutions**:
-1. Check path in `opencode.json`: `"plugins": ["./plugins/workflow-enforcement.ts"]`
-2. Verify file exists: `ls ~/.config/opencode/plugins/workflow-enforcement.ts`
-3. Check TypeScript syntax
-4. Restart OpenCode
-
-### Routing Violations Not Blocked
-
-**Problem**: Agent can call agents outside whitelist
-
-**Solutions**:
-1. Check `currentAgent` detection: `grep "agent detected" ~/.local/share/opencode/log/*.log`
-2. Verify routing tables in plugin match ARCHITECTURE.md
-3. Check `tool.execute.before` hook is working
-4. Run `consistency-checker` to validate configuration
-
-### JSON Validation Errors
-
-**Problem**: Invalid JSON not detected
-
-**Solutions**:
-1. Check `message.updated` event is handled
-2. Verify `REQUIRED_JSON_FIELDS` in plugin
-3. Ensure agent outputs valid JSON format
-4. Check for missing fields in agent output
-
-### Identity Drift Not Detected
-
-**Problem**: Agent changes identity without warning
-
-**Solutions**:
-1. Check JSON contains `agent` field
-2. Search logs: `grep "IDENTITY DRIFT" ~/.local/share/opencode/log/*.log`
-3. Verify `session.updated` hook is working
-4. Check agent outputs correct identity verification
-
-### Serena Not Detecting Languages
-
-**Problem**: Language servers not starting
-
-**Solutions**:
-1. Check `.serena/project.yml` has correct `languages` list
-2. Verify language-specific dependencies are installed
-3. Run `serena init` again
-4. Check Serena logs for language server errors
-5. Verify language key is correct (e.g., `typescript` for JavaScript)
-
-### Serena Tools Not Available
-
-**Problem**: Serena tools not appearing in tool list
-
-**Solutions**:
-1. Check Serena MCP server configuration in `opencode.json`
-2. Verify Serena is installed: `serena --version`
-3. Check MCP server is running: `serena mcp-server --transport stdio`
-4. Restart OpenCode after Serena installation
-
-### OpenCode Permissions Blocking Calls
-
-**Problem**: Calls blocked before plugin hook runs
-
-**Solutions**:
-1. Check OpenCode's permission logs separately
-2. Verify agent is in OpenCode's agent registry
-3. Check agent file path in `opencode.json`
-
----
-
-## 15. File Locations Reference
+## 7. File Locations Reference
 
 ### Configuration Files
 
-| Item | Path | Purpose |
-|------|------|---------|
-| Main Config | `~/.config/opencode/opencode.json` | OpenCode configuration |
-| Plugin | `~/.config/opencode/plugins/workflow-enforcement.ts` | Workflow enforcement plugin |
-| Agents | `~/.config/opencode/agents/*.md` | Agent definitions |
-| Serena Config | `.serena/project.yml` | Serena project configuration |
-| Serena Local | `.serena/project.local.yml` | Local overrides (not versioned) |
-
-### Project Documentation
-
-| Item | Location | Purpose |
+| File | Location | Purpose |
 |------|----------|---------|
-| Project Rules | `AGENTS.md` | Rules for agents to follow |
-| Architecture | `ARCHITECTURE.md` | Single source of truth for architecture |
-| Plugin Docs | `PLUGIN.md` | Plugin documentation |
-| MCP Setup | `MCP_SETUP.md` | This file |
-| Identity Probes | `identity_probe_section.md` | Identity probe documentation |
+| opencode.json | `~/.config/opencode/opencode.json` | Main configuration |
+| workflow-enforcement.ts | `~/.config/opencode/plugins/workflow-enforcement.ts` | Workflow plugin |
+| orchestrator.md | `~/.config/opencode/agents/orchestrator.md` | Primary agent |
+| plankestrator.md | `~/.config/opencode/agents/plankestrator.md` | Primary agent |
+| [subagent].md | `~/.config/opencode/agents/[name].md` | Subagent definitions |
 
 ### Data Storage
 
-| Item | Path | Format |
-|------|------|--------|
-| Database | `~/.local/share/opencode/opencode.db` | SQLite |
-| Session Storage | `~/.local/share/opencode/storage/session_diff/` | JSON |
-| Tool Outputs | `~/.local/share/opencode/tool-output/` | Various |
-| Todo Lists | `~/.local/share/opencode/storage/todo/` | JSON |
-| Logs | `~/.local/share/opencode/log/` | `.log` files |
-| Serena Cache | `.serena/cache/` | Language server cache |
+| Directory | Location | Purpose |
+|-----------|----------|---------|
+| Database | `~/.local/share/opencode/opencode.db` | SQLite database |
+| Session Storage | `~/.local/share/opencode/storage/session_diff/` | Session state |
+| Todo Lists | `~/.local/share/opencode/storage/todo/` | Task tracking |
+| Tool Outputs | `~/.local/share/opencode/tool-output/` | Tool results |
+| Logs | `~/.local/share/opencode/log/` | Execution logs |
 
-### Serena Files
+### Documentation
 
-| Item | Location | Purpose |
+| File | Location | Purpose |
 |------|----------|---------|
-| Project Config | `.serena/project.yml` | Language and tool configuration |
-| Local Overrides | `.serena/project.local.yml` | Local development settings |
-| Gitignore | `.serena/.gitignore` | Ignore cache and local config |
-| Memories | `.serena/memories/` | Project-specific memories |
+| AGENTS.md | Project root | Project rules |
+| ARCHITECTURE.md | Project root | Architecture requirements |
+| PLUGIN.md | Project root | Plugin documentation |
+| MCP_SETUP.md | Project root | Setup guide |
 
 ---
 
-## Appendices
+## 8. Troubleshooting
 
-### Appendix A: Debug Commands
+### Common Issues
+
+#### Issue 1: Plugin Not Loading
+
+**Symptoms:**
+- No "Workflow enforcement plugin initialized" log
+- Routing violations not blocked
+
+**Solution:**
+```bash
+# Check plugin path in opencode.json
+cat ~/.config/opencode/opencode.json | grep plugins
+
+# Verify plugin file exists
+ls ~/.config/opencode/plugins/workflow-enforcement.ts
+
+# Check plugin syntax
+node -c ~/.config/opencode/plugins/workflow-enforcement.ts
+```
+
+#### Issue 2: MCP Server Not Connecting
+
+**Symptoms:**
+- MCP tools not available
+- "MCP server not found" errors
+
+**Solution:**
+```bash
+# Check MCP configuration
+cat ~/.config/opencode/opencode.json | grep mcp
+
+# Verify MCP server path
+ls path/to/mcp-server.js
+
+# Test MCP server manually
+node path/to/mcp-server.js
+```
+
+#### Issue 3: Agent Identity Drift
+
+**Symptoms:**
+- "IDENTITY DRIFT DETECTED" warnings
+- Agent calling wrong subagents
+
+**Solution:**
+- Check agent file frontmatter matches opencode.json
+- Verify agent description contains correct name
+- Ensure identity verification output is correct format
+
+#### Issue 4: Routing Violation
+
+**Symptoms:**
+- "WORKFLOW VIOLATION" errors
+- Task tool calls blocked
+
+**Solution:**
+- Check routing table in plugin matches opencode.json whitelist
+- Verify agent is calling correct subagent for its type
+- Ensure JSON output includes correct `"agent"` field
+
+#### Issue 5: JSON Validation Failure
+
+**Symptoms:**
+- "INVALID JSON OUTPUT" warnings
+- Missing fields errors
+
+**Solution:**
+- Check JSON includes all required fields
+- Verify field values are valid (see validation rules)
+- Ensure `"agent"` field matches current agent
+
+### Debug Commands
 
 ```bash
-# Linux/macOS
 # View recent logs
 tail -100 ~/.local/share/opencode/log/opencode.log
 
@@ -1589,133 +1900,87 @@ grep "IDENTITY DRIFT" ~/.local/share/opencode/log/*.log
 grep "INVALID JSON" ~/.local/share/opencode/log/*.log
 
 # View all plugin activity
-grep "Workflow enforcement" ~/.local/share/opencode/log/*.log
-
-# Combined search
-grep -E "(WORKFLOW VIOLATION|IDENTITY DRIFT|INVALID JSON|Workflow enforcement)" ~/.local/share/opencode/log/*.log
+grep "workflow-enforcement" ~/.local/share/opencode/log/*.log
 ```
 
-```powershell
-# Windows (PowerShell)
-Get-Content "$env:USERPROFILE\.local\share\opencode\log\opencode.log" -Tail 100
-Select-String "WORKFLOW VIOLATION" "$env:USERPROFILE\.local\share\opencode\log\*.log"
-Select-String "IDENTITY DRIFT" "$env:USERPROFILE\.local\share\opencode\log\*.log"
-Select-String "INVALID JSON" "$env:USERPROFILE\.local\share\opencode\log\*.log"
-Select-String "Workflow enforcement" "$env:USERPROFILE\.local\share\opencode\log\*.log"
-Select-String "(WORKFLOW VIOLATION|IDENTITY DRIFT|INVALID JSON|Workflow enforcement)" "$env:USERPROFILE\.local\share\opencode\log\*.log"
+---
+
+## 9. Verification Checklist
+
+### Pre-Deployment Checklist
+
+- [ ] Node.js 18+ installed
+- [ ] OpenCode CLI installed
+- [ ] Directory structure created
+- [ ] MCP servers installed (zread, webSearchPrime, webReader)
+- [ ] Serena installed (if using code symbol operations)
+- [ ] unity-mcp configured (if Unity project)
+
+### Configuration Checklist
+
+- [ ] opencode.json copied to `~/.config/opencode/`
+- [ ] Plugin copied to `~/.config/opencode/plugins/`
+- [ ] All 31 agent files copied to `~/.config/opencode/agents/`
+- [ ] MCP server paths correct in opencode.json
+- [ ] Agent whitelists match routing tables
+
+### Post-Deployment Checklist
+
+- [ ] OpenCode starts without errors
+- [ ] Plugin initialization log appears
+- [ ] MCP tools available (zread_*, webSearchPrime_*, webReader_*)
+- [ ] orchestrator session works
+- [ ] plankestrator session works
+- [ ] Routing violations blocked correctly
+- [ ] JSON validation works
+- [ ] Identity drift detection works
+
+### Test Commands
+
+```bash
+# Test orchestrator
+opencode --agent orchestrator
+# Should see: "Workflow enforcement plugin initialized"
+# Should see: "Session created — agent detected: orchestrator"
+
+# Test plankestrator
+opencode --agent plankestrator
+# Should see: "Session created — agent detected: plankestrator"
+
+# Test routing violation (should be blocked)
+# In orchestrator session, try calling plan-writer-simple
+# Should see: "WORKFLOW VIOLATION" error
+
+# Test MCP tools
+# In any session, use zread_search_doc
+# Should return GitHub search results
 ```
-
-### Appendix B: Architecture Summary
-
-| Component | Count | Description |
-|-----------|-------|-------------|
-| MCP Servers | 5 | zread, webSearchPrime, webReader, Serena, Unity |
-| Primary Agents | 2 | orchestrator, plankestrator |
-| Subagents (orchestrator) | 20 | For operational tasks |
-| Subagents (plankestrator) | 9 | For planning and research |
-| Pipelines | 8 | BUGFIX (2), DEV (2), DEVOPS, DOCS, PLAN, RESEARCH |
-| Plugin Hooks | 6 | lifecycle hooks for enforcement |
-| Identity Probes | 2 | One per primary agent |
-| Serena Languages | 40+ | Via language servers |
-
-### Appendix C: Complete File List for Deployment
-
-| File | Source | Target | Size |
-|------|--------|--------|------|
-| workflow-enforcement.ts | Project | `~/.config/opencode/plugins/` | ~512 lines |
-| opencode.json | Config | `~/.config/opencode/` | ~50 lines |
-| orchestrator.md | Project | `~/.config/opencode/agents/` | ~100 lines |
-| plankestrator.md | Project | `~/.config/opencode/agents/` | ~80 lines |
-| orchestrator-identity-probe.md | Project | `~/.config/opencode/agents/` | ~20 lines |
-| plankestrator-identity-probe.md | Project | `~/.config/opencode/agents/` | ~20 lines |
-| worker.md | Project | `~/.config/opencode/agents/` | ~50 lines |
-| utility.md | Project | `~/.config/opencode/agents/` | ~30 lines |
-| consistency-checker.md | Project | `~/.config/opencode/agents/` | ~60 lines |
-| docs-writer.md | Project | `~/.config/opencode/agents/` | ~40 lines |
-| AGENTS.md | Project | Project root | ~274 lines |
-| ARCHITECTURE.md | Project | Project root | ~268 lines |
-| PLUGIN.md | Project | Project root | ~856 lines |
-| MCP_SETUP.md | Project | Project root | This file |
-| .serena/project.yml | Project | Project root | ~157 lines |
-
-### Appendix D: Serena Language Server Requirements
-
-| Language | Additional Requirements |
-|----------|------------------------|
-| C# | .NET v10+, PowerShell 7+ (Windows) |
-| C/C++ | compile_commands.json recommended |
-| Go | gopls installed |
-| Rust | rustup installed |
-| Ruby | ruby-lsp (default) or Solargraph |
-| PHP | Intelephense (default) or Phpactor |
-| Elixir | Elixir installation |
-| Haskell | HLS via ghcup, stack, or PATH |
-| F# | .NET v8.0+ |
-| Fortran | fortls (`pip install fortls`) |
-| Perl | Perl::LanguageServer |
-| R | languageserver R package |
-| Scala | Metals LSP (manual setup) |
-| Zig | ZLS installed |
-| Nix | nixd installed |
-| Erlang | beam and erlang_ls |
-| Elm | Elm compiler |
-| Groovy | groovy-language-server.jar |
-| Haxe | Haxe compiler 3.4.0+, Node.js |
-| OCaml | opam and ocaml-lsp-server |
-| Lean 4 | elan |
-| Crystal | Crystalline on PATH |
-| JSON | Node.js and npm |
-| Ansible | Node.js, npm, ansible in PATH |
-| Solidity | Node.js, npm |
 
 ---
 
 ## Summary
 
-This document provides complete instructions for replicating the OpenCode infrastructure:
+| Component | Count | Location |
+|-----------|-------|----------|
+| Primary agents | 2 | `~/.config/opencode/agents/` |
+| Subagents | 29 | `~/.config/opencode/agents/` |
+| MCP servers | 5 | Configured in opencode.json |
+| Plugin hooks | 3 | workflow-enforcement.ts |
+| Routing tables | 2 | orchestrator (20), plankestrator (9) |
+| Pipelines | 7 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 
-1. **Dual Primary Agents**: orchestrator (operational) and plankestrator (planning)
-2. **Routing Tables**: 20 agents for orchestrator, 9 for plankestrator
-3. **Pipelines**: 8 workflows for different task types
-4. **JSON Validation**: Required fields for each agent type
-5. **Workflow Enforcement Plugin**: 6 hooks for routing, identity, and validation
-6. **Identity Probes**: Verification mechanism for primary agents
-7. **MCP Servers**: zread, webSearchPrime, webReader, Serena, Unity
-8. **Unity MCP Server**: Official Unity Editor integration for game development automation
-9. **Serena**: IDE-level coding agent with 40+ language support
-10. **Deployment Guide**: Step-by-step instructions with checklist
-11. **Troubleshooting**: Common issues and solutions
+### Quick Reference
 
-For detailed plugin documentation, see `PLUGIN.md`.
-For architecture requirements, see `ARCHITECTURE.md`.
-For project rules, see `AGENTS.md`.
+| Task | Command |
+|------|---------|
+| Start orchestrator | `opencode --agent orchestrator` |
+| Start plankestrator | `opencode --agent plankestrator` |
+| View logs | `tail ~/.local/share/opencode/log/*.log` |
+| Check config | `cat ~/.config/opencode/opencode.json` |
+| List agents | `ls ~/.config/opencode/agents/` |
 
 ---
 
-## Recent Updates (2026-05-04)
-
-### Added
-- **Serena MCP Server** — Complete integration with OpenCode
-- **Serena Language Configuration** — Support for 40+ languages
-- **Serena MCP Rules** in AGENTS.md — Tool priority guidelines
-- **Key Agent Permissions** section — Permission configurations for reviewers
-
-### Changed
-- **devops-reviewer** — `bash: deny` → `bash: allow` (for git read-only operations)
-- **worker** — Model changed to `alibaba-coding-plan/qwen3.6-plus`
-- **devops-reviewer** — Model changed to `alibaba-coding-plan/qwen3.6-plus`
-- **orchestrator permission** — Added `serena_*: allow` for Serena tools
-- **orchestrator prompt** — Added Tool Priority section
-
-### Fixed
-- **Workflow Enforcement Plugin** — Routing fallback for agent detection
-- **TypeScript errors** — Type casts for plugin validation
-- **JSON field inconsistency** — Removed `state` and `pipeline_step` from orchestrator prompt
-
-### Deployment Checklist Update
-
-After pulling latest changes, ensure:
-1. Update agent `.md` files with correct models (worker, devops-reviewer)
-2. Update `.serena/project.yml` with languages for your project
-3. Review permission changes in `opencode.json`
-4. Test Serena integration with `/mcps` command
+**Document Version:** 1.0
+**Last Updated:** 2026-05-09
+**Author:** OpenCode Documentation Team
