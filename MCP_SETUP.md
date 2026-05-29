@@ -1,6 +1,6 @@
 ﻿# MCP Setup Guide — OpenCode Agent Orchestration System
 
-Полное руководство по развертыванию системы оркестрации агентов OpenCode на машинах коллег.
+Полное и исчерпывающее руководство по развертыванию системы оркестрации агентов OpenCode на машинах коллег.
 
 ---
 
@@ -9,12 +9,18 @@
 1. [Overview](#1-overview)
 2. [Prerequisites](#2-prerequisites)
 3. [Installation Steps](#3-installation-steps)
-4. [Configuration](#4-configuration)
-5. [Agent Reference](#5-agent-reference)
-6. [MCP Servers](#6-mcp-servers)
-7. [File Locations](#7-file-locations)
-8. [Troubleshooting](#8-troubleshooting)
-9. [Verification Checklist](#9-verification-checklist)
+4. [opencode.json — Full Configuration](#4-opencodejson--full-configuration)
+5. [Agent Definitions — All 33 Agents](#5-agent-definitions--all-33-agents)
+6. [Routing Tables](#6-routing-tables)
+7. [Pipelines](#7-pipelines)
+8. [ARCHITECTURE.md Integration](#8-architecturemd-integration)
+9. [AGENTS.md — Project Rules](#9-agentsmd--project-rules)
+10. [Plugin — workflow-enforcement.ts](#10-plugin--workflow-enforcementts)
+11. [MCP Servers](#11-mcp-servers)
+12. [Commands](#12-commands)
+13. [File Locations](#13-file-locations)
+14. [Troubleshooting](#14-troubleshooting)
+15. [Verification Checklist](#15-verification-checklist)
 
 ---
 
@@ -37,26 +43,26 @@ OpenCode использует архитектуру с двумя primary-аг�
 | Subagents | 31 |
 | **Total unique agents** | **33** |
 
-### Models Used
+### Models Distribution
 
-| Model | Provider | Agents Using It |
-|-------|----------|-----------------|
-| `glm-5` | alibaba-coding-plan | orchestrator, plankestrator, identity-probes, docs-writer, research-writer-simple, plan-reviewer-simple |
-| `qwen3.6-plus` | alibaba-coding-plan | worker, bugfix, bugfix-triage, plan-bug, dev-planner, devops-reviewer, plan-writer-simple, consistency-checker |
-| `glm-5.1` | bailian-token-plan | dev-professor, plan-writer-complex, research-writer-complex, execute-bug, rework |
-| `k2p6` | kimi-for-coding | dev-reviewer, plan-reviewer-complex, research-reviewer, view-image |
-| `MiniMax-M2.7` | minimax-coding-plan | mcp-github, mcp-read, mcp-search, summarizer, devops, devops-agent, devops-readonly |
+| Model | Provider | Agents Count | Agents |
+|-------|----------|--------------|--------|
+| `glm-5` | alibaba-coding-plan | 7 | orchestrator, plankestrator, orchestrator-identity-probe, plankestrator-identity-probe, docs-writer, research-writer-simple, plan-reviewer-simple |
+| `qwen3.6-plus` | alibaba-coding-plan | 11 | worker, bugfix, bugfix-triage, plan-bug, dev-planner, devops-reviewer, plan-writer-simple, consistency-checker, utility |
+| `glm-5.1` | bailian-token-plan | 5 | dev-professor, plan-writer-complex, research-writer-complex, execute-bug, rework |
+| `k2p6` | kimi-for-coding | 4 | dev-reviewer, plan-reviewer-complex, research-reviewer, view-image |
+| `MiniMax-M2.7` | minimax-coding-plan | 7 | mcp-github, mcp-read, mcp-search, summarizer, devops, devops-agent, devops-readonly |
 
 ### MCP Servers
 
 | Server | Type | Purpose |
 |--------|------|---------|
-| zread | Remote | GitHub repository operations (search docs, read files, get structure) |
+| zread | Remote | GitHub repository operations |
 | webSearchPrime | Remote | Web search |
 | webReader | Remote | URL content reading |
-| serena | Local | Code symbol operations (find, rename, replace, delete) |
+| serena | Local | Code symbol operations |
 | unity-mcp | Remote | Unity Editor operations |
-| zai-mcp-server | Local | Image analysis (fallback for view-image) |
+| zai-mcp-server | Local | Image analysis (fallback) |
 
 ---
 
@@ -66,7 +72,7 @@ OpenCode использует архитектуру с двумя primary-аг�
 
 | Software | Version | Purpose |
 |----------|---------|---------|
-| Node.js | 18+ | Plugin runtime, MCP servers |
+| Node.js | 18+ | Plugin runtime, npx |
 | OpenCode CLI | Latest | Agent orchestration |
 | Git | 2.x | Repository operations |
 | Python | 3.10+ | Serena MCP server |
@@ -77,15 +83,14 @@ OpenCode использует архитектуру с двумя primary-аг�
 | Software | Version | Purpose |
 |----------|---------|---------|
 | Unity Editor | 2021.3 LTS+ | Unity MCP server host |
-| unity-mcp package | Latest | Unity MCP integration |
+| unity-mcp package | Latest | Unity MCP integration via git URL |
 
 ### Required API Keys
 
-| Provider | Key Variable | Purpose |
-|----------|-------------|---------|
-| Alibaba (bailian-token-plan) | Embedded in config | Qwen, GLM models |
-| Z.AI | Embedded in config | zread, webSearchPrime, webReader, zai-mcp-server |
-| Kimi | Via zai-mcp-server | k2p6 model access |
+| Provider | Key | Purpose |
+|----------|-----|---------|
+| Alibaba (bailian-token-plan) | `sk-sp-*` | Qwen, GLM models через token-plan API |
+| Z.AI | `a8d38aaca0e04f678f11c7f8bd135a12.*` | zread, webSearchPrime, webReader, zai-mcp-server |
 
 ---
 
@@ -99,14 +104,14 @@ npm install -g opencode
 
 ### Step 2: Install Serena
 
+Serena — MCP сервер для операций с кодовыми символами (поиск классов, функций, рефакторинг).
+
 ```bash
-# Download and install Serena
-# See: https://github.com/orbstack/serena (or project-specific instructions)
-# Place serena.exe in a directory in your PATH, e.g.:
-# %USERPROFILE%\.local\bin\serena.exe
+# Скачать Serena и установить serena.exe в PATH
+# Рекомендуемое расположение: %USERPROFILE%\.local\bin\serena.exe
 ```
 
-Verify installation:
+Проверка установки:
 ```bash
 serena --version
 ```
@@ -114,18 +119,19 @@ serena --version
 ### Step 3: Install zai-mcp-server
 
 ```bash
+# Устанавливается автоматически через npx при первом запуске
 npx -y @z_ai/mcp-server
 ```
 
-### Step 4: Configure Unity MCP (Optional — for Unity projects only)
+### Step 4: Configure Unity MCP (Optional — только для Unity проектов)
 
-1. Install Unity 2021.3 LTS or later
-2. Install unity-mcp package via Unity Package Manager:
-   - Open Package Manager
-   - Add package from git URL: `https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main`
-3. Start Unity Editor
-4. Start MCP server: `Window > MCP for Unity > Start Server`
-5. Server runs on `http://localhost:8080/mcp`
+1. Установить Unity 2021.3 LTS или новее
+2. Установить unity-mcp package через Unity Package Manager:
+   - Открыть Package Manager
+   - Добавить package из git URL: `https://github.com/CoplayDev/unity-mcp.git?path=/MCPForUnity#main`
+3. Запустить Unity Editor
+4. Запустить MCP сервер: `Window > MCP for Unity > Start Server`
+5. Сервер работает на `http://localhost:8080/mcp`
 
 ### Step 5: Create Directory Structure
 
@@ -138,40 +144,29 @@ mkdir -p $HOME\.config\opencode\agents
 ### Step 6: Copy Configuration Files
 
 ```powershell
-# Copy opencode.json
+# Скопировать opencode.json
 cp opencode-config/opencode.json $HOME\.config\opencode\opencode.json
 
-# Copy plugin
+# Скопировать plugin
 cp plugins/workflow-enforcement.ts $HOME\.config\opencode\plugins\workflow-enforcement.ts
 
-# Copy all agent files
+# Скопировать все agent файлы
 cp agents/*.md $HOME\.config\opencode\agents\
 ```
 
 ### Step 7: Copy Project Files
 
-Copy these files to your project root:
-- `AGENTS.md` — Project rules and agent permissions
-- `ARCHITECTURE.md` — Architecture requirements
-- `PLUGIN.md` — Plugin documentation
+Скопировать в корень проекта:
+- `AGENTS.md` — Правила проекта и разрешения агентов
+- `ARCHITECTURE.md` — Требования к архитектуре
+- `PLUGIN.md` — Документация плагина
+- `MCP_SETUP.md` — Это руководство
 
 ---
 
-## 4. Configuration
+## 4. opencode.json — Full Configuration
 
-### opencode.json Structure
-
-The main configuration file contains:
-
-1. **Providers** — Model provider definitions with API keys and endpoints
-2. **MCP Servers** — Server connections (remote and local)
-3. **Agents** — All 33 agent definitions with models, permissions, and prompts
-4. **Commands** — Custom command shortcuts
-5. **Plugin** — Workflow enforcement plugin
-
-### Key Configuration Sections
-
-#### Providers
+### Provider Configuration
 
 ```json
 "provider": {
@@ -180,18 +175,26 @@ The main configuration file contains:
     "name": "Alibaba Token Plan",
     "options": {
       "baseURL": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
-      "apiKey": "YOUR_API_KEY"
+      "apiKey": "sk-sp-YOUR_API_KEY"
     },
     "models": {
+      "qwen3.7-max": { "name": "Qwen3.7 Max", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
       "qwen3.6-plus": { "name": "Qwen3.6 Plus", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
+      "qwen3.6-flash": { "name": "Qwen3.6 Flash", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
+      "deepseek-v4-pro": { "name": "DeepSeek V4 Pro" },
+      "deepseek-v4-flash": { "name": "DeepSeek V4 Flash" },
+      "deepseek-v3.2": { "name": "DeepSeek V3.2" },
+      "kimi-k2.6": { "name": "Kimi K2.6", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
+      "kimi-k2.5": { "name": "Kimi K2.5", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
       "glm-5.1": { "name": "GLM-5.1", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-      "glm-5": { "name": "GLM-5", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } }
+      "glm-5": { "name": "GLM-5", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
+      "MiniMax-M2.5": { "name": "MiniMax M2.5" }
     }
   }
 }
 ```
 
-#### MCP Servers
+### MCP Servers Configuration
 
 ```json
 "mcp": {
@@ -212,7 +215,7 @@ The main configuration file contains:
   },
   "serena": {
     "type": "local",
-    "command": ["serena", "start-mcp-server", "--transport", "stdio", "--context=ide", "--project-from-cwd"],
+    "command": ["C:\\Users\\Admin\\.local\\bin\\serena.exe", "start-mcp-server", "--transport", "stdio", "--context=ide", "--project-from-cwd"],
     "enabled": true
   },
   "unity-mcp": {
@@ -232,50 +235,209 @@ The main configuration file contains:
 }
 ```
 
+### Plugin Configuration
+
+```json
+"plugin": ["./plugins/workflow-enforcement.ts"]
+```
+
+### Shell Configuration
+
+```json
+"shell": "powershell"
+```
+
 ---
 
-## 5. Agent Reference
+## 5. Agent Definitions — All 33 Agents
 
-### Complete Agent List
+### Primary Agents
 
-| Agent | Mode | Model | Role |
-|-------|------|-------|------|
-| **orchestrator** | primary | alibaba-coding-plan/glm-5 | Task classifier and delegator (BUGFIX/DEVOPS/DEV/DOCS) |
-| **plankestrator** | primary | alibaba-coding-plan/glm-5 | Planning and research state machine |
-| **orchestrator-identity-probe** | subagent | alibaba-coding-plan/glm-5 | Identity verification for orchestrator |
-| **plankestrator-identity-probe** | subagent | alibaba-coding-plan/glm-5 | Identity verification for plankestrator |
-| **worker** | subagent | alibaba-coding-plan/qwen3.6-plus | Simple development implementation |
-| **bugfix** | subagent | alibaba-coding-plan/qwen3.6-plus | Bug fixing |
-| **bugfix-triage** | subagent | alibaba-coding-plan/qwen3.6-plus | Initial bug analysis |
-| **plan-bug** | subagent | alibaba-coding-plan/qwen3.6-plus | Bug fix planning |
-| **dev-planner** | subagent | alibaba-coding-plan/qwen3.6-plus | Development planning |
-| **devops-reviewer** | subagent | alibaba-coding-plan/qwen3.6-plus | DevOps review |
-| **plan-writer-simple** | subagent | alibaba-coding-plan/qwen3.6-plus | Simple planning |
-| **consistency-checker** | subagent | alibaba-coding-plan/qwen3.6-plus | Architecture consistency validation |
-| **dev-professor** | subagent | bailian-token-plan/glm-5.1 | Development guidance |
-| **plan-writer-complex** | subagent | bailian-token-plan/glm-5.1 | Complex planning |
-| **research-writer-complex** | subagent | bailian-token-plan/glm-5.1 | Complex research |
-| **execute-bug** | subagent | bailian-token-plan/glm-5.1 | Bug fix implementation |
-| **rework** | subagent | bailian-token-plan/glm-5.1 | Rework on feedback |
-| **dev-reviewer** | subagent | kimi-for-coding/k2p6 | Code review |
-| **plan-reviewer-complex** | subagent | kimi-for-coding/k2p6 | Complex plan review |
-| **research-reviewer** | subagent | kimi-for-coding/k2p6 | Research review |
-| **view-image** | subagent | kimi-for-coding/k2p6 | Image analysis |
-| **research-writer-simple** | subagent | alibaba-coding-plan/glm-5 | Simple research |
-| **plan-reviewer-simple** | subagent | alibaba-coding-plan/glm-5 | Simple plan review |
-| **docs-writer** | subagent | alibaba-coding-plan/glm-5 | Documentation writing |
-| **mcp-github** | subagent | minimax-coding-plan/MiniMax-M2.7 | GitHub operations |
-| **mcp-read** | subagent | minimax-coding-plan/MiniMax-M2.7 | File reading |
-| **mcp-search** | subagent | minimax-coding-plan/MiniMax-M2.7 | Web search |
-| **summarizer** | subagent | minimax-coding-plan/MiniMax-M2.7 | Content summarization |
-| **devops** | subagent | minimax-coding-plan/MiniMax-M2.7 | DevOps tasks |
-| **devops-agent** | subagent | minimax-coding-plan/MiniMax-M2.7 | DevOps operations |
-| **devops-readonly** | subagent | minimax-coding-plan/MiniMax-M2.7 | DevOps read-only |
-| **utility** | subagent | alibaba-coding-plan/qwen3.6-plus | Syntax checking, formatting |
+#### orchestrator
 
-### Routing Tables
+| Field | Value |
+|-------|-------|
+| Mode | primary |
+| Model | alibaba-coding-plan/glm-5 |
+| Temperature | 0.1 |
+| Role | Task classifier and delegator (BUGFIX/DEVOPS/DEV/DOCS) |
 
-#### orchestrator Whitelist (21 agents)
+**Prompt:**
+```
+You MUST output JSON in EVERY response. First line: 'IDENTITY VERIFIED: I am orchestrator...'. Second: JSON code block with fields: agent, type, complexity, plan_exists, plan_source, goal, next_agent, pipeline. Third: Call Task tool if next_agent is not null. This is MANDATORY. NO EXCEPTIONS.
+
+## Tool Priority
+For code operations, ALWAYS try Serena MCP tools FIRST:
+- serena_find_symbol (not grep)
+- serena_find_referencing_symbols (not grep)
+- serena_get_symbols_overview (not grep)
+- serena_rename_symbol (not edit with regex)
+- serena_replace_symbol_body (not edit)
+
+Use built-in tools (grep, read, edit) as FALLBACK when Serena fails or for non-symbol tasks.
+
+## Image Analysis Priority
+For image analysis tasks, ALWAYS use view-image agent FIRST (NOT zai-mcp-server):
+- Call Task tool with view-image subagent
+- view-image has direct vision capabilities via kimi-for-coding/k2p6
+- Use zai-mcp-server only as FALLBACK when view-image is unavailable
+
+## Pipeline Logic
+| Task Type | plan_exists | Pipeline |
+|-----------|-------------|----------|
+| DEV SIMPLE | false | worker → utility |
+| DEV SIMPLE | true | worker → consistency-checker → utility |
+| DEV COMPLEX | any | dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → utility |
+
+**Decision rule:** When plan_exists=true for DEV SIMPLE, add consistency-checker before utility. When plan_exists=false, skip consistency-checker.
+```
+
+**Permissions:**
+| Tool | Permission | Notes |
+|------|------------|-------|
+| edit | ask | |
+| write | deny | |
+| read | { "*.py": "ask", "*.ts": "ask", "*.js": "ask", "*": "allow" } | |
+| grep | ask | |
+| glob | allow | |
+| question | allow | |
+| bash | deny | |
+| todowrite | allow | |
+| unity-mcp.* | allow | |
+| serena_* | allow | Все Serena инструменты |
+| task | { "*": "deny", ... } | Whitelist ниже |
+
+**Task Whitelist (21 agents):**
+orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bugfix, rework, mcp-read, utility, devops, bugfix-triage, plan-bug, devops-agent, devops-reviewer, dev-planner, mcp-search, docs-writer, summarizer, execute-bug, consistency-checker, view-image
+
+#### plankestrator
+
+| Field | Value |
+|-------|-------|
+| Mode | primary |
+| Model | alibaba-coding-plan/glm-5 |
+| Temperature | 0.1 |
+| Role | Planning and research state machine |
+
+**Permissions:**
+| Tool | Permission |
+|------|------------|
+| edit | deny |
+| write | deny |
+| bash | deny |
+| read | allow |
+| question | allow |
+| todowrite | allow |
+| unity-mcp.* | allow |
+| serena_* | allow | Все Serena инструменты |
+
+**Task Whitelist (9 agents):**
+plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-reviewer-simple, plan-reviewer-complex, research-writer-simple, research-writer-complex, research-reviewer, devops-readonly, view-image
+
+### Subagents — Full Table
+
+| Agent | Mode | Model | Temperature | edit | write | read | bash | task whitelist extras |
+|-------|------|-------|-------------|------|-------|------|------|----------------------|
+| **mcp-github** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
+| **dev-planner** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | - | deny | view-image |
+| **bugfix** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.2 | allow | - | - | deny | view-image |
+| **mcp-read** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
+| **plan-writer-complex** | subagent | bailian-token-plan/glm-5.1 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
+| **worker** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.2 | allow | - | - | **allow** | view-image |
+| **utility** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | - | **allow** | view-image |
+| **rework** | subagent | bailian-token-plan/glm-5.1 | 0.2 | allow | - | - | deny | view-image |
+| **research-writer-simple** | subagent | alibaba-coding-plan/glm-5 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
+| **plan-reviewer-simple** | subagent | alibaba-coding-plan/glm-5 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
+| **plan-bug** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | - | deny | view-image |
+| **devops** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | **allow** | view-image |
+| **docs-writer** | subagent | alibaba-coding-plan/glm-5 | 0.3 | allow | - | - | deny | view-image |
+| **dev-professor** | subagent | bailian-token-plan/glm-5.1 | 0.2 | allow | - | - | deny | view-image |
+| **devops-readonly** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | allow | - | allow | deny | view-image |
+| **devops-agent** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | - | **allow** | view-image |
+| **devops-reviewer** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | allow | deny | view-image |
+| **orchestrator-identity-probe** | subagent | alibaba-coding-plan/glm-5 | 0.1 | deny | deny | - | deny | view-image |
+| **plankestrator-identity-probe** | subagent | alibaba-coding-plan/glm-5 | 0.1 | deny | deny | - | deny | view-image |
+| **mcp-search** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
+| **summarizer** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
+| **bugfix-triage** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | - | deny | view-image |
+| **research-reviewer** | subagent | kimi-for-coding/k2p6 | 0.1 | allow | - | allow | deny | view-image |
+| **dev-reviewer** | subagent | kimi-for-coding/k2p6 | 0.1 | allow | - | - | deny | view-image |
+| **research-writer-complex** | subagent | bailian-token-plan/glm-5.1 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
+| **plan-writer-simple** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
+| **execute-bug** | subagent | bailian-token-plan/glm-5.1 | 0.2 | allow | - | - | deny | view-image |
+| **plan-reviewer-complex** | subagent | kimi-for-coding/k2p6 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
+| **consistency-checker** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
+| **view-image** | subagent | kimi-for-coding/k2p6 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
+
+### view-image — Special Configuration
+
+**Prompt:**
+```
+You are an image analysis agent. Analyze images and describe what you see. You have direct vision capabilities. Analyze images directly through your model — do NOT use MCP servers for image analysis. You CAN use read, glob, and grep tools to access files when needed.
+```
+
+**Permissions:**
+| Tool | Permission |
+|------|------------|
+| edit | deny |
+| write | deny |
+| bash | deny |
+| read | allow |
+| glob | allow |
+| grep | allow |
+| zread.* | **deny** |
+| webSearchPrime.* | **deny** |
+| webReader.* | **deny** |
+| serena.* | **deny** |
+| unity-mcp.* | **deny** |
+| zai-mcp-server.* | **deny** |
+
+view-image анализирует изображения **напрямую через модель** (kimi-for-coding/k2p6 с vision capabilities). Все MCP серверы запрещены.
+
+### Serena Permissions — All Agents (кроме view-image)
+
+Все агенты (кроме view-image) имеют доступ ко всем Serena инструментам:
+
+| Serena Tool | Permission |
+|-------------|------------|
+| serena_find_symbol | allow |
+| serena_find_referencing_symbols | allow |
+| serena_get_symbols_overview | allow |
+| serena_rename_symbol | allow |
+| serena_safe_delete_symbol | allow |
+| serena_replace_symbol_body | allow |
+| serena_insert_after_symbol | allow |
+
+### unity-mcp Permissions — All Agents
+
+Все 33 агента имеют `"unity-mcp.*": "allow"` — полный доступ ко всем инструментам Unity MCP.
+
+### Key Agent Permissions Details
+
+#### worker — bash: allow (CRITICAL)
+
+Worker — единственный агент с `bash: allow` для выполнения команд:
+- npm operations: `npm install`, `npm run build`, `npm run test`
+- git operations: `git status`, `git add`, `git commit`, `git push`
+- file operations: `mkdir`, `touch`, `rm`, `cp`
+- linting tools: `eslint`, `prettier`, `tsc --noEmit`
+- test runners: `jest`, `vitest`, `pytest`, `cargo test`
+
+**Без `bash: allow` worker не может выполнять задачи — это критическая настройка.**
+
+#### utility — bash: allow
+
+Utility имеет `bash: allow` для запуска линтеров, форматтеров, компиляторов при валидации кода.
+
+#### devops / devops-agent — bash: allow
+
+DevOps агенты имеют `bash: allow` для выполнения команд деплоя, сборки, управления инфраструктурой.
+
+---
+
+## 6. Routing Tables
+
+### orchestrator Whitelist (21 agents)
 
 | Agent | Role |
 |-------|------|
@@ -301,7 +463,7 @@ The main configuration file contains:
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
 
-#### plankestrator Whitelist (9 agents)
+### plankestrator Whitelist (9 agents)
 
 | Agent | Role |
 |-------|------|
@@ -314,115 +476,342 @@ The main configuration file contains:
 | research-writer-complex | Complex research |
 | research-reviewer | Research review |
 | devops-readonly | DevOps read-only |
+| view-image | Image analysis |
 
-### Pipelines
+### Routing Enforcement
+
+Плагин `workflow-enforcement.ts` обеспечивает:
+1. **Routing table enforcement** — агенты могут вызывать только агентов из своего whitelist
+2. **JSON validation** — primary агенты должны выводить JSON перед вызовом Task tool
+3. **Identity drift detection** — обнаружение и логирование смены идентичности агента
+4. **Agent detection** — автоматическое определение текущего агента из session data, JSON output, или IDENTITY VERIFIED текста
+
+---
+
+## 7. Pipelines
+
+### BUGFIX Pipelines
 
 | Pipeline | Flow |
 |----------|------|
-| BUGFIX SIMPLE | bugfix-triage → worker → utility |
-| BUGFIX DEEP | bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → utility |
-| DEV SIMPLE (без плана) | worker → utility |
-| DEV SIMPLE (с планом) | worker → consistency-checker → utility |
-| DEV COMPLEX | dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → utility |
-| DEVOPS | devops-agent → devops-reviewer |
-| DOCS | docs-writer → utility |
-| PLAN | plan-writer-* → plan-reviewer-* |
-| RESEARCH | research-writer-* → research-reviewer |
+| **BUGFIX SIMPLE** | bugfix-triage → worker → utility |
+| **BUGFIX DEEP** | bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → utility |
 
-### Key Agent Permissions
+### DEV Pipelines
 
-#### Worker — bash: allow
+| Pipeline | Flow | When to Use |
+|----------|------|-------------|
+| **DEV SIMPLE (без плана)** | worker → utility | Простые задачи без предварительного планирования |
+| **DEV SIMPLE (с планом)** | worker → consistency-checker → utility | Задачи с существующим планом — валидация против плана |
+| **DEV COMPLEX** | dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → utility | Сложные задачи с планированием, guidance, review |
 
-Worker MUST have `bash: allow` to execute commands:
-- npm operations (`npm install`, `npm run build`, `npm run test`)
-- git operations (`git status`, `git add`, `git commit`, `git push`)
-- file operations (`mkdir`, `touch`, `rm`, `cp`)
-- linting tools (`eslint`, `prettier`, `tsc --noEmit`)
-- test runners (`jest`, `vitest`, `pytest`, `cargo test`)
+**Decision rule:** Если `plan_exists=true` для DEV SIMPLE, добавить consistency-checker перед utility. Если `plan_exists=false`, пропустить consistency-checker.
 
-#### View-Image — Build Agents
+### Other Pipelines
 
-All build agents have `task.view-image: allow`:
-
-| Agent | Use Case |
-|-------|----------|
-| worker | Analyze UI screenshots, diagrams, error images |
-| bugfix | Analyze error screenshots during bug triage |
-| execute-bug | Visual verification of bug fixes |
-| rework | Compare before/after UI changes |
-
-#### view-image Agent Restrictions
-
-view-image is restricted from using MCP servers — it analyzes images directly through the model:
-- **Denied**: zread, webSearchPrime, webReader, serena, unity-mcp, zai-mcp-server
-- **Allowed**: read, glob, grep (for file access)
+| Pipeline | Flow |
+|----------|------|
+| **DEVOPS** | devops-agent → devops-reviewer |
+| **DOCS** | docs-writer → utility |
+| **PLAN SIMPLE** | plan-writer-simple → plan-reviewer-simple |
+| **PLAN COMPLEX** | plan-writer-complex → plan-reviewer-complex |
+| **RESEARCH SIMPLE** | research-writer-simple → research-reviewer |
+| **RESEARCH COMPLEX** | research-writer-complex → research-reviewer |
+| **RESEARCH+PLAN SIMPLE** | research-writer-simple → research-reviewer → plan-writer-simple → plan-reviewer-simple |
+| **RESEARCH+PLAN COMPLEX** | research-writer-complex → research-reviewer → plan-writer-complex → plan-reviewer-complex |
 
 ---
 
-## 6. MCP Servers
+## 8. ARCHITECTURE.md Integration
+
+### Purpose
+
+`ARCHITECTURE.md` определяет все архитектурные требования проекта. consistency-checker agent читает этот файл для валидации всех конфигурационных файлов.
+
+### What ARCHITECTURE.md Contains
+
+- Routing tables (agent whitelists)
+- Pipeline definitions
+- JSON validation fields
+- MCP server configurations
+- Identity probe whitelists
+- Outdated terms to check
+
+### How consistency-checker Uses It
+
+1. Читает `ARCHITECTURE.md` из корня проекта
+2. Сравнивает текущие конфигурации с определёнными требованиями
+3. Валидирует:
+   - Соответствие routing tables
+   - Корректность pipeline definitions
+   - JSON validation rules
+   - MCP server configurations
+   - Identity probe configurations
+4. Возвращает отчёт о несоответствиях
+
+### When to Update ARCHITECTURE.md
+
+Обновлять `ARCHITECTURE.md` при:
+- Добавлении/удалении агентов
+- Изменении routing tables
+- Добавлении/изменении pipelines
+- Изменении MCP server configurations
+- Изменении identity probe whitelists
+
+---
+
+## 9. AGENTS.md — Project Rules
+
+### Purpose
+
+`AGENTS.md` определяет правила проекта для всех агентов. Загружается как instructions для каждого агента при старте сессии.
+
+### Key Sections
+
+#### MCP Tools Rules
+
+- **Search**: Always use webSearchPrime MCP for web search
+- **Read URLs**: Always use webReader MCP for reading webpage content
+- **GitHub**: Always use zread MCP tools for GitHub repositories
+
+#### Image Analysis Rules
+
+- **PRIMARY**: view-image agent via Task tool
+- **FALLBACK**: zai-mcp-server (only when view-image unavailable)
+- view-image uses `kimi-for-coding/k2p6` with direct vision capabilities
+
+#### Serena MCP Rules
+
+- **PRIMARY**: Все Serena инструменты для code operations
+- **FALLBACK**: Built-in tools (grep, read, edit) только когда Serena fails
+
+#### unity-mcp Rules
+
+- **PRIMARY**: unity-mcp для ALL Unity operations
+- **FALLBACK**: Built-in tools только когда unity-mcp unavailable
+- unity-mcp доступен для ВСЕХ агентов
+
+#### Dual Primary Agents Architecture
+
+- **orchestrator**: BUGFIX, DEVOPS, DEV, DOCS
+- **plankestrator**: PLAN, RESEARCH, RESEARCH+PLAN
+- Агенты НЕ вызывают друг друга — пользователь переключается вручную
+
+#### Identity Verification
+
+Оба primary агента выводят верификацию идентичности:
+```
+IDENTITY VERIFIED: I am [agent_name]. I am NOT [other_agent_name].
+```
+
+JSON output должен включать поле `agent`:
+```json
+{
+  "agent": "orchestrator" | "plankestrator",
+  ...
+}
+```
+
+---
+
+## 10. Plugin — workflow-enforcement.ts
+
+### Location
+
+`~/.config/opencode/plugins/workflow-enforcement.ts`
+
+### Functionality
+
+1. **Routing table enforcement** — через `tool.execute.before` hook
+2. **JSON validation** — через `message.updated` event hook
+3. **Identity drift detection** — через `message.updated` event hook
+4. **Agent detection** — из session.created, message.updated, tool.execute.before
+
+### Hooks
+
+| Hook | Purpose |
+|------|---------|
+| `event` | Session lifecycle, identity tracking, JSON validation |
+| `tool.execute.before` | Routing table enforcement before tool calls |
+| `tool.execute.after` | Log tool completion |
+
+### Routing Tables in Plugin
+
+```typescript
+const ROUTING_TABLES = {
+  orchestrator: [
+    "orchestrator-identity-probe", "dev-reviewer", "dev-professor", "mcp-github",
+    "worker", "bugfix", "rework", "mcp-read", "utility", "devops",
+    "bugfix-triage", "plan-bug", "devops-agent", "devops-reviewer",
+    "dev-planner", "mcp-search", "docs-writer", "summarizer",
+    "execute-bug", "consistency-checker", "view-image"
+  ],
+  plankestrator: [
+    "plankestrator-identity-probe", "plan-writer-simple", "plan-writer-complex",
+    "plan-reviewer-simple", "plan-reviewer-complex", "research-writer-simple",
+    "research-writer-complex", "research-reviewer", "devops-readonly", "view-image"
+  ]
+}
+```
+
+### JSON Validation Rules
+
+```typescript
+const REQUIRED_JSON_FIELDS = {
+  orchestrator: ["agent", "type", "complexity", "plan_exists", "plan_source", "goal", "next_agent", "pipeline"],
+  plankestrator: ["agent", "state", "type", "complexity", "goal", "next_agent", "pipeline"]
+}
+```
+
+### Error Messages
+
+| Error | Trigger |
+|-------|---------|
+| `JSON OUTPUT REQUIRED` | Agent calls Task tool without outputting JSON first |
+| `WORKFLOW VIOLATION` | Agent calls subagent not in routing table |
+| `IDENTITY DRIFT DETECTED` | Agent identity changes between messages |
+
+---
+
+## 11. MCP Servers
 
 ### zread
 
-- **Type**: Remote
-- **URL**: `https://api.z.ai/api/mcp/zread/mcp`
-- **Tools**: `zread_search_doc`, `zread_read_file`, `zread_get_repo_structure`
-- **Purpose**: Search documentation, issues, PRs, and code in GitHub repositories
+| Field | Value |
+|-------|-------|
+| Type | Remote |
+| URL | `https://api.z.ai/api/mcp/zread/mcp` |
+| Auth | Bearer token (Z.AI API key) |
+
+**Tools:**
+| Tool | Purpose |
+|------|---------|
+| `zread_search_doc` | Search documentation, issues, PRs, code in GitHub repos |
+| `zread_read_file` | Read complete file content from GitHub repo |
+| `zread_get_repo_structure` | Get directory structure of GitHub repo |
 
 ### webSearchPrime
 
-- **Type**: Remote
-- **URL**: `https://api.z.ai/api/mcp/web_search_prime/mcp`
-- **Tools**: `webSearchPrime_web_search_prime`
-- **Purpose**: Web search with time and domain filters
+| Field | Value |
+|-------|-------|
+| Type | Remote |
+| URL | `https://api.z.ai/api/mcp/web_search_prime/mcp` |
+| Auth | Bearer token (Z.AI API key) |
+
+**Tools:**
+| Tool | Purpose |
+|------|---------|
+| `webSearchPrime_web_search_prime` | Web search with time/domain filters |
 
 ### webReader
 
-- **Type**: Remote
-- **URL**: `https://api.z.ai/api/mcp/web_reader/mcp`
-- **Tools**: `webReader_webReader`
-- **Purpose**: Fetch and convert web pages to markdown
+| Field | Value |
+|-------|-------|
+| Type | Remote |
+| URL | `https://api.z.ai/api/mcp/web_reader/mcp` |
+| Auth | Bearer token (Z.AI API key) |
+
+**Tools:**
+| Tool | Purpose |
+|------|---------|
+| `webReader_webReader` | Fetch URL content, convert to markdown |
 
 ### serena
 
-- **Type**: Local
-- **Command**: `serena start-mcp-server --transport stdio --context=ide --project-from-cwd`
-- **Tools**: `serena_find_symbol`, `serena_find_referencing_symbols`, `serena_get_symbols_overview`, `serena_rename_symbol`, `serena_safe_delete_symbol`, `serena_replace_symbol_body`, `serena_insert_after_symbol`
-- **Purpose**: Code symbol operations (PRIMARY for all code operations)
+| Field | Value |
+|-------|-------|
+| Type | Local |
+| Command | `serena start-mcp-server --transport stdio --context=ide --project-from-cwd` |
+| Executable | `C:\Users\Admin\.local\bin\serena.exe` (adjust path per machine) |
+
+**Tools:**
+| Tool | Purpose |
+|------|---------|
+| `serena_find_symbol` | Find classes/functions by name |
+| `serena_find_referencing_symbols` | Find all usages of a symbol |
+| `serena_get_symbols_overview` | Get file structure overview |
+| `serena_rename_symbol` | Rename symbol across codebase |
+| `serena_safe_delete_symbol` | Delete symbol if safe |
+| `serena_replace_symbol_body` | Replace symbol body |
+| `serena_insert_after_symbol` | Insert code after symbol |
 
 ### unity-mcp
 
-- **Type**: Remote
-- **URL**: `http://localhost:8080/mcp`
-- **Tools**: 20+ Unity Editor tools
-- **Purpose**: Unity Editor operations (PRIMARY for Unity projects)
-- **Prerequisites**: Unity Editor running with MCP server started
+| Field | Value |
+|-------|-------|
+| Type | Remote |
+| URL | `http://localhost:8080/mcp` |
+| Prerequisites | Unity Editor running with MCP server started |
+
+**Tools:** 20+ Unity Editor tools including:
+- `manage_gameobject` — Create/modify/delete GameObjects
+- `manage_scene` — Create/save scenes
+- `manage_script` — CRUD operations on C# scripts
+- `manage_asset` — Import/manage assets
+- `read_console` — Read Unity console logs
+- `manage_components` — Add/remove/configure components
+- `manage_prefabs` — Prefab operations
+- `manage_material` — Material operations
+- `manage_animation` — Animation operations
+- `manage_physics` — Physics operations
+- `manage_build` — Build operations
+- `manage_camera` — Camera operations
+- `manage_graphics` — Graphics/rendering operations
+- `manage_ui` — UI Toolkit operations
+- `manage_vfx` — VFX operations
+- `manage_profiler` — Profiler operations
+- `manage_packages` — Package management
+- `manage_editor` — Editor state control
+- `batch_execute` — Batch operations (10-100x faster)
+- `unity_docs` — Unity documentation lookup
+- `unity_reflect` — Unity API reflection
 
 ### zai-mcp-server
 
-- **Type**: Local
-- **Command**: `npx -y @z_ai/mcp-server`
-- **Purpose**: Image analysis (fallback when view-image unavailable)
+| Field | Value |
+|-------|-------|
+| Type | Local |
+| Command | `npx -y @z_ai/mcp-server` |
+| Environment | `Z_AI_API_KEY`, `Z_AI_MODE=ZAI` |
+
+**Purpose:** Image analysis (fallback when view-image unavailable)
 
 ---
 
-## 7. File Locations
+## 12. Commands
+
+Custom commands defined in opencode.json:
+
+| Command | Description | Agent | Template |
+|---------|-------------|-------|----------|
+| `read-url` | Read content from a URL | mcp-read | `Read and analyze this URL: $ARGUMENTS` |
+| `document` | Generate documentation | docs-writer | `Document the following: $ARGUMENTS` |
+| `github` | Search GitHub repositories | mcp-github | `Search GitHub for: $ARGUMENTS` |
+| `summarize` | Summarize content | summarizer | `Summarize the following: $ARGUMENTS` |
+| `search` | Search the web for information | mcp-search | `Search for: $ARGUMENTS` |
+
+All commands are `subtask: true` — they run as subagent tasks.
+
+---
+
+## 13. File Locations
 
 ### Configuration Files
 
 | File | Location | Purpose |
 |------|----------|---------|
-| opencode.json | `~/.config/opencode/opencode.json` | Main configuration |
-| workflow-enforcement.ts | `~/.config/opencode/plugins/workflow-enforcement.ts` | Workflow plugin |
-| [agent].md | `~/.config/opencode/agents/[name].md` | Agent definitions |
+| opencode.json | `~/.config/opencode/opencode.json` | Main configuration (providers, MCP, agents, commands) |
+| workflow-enforcement.ts | `~/.config/opencode/plugins/workflow-enforcement.ts` | Workflow enforcement plugin |
+| [agent].md | `~/.config/opencode/agents/[name].md` | Individual agent definitions (33 files) |
 
 ### Data Storage
 
 | Directory | Location | Purpose |
 |-----------|----------|---------|
 | Database | `~/.local/share/opencode/opencode.db` | SQLite database |
-| Session Storage | `~/.local/share/opencode/storage/session_diff/` | Session state |
+| Session Storage | `~/.local/share/opencode/storage/session_diff/` | Session state differences |
 | Todo Lists | `~/.local/share/opencode/storage/todo/` | Task tracking |
-| Tool Outputs | `~/.local/share/opencode/tool-output/` | Tool results |
+| Tool Outputs | `~/.local/share/opencode/tool-output/` | Tool execution results |
 | Logs | `~/.local/share/opencode/log/` | Execution logs |
 
 ### Project Files
@@ -433,10 +822,49 @@ view-image is restricted from using MCP servers — it analyzes images directly 
 | ARCHITECTURE.md | Project root | Architecture requirements |
 | PLUGIN.md | Project root | Plugin documentation |
 | MCP_SETUP.md | Project root | This setup guide |
+| PLAN.md | Project root | Current implementation plan |
+
+### Agent Files List (33 files)
+
+```
+~/.config/opencode/agents/
+├── orchestrator.md                    # Primary agent
+├── plankestrator.md                   # Primary agent
+├── orchestrator-identity-probe.md
+├── plankestrator-identity-probe.md
+├── worker.md
+├── bugfix.md
+├── bugfix-triage.md
+├── plan-bug.md
+├── execute-bug.md
+├── dev-planner.md
+├── dev-professor.md
+├── dev-reviewer.md
+├── rework.md
+├── consistency-checker.md
+├── docs-writer.md
+├── utility.md
+├── mcp-github.md
+├── mcp-read.md
+├── mcp-search.md
+├── summarizer.md
+├── devops.md
+├── devops-agent.md
+├── devops-reviewer.md
+├── devops-readonly.md
+├── plan-writer-simple.md
+├── plan-writer-complex.md
+├── plan-reviewer-simple.md
+├── plan-reviewer-complex.md
+├── research-writer-simple.md
+├── research-writer-complex.md
+├── research-reviewer.md
+└── view-image.md
+```
 
 ---
 
-## 8. Troubleshooting
+## 14. Troubleshooting
 
 ### Common Issues
 
@@ -448,10 +876,10 @@ view-image is restricted from using MCP servers — it analyzes images directly 
 
 **Solution:**
 ```powershell
-# Check plugin path in opencode.json
+# Проверить путь к плагину в opencode.json
 cat $HOME\.config\opencode\opencode.json | Select-String "plugin"
 
-# Verify plugin file exists
+# Проверить существование файла плагина
 Test-Path $HOME\.config\opencode\plugins\workflow-enforcement.ts
 ```
 
@@ -462,10 +890,10 @@ Test-Path $HOME\.config\opencode\plugins\workflow-enforcement.ts
 - "MCP server not found" errors
 
 **Solution:**
-- Check MCP configuration in opencode.json
-- Verify API keys are correct
-- For serena: ensure `serena.exe` is in PATH
-- For unity-mcp: ensure Unity Editor is running with MCP server started
+- Проверить конфигурацию MCP в opencode.json
+- Проверить API keys
+- Для serena: убедиться что `serena.exe` в PATH
+- Для unity-mcp: убедиться что Unity Editor запущен с MCP сервером
 
 #### Agent Identity Drift
 
@@ -474,9 +902,9 @@ Test-Path $HOME\.config\opencode\plugins\workflow-enforcement.ts
 - Agent calling wrong subagents
 
 **Solution:**
-- Check agent file frontmatter matches opencode.json
-- Verify agent description contains correct name
-- Ensure identity verification output is correct format
+- Проверить что frontmatter agent файла совпадает с opencode.json
+- Убедиться что description агента содержит правильное имя
+- Проверить формат identity verification output
 
 #### Routing Violation
 
@@ -485,9 +913,9 @@ Test-Path $HOME\.config\opencode\plugins\workflow-enforcement.ts
 - Task tool calls blocked
 
 **Solution:**
-- Check routing table in plugin matches opencode.json whitelist
-- Verify agent is calling correct subagent for its type
-- Ensure JSON output includes correct `"agent"` field
+- Проверить routing table в плагине совпадает с whitelist в opencode.json
+- Убедиться что агент вызывает правильный subagent для своего типа
+- Проверить что JSON output включает правильное поле `"agent"`
 
 #### view-image Cannot Read Files
 
@@ -495,78 +923,110 @@ Test-Path $HOME\.config\opencode\plugins\workflow-enforcement.ts
 - view-image reports it cannot access files
 
 **Solution:**
-- Ensure view-image has `read: allow`, `glob: allow`, `grep: allow` permissions
-- view-image should analyze images directly through the model, not use MCP servers
+- Убедиться что view-image имеет `read: allow`, `glob: allow`, `grep: allow`
+- view-image должен анализировать изображения напрямую через модель, НЕ через MCP серверы
+
+#### Serena Not Working
+
+**Symptoms:**
+- serena_* tools not available
+- "serena not found" errors
+
+**Solution:**
+- Убедиться что `serena.exe` установлен и в PATH
+- Проверить что serena запускается: `serena --version`
+- Проверить что проект открыт в IDE (serena использует `--project-from-cwd`)
 
 ### Debug Commands
 
 ```powershell
-# View recent logs
+# Просмотреть последние логи
 Get-Content $HOME\.local\share\opencode\log\*.log -Tail 100
 
-# Search for violations
+# Поискать violations
 Select-String "WORKFLOW VIOLATION" $HOME\.local\share\opencode\log\*.log
 
-# Search for drift
+# Поискать drift
 Select-String "IDENTITY DRIFT" $HOME\.local\share\opencode\log\*.log
 
-# Search for JSON errors
+# Поискать JSON errors
 Select-String "INVALID JSON" $HOME\.local\share\opencode\log\*.log
 
-# View all plugin activity
+# Просмотреть всю активность плагина
 Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 ```
 
+### Escape Hatches
+
+Когда конфигурация сломана и opencode не запускается:
+
+| Env Var | Purpose |
+|---------|---------|
+| `OPENCODE_DISABLE_PROJECT_CONFIG=1` | Пропустить локальный opencode.json проекта |
+| `OPENCODE_CONFIG=/path/to/file.json` | Загрузить альтернативный конфиг |
+| `OPENCODE_CONFIG_CONTENT='{}'` | Inject inline JSON как финальный merge |
+| `OPENCODE_DISABLE_DEFAULT_PLUGINS=1` | Пропустить default плагины |
+| `OPENCODE_PURE=1` | Пропустить внешние плагины |
+| `OPENCODE_DISABLE_EXTERNAL_SKILLS=1` | Пропустить skills из ~/.claude/ |
+| `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1` | Пропустить skills из ~/.agents/ |
+
 ---
 
-## 9. Verification Checklist
+## 15. Verification Checklist
 
 ### Pre-Deployment
 
 - [ ] Node.js 18+ installed
 - [ ] OpenCode CLI installed
-- [ ] Serena installed and in PATH
-- [ ] zai-mcp-server available via npx
+- [ ] Serena installed и в PATH
+- [ ] zai-mcp-server доступен через npx
 - [ ] Directory structure created
 
 ### Configuration
 
-- [ ] opencode.json copied to `~/.config/opencode/`
-- [ ] Plugin copied to `~/.config/opencode/plugins/`
-- [ ] All agent files copied to `~/.config/opencode/agents/`
-- [ ] API keys configured correctly
-- [ ] MCP server URLs correct
+- [ ] opencode.json скопирован в `~/.config/opencode/`
+- [ ] Plugin скопирован в `~/.config/opencode/plugins/`
+- [ ] Все 33 agent файла скопированы в `~/.config/opencode/agents/`
+- [ ] API keys настроены корректно
+- [ ] MCP server URLs корректны
+- [ ] Routing tables в плагине совпадают с opencode.json
 
 ### Post-Deployment
 
-- [ ] OpenCode starts without errors
-- [ ] Plugin initialization log appears
-- [ ] MCP tools available (zread_*, webSearchPrime_*, webReader_*, serena_*, unity-mcp_*)
-- [ ] orchestrator session works
-- [ ] plankestrator session works
-- [ ] Routing violations blocked correctly
-- [ ] JSON validation works
-- [ ] Identity drift detection works
+- [ ] OpenCode запускается без ошибок
+- [ ] Plugin initialization log появляется
+- [ ] MCP tools доступны (zread_*, webSearchPrime_*, webReader_*, serena_*, unity-mcp_*)
+- [ ] orchestrator session работает
+- [ ] plankestrator session работает
+- [ ] Routing violations блокируются корректно
+- [ ] JSON validation работает
+- [ ] Identity drift detection работает
+- [ ] view-image может анализировать изображения напрямую
+- [ ] worker может выполнять bash команды
 
 ### Test Commands
 
 ```bash
 # Test orchestrator
 opencode --agent orchestrator
-# Should see: "Workflow enforcement plugin initialized"
-# Should see: "Session created — agent detected: orchestrator"
+# Должно появиться: "Workflow enforcement plugin initialized"
+# Должно появиться: "Session created — agent detected: orchestrator"
 
 # Test plankestrator
 opencode --agent plankestrator
-# Should see: "Session created — agent detected: plankestrator"
+# Должно появиться: "Session created — agent detected: plankestrator"
 
-# Test routing violation (should be blocked)
-# In orchestrator session, try calling plan-writer-simple
-# Should see: "WORKFLOW VIOLATION" error
+# Test routing violation (должно быть заблокировано)
+# В orchestrator session, попробовать вызвать plan-writer-simple
+# Должно появиться: "WORKFLOW VIOLATION" error
 
 # Test MCP tools
-# In any session, use zread_search_doc
-# Should return GitHub search results
+# В любой session, использовать zread_search_doc
+# Должно вернуть результаты поиска GitHub
+
+# Test view-image
+# В любой session, передать изображение view-image агенту
+# Должно вернуть описание изображения
 ```
 
 ---
@@ -579,8 +1039,10 @@ opencode --agent plankestrator
 | Subagents | 31 | `~/.config/opencode/agents/` |
 | MCP servers | 6 | Configured in opencode.json |
 | Plugin hooks | 3 | workflow-enforcement.ts |
-| Routing tables | 2 | orchestrator (21), plankestrator (9) |
+| Routing tables | 2 | orchestrator (21), plankestrator (10) |
 | Pipelines | 9 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
+| Custom commands | 5 | opencode.json |
+| Models | 5 | alibaba, bailian, kimi, minimax |
 
 ### Quick Reference
 
@@ -591,9 +1053,11 @@ opencode --agent plankestrator
 | View logs | `Get-Content ~/.local/share/opencode/log/*.log -Tail 100` |
 | Check config | `cat ~/.config/opencode/opencode.json` |
 | List agents | `ls ~/.config/opencode/agents/` |
+| Test Serena | `serena --version` |
+| Test unity-mcp | Открыть Unity Editor → `Window > MCP for Unity > Start Server` |
 
 ---
 
-**Document Version:** 2.0
+**Document Version:** 3.0
 **Last Updated:** 2026-05-29
 **Author:** OpenCode Documentation Team
