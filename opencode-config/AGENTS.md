@@ -64,7 +64,7 @@ Handles planning and research tasks:
 
 ## Routing Tables
 
-### orchestrator Whitelist (20 agents)
+### orchestrator Whitelist (21 agents)
 
 | Agent Name | Role |
 |------------|------|
@@ -88,6 +88,7 @@ Handles planning and research tasks:
 | summarizer | Content summarization |
 | execute-bug | Bug fix implementation |
 | consistency-checker | Architecture consistency validation |
+| view-image | Image analysis |
 
 ### plankestrator Whitelist (9 agents)
 
@@ -250,3 +251,16 @@ Configured in ~/.config/opencode/opencode.json under the plugins section.
 - Storage: ~/.local/share/opencode/storage/
 - Logs: ~/.local/share/opencode/log/
 - Tool Outputs: ~/.local/share/opencode/tool-output/
+
+### View-Image Permission — Build Agents
+
+All build agents have `task.view-image: allow` to delegate image analysis:
+
+| Agent | Permission | Use Case |
+|-------|------------|----------|
+| worker | `view-image: allow` | Analyze UI screenshots, diagrams, error images |
+| bugfix | `view-image: allow` | Analyze error screenshots during bug triage |
+| execute-bug | `view-image: allow` | Visual verification of bug fixes |
+| rework | `view-image: allow` | Compare before/after UI changes |
+
+**Usage pattern:** Call via Task tool with `subagent_type: "view-image"`. view-image uses `kimi-for-coding/k2p6` with direct vision capabilities.
