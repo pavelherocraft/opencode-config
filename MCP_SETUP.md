@@ -49,7 +49,7 @@ OpenCode использует архитектуру с двумя primary-аг�
 |-------|----------|--------------|--------|
 | `glm-5` | alibaba-coding-plan | 7 | orchestrator, plankestrator, orchestrator-identity-probe, plankestrator-identity-probe, docs-writer, research-writer-simple, plan-reviewer-simple |
 | `qwen3.6-plus` | alibaba-coding-plan | 11 | worker, bugfix, bugfix-triage, plan-bug, dev-planner, devops-reviewer, plan-writer-simple, consistency-checker, utility |
-| `glm-5.1` | bailian-token-plan | 5 | dev-professor, plan-writer-complex, research-writer-complex, execute-bug, rework |
+| `glm-5.1` | zai-coding-plan | 5 | dev-professor, plan-writer-complex, research-writer-complex, execute-bug, rework |
 | `k2p6` | kimi-for-coding | 4 | dev-reviewer, plan-reviewer-complex, research-reviewer, view-image |
 | `MiniMax-M2.7` | minimax-coding-plan | 7 | mcp-github, mcp-read, mcp-search, summarizer, devops, devops-agent, devops-readonly |
 
@@ -89,7 +89,8 @@ OpenCode использует архитектуру с двумя primary-аг�
 
 | Provider | Key | Purpose |
 |----------|-----|---------|
-| Alibaba (bailian-token-plan) | `sk-sp-*` | Qwen, GLM models через token-plan API |
+| Alibaba (bailian-token-plan) | `sk-sp-*` | Qwen, GLM models (glm-5, qwen3.6-plus) |
+| Z.AI (zai-coding-plan) | через API | GLM-5.1 модели |
 | Z.AI | `a8d38aaca0e04f678f11c7f8bd135a12.*` | zread, webSearchPrime, webReader, zai-mcp-server |
 
 ---
@@ -186,9 +187,19 @@ cp agents/*.md $HOME\.config\opencode\agents\
       "deepseek-v3.2": { "name": "DeepSeek V3.2" },
       "kimi-k2.6": { "name": "Kimi K2.6", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
       "kimi-k2.5": { "name": "Kimi K2.5", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-      "glm-5.1": { "name": "GLM-5.1", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
       "glm-5": { "name": "GLM-5", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
       "MiniMax-M2.5": { "name": "MiniMax M2.5" }
+    }
+  },
+  "zai-coding-plan": {
+    "npm": "@ai-sdk/openai-compatible",
+    "name": "Z.AI Coding Plan",
+    "options": {
+      "baseURL": "https://api.z.ai/anthropic/v1",
+      "apiKey": "YOUR_Z_AI_KEY"
+    },
+    "models": {
+      "glm-5.1": { "name": "GLM-5.1", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } }
     }
   }
 }
@@ -342,16 +353,16 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **dev-planner** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | - | deny | view-image |
 | **bugfix** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.2 | allow | - | - | deny | view-image |
 | **mcp-read** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
-| **plan-writer-complex** | subagent | bailian-token-plan/glm-5.1 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
+| **plan-writer-complex** | subagent | zai-coding-plan/glm-5.1 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **worker** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.2 | allow | - | - | **allow** | view-image |
 | **utility** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | - | **allow** | view-image |
-| **rework** | subagent | bailian-token-plan/glm-5.1 | 0.2 | allow | - | - | deny | view-image |
+| **rework** | subagent | zai-coding-plan/glm-5.1 | 0.2 | allow | - | - | deny | view-image |
 | **research-writer-simple** | subagent | alibaba-coding-plan/glm-5 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
 | **plan-reviewer-simple** | subagent | alibaba-coding-plan/glm-5 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **plan-bug** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | - | deny | view-image |
 | **devops** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | **allow** | view-image |
 | **docs-writer** | subagent | alibaba-coding-plan/glm-5 | 0.3 | allow | - | - | deny | view-image |
-| **dev-professor** | subagent | bailian-token-plan/glm-5.1 | 0.2 | allow | - | - | deny | view-image |
+| **dev-professor** | subagent | zai-coding-plan/glm-5.1 | 0.2 | allow | - | - | deny | view-image |
 | **devops-readonly** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | allow | - | allow | deny | view-image |
 | **devops-agent** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | - | **allow** | view-image |
 | **devops-reviewer** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | allow | deny | view-image |
@@ -362,9 +373,9 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **bugfix-triage** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | - | deny | view-image |
 | **research-reviewer** | subagent | kimi-for-coding/k2p6 | 0.1 | allow | - | allow | deny | view-image |
 | **dev-reviewer** | subagent | kimi-for-coding/k2p6 | 0.1 | allow | - | - | deny | view-image |
-| **research-writer-complex** | subagent | bailian-token-plan/glm-5.1 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
+| **research-writer-complex** | subagent | zai-coding-plan/glm-5.1 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
 | **plan-writer-simple** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **execute-bug** | subagent | bailian-token-plan/glm-5.1 | 0.2 | allow | - | - | deny | view-image |
+| **execute-bug** | subagent | zai-coding-plan/glm-5.1 | 0.2 | allow | - | - | deny | view-image |
 | **plan-reviewer-complex** | subagent | kimi-for-coding/k2p6 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **consistency-checker** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
 | **view-image** | subagent | kimi-for-coding/k2p6 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
