@@ -2,13 +2,14 @@
 
 ## 1. Overview
 
-The Workflow Enforcement Plugin is a critical component of the OpenCode dual-primary-agent architecture. It enforces routing table compliance, prevents identity drift, and validates JSON output format.
+The Workflow Enforcement Plugin is a critical component of the OpenCode dual-primary-agent architecture. It enforces routing table compliance, prevents identity drift, validates JSON output format, and **enforces pipeline execution order**.
 
 ### Purpose
 
 - **Routing Table Enforcement**: Ensures agents can only call other agents within their whitelisted set
 - **Identity Drift Detection**: Alerts when an agent's identity changes unexpectedly mid-session
 - **JSON Output Validation**: Validates that agent outputs contain required fields with correct values
+- **Pipeline Enforcement**: Blocks calls that skip pipeline steps or call agents out of order
 - **Workflow Step Logging**: Logs all workflow steps for debugging and auditing
 
 ### Why It Exists
@@ -70,9 +71,9 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 
 | Hook | When | What It Does |
 |------|------|--------------|
-| `event` | System events fire | Handles `session.created`, `session.idle`, `message.updated` — agent detection, identity tracking, JSON validation |
-| `tool.execute.before` | Before any tool call | Routing table enforcement + reverse routing lookup for agent detection |
-| `tool.execute.after` | After tool completes | Logs tool completion |
+| `event` | System events fire | Handles `session.created`, `session.idle`, `message.updated` — agent detection, identity tracking, JSON validation, **pipeline activation** |
+| `tool.execute.before` | Before any tool call | Routing table enforcement, reverse routing lookup, **pipeline order enforcement** |
+| `tool.execute.after` | After tool completes | Logs tool completion, **advances pipeline step** |
 
 **Important**: `session.created`, `session.idle`, `message.updated` are NOT top-level hooks — they are **event types** handled inside the `event` hook. The old plugin used them as top-level hooks, which caused them to be silently ignored.
 
@@ -85,9 +86,9 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 **Purpose**: Agent detection, identity tracking, JSON validation, and workflow logging.
 
 **Behavior**: Checks `event.type` to handle:
-1. `session.created` — Detect initial agent identity from session data; reset workflow tracking
-2. `session.idle` — Log workflow summary when agent finishes
-3. `message.updated` — Parse JSON from messages to detect agent (if not yet known) and validate output
+1. `session.created` — Detect initial agent identity from session data; reset workflow tracking **and pipeline state**
+2. `session.idle` — Log workflow summary when agent finishes; **warn if pipeline incomplete**
+3. `message.updated` — Parse JSON from messages to detect agent (if not yet known), validate output, **and activate pipeline from JSON**
 
 **Agent Detection Priority**:
 1. Session data (title, agent field) on `session.created`
@@ -101,12 +102,13 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 **Purpose**: Enforce routing table compliance + fallback agent detection.
 
 **Behavior**:
-1. **Reverse routing lookup**: If `currentAgent` is unknown and a `task` call is made, look up which primary agent can call this subagent
-2. Check if tool is `task` (agent delegation)
-3. Extract target agent name from tool parameters
-4. Look up current agent's whitelist
-5. If target not in whitelist → throw error, block execution
-6. If target in whitelist → allow execution, log valid routing
+1. **Pipeline enforcement**: If a pipeline is active, verify that the target agent matches the expected step
+2. **Reverse routing lookup**: If `currentAgent` is unknown and a `task` call is made, look up which primary agent can call this subagent
+3. Check if tool is `task` (agent delegation)
+4. Extract target agent name from tool parameters
+5. Look up current agent's whitelist
+6. If target not in whitelist → throw error, block execution
+7. If target in whitelist → allow execution, log valid routing
 
 #### `tool.execute.after`
 
@@ -118,6 +120,7 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 1. Log tool name and result status
 2. Track workflow progress
 3. Enable debugging of pipeline execution
+4. **Advance pipeline step** if the completed task matches the expected pipeline step
 
 ---
 
@@ -208,7 +211,146 @@ const ROUTING_TABLES = {
 
 ---
 
-## 5. Error Messages
+## 5. Pipeline Enforcement
+
+### Overview
+
+Pipeline enforcement ensures that agents are called in the correct order as defined in the orchestrator's JSON output. When orchestrator outputs a `pipeline` array (e.g., `["worker", "consistency-checker", "utility"]`), the plugin:
+
+1. **Activates** the pipeline from JSON output
+2. **Tracks** which step is expected next
+3. **Blocks** calls that skip steps or call out of order
+4. **Advances** the step counter after successful completion
+5. **Warns** if session ends with incomplete pipeline
+
+### Pipeline Definitions
+
+The plugin defines expected agent sequences for each workflow type:
+
+| Pipeline Key | Sequence |
+|---|---|
+| `BUGFIX_SIMPLE` | `bugfix-triage → worker → utility` |
+| `BUGFIX_DEEP` | `bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → utility` |
+| `DEV_SIMPLE_NO_PLAN` | `worker → utility` |
+| `DEV_SIMPLE_WITH_PLAN` | `worker → consistency-checker → utility` |
+| `DEV_COMPLEX` | `dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → utility` |
+| `DEVOPS` | `devops-agent → devops-reviewer` |
+| `DOCS` | `docs-writer → utility` |
+| `PLAN_SIMPLE` | `plan-writer-simple → plan-reviewer-simple` |
+| `PLAN_COMPLEX` | `plan-writer-complex → plan-reviewer-complex` |
+| `PLAN_BUG` | `plan-bug` |
+| `RESEARCH_SIMPLE` | `research-writer-simple → research-reviewer` |
+| `RESEARCH_COMPLEX` | `research-writer-complex → research-reviewer` |
+
+**Note**: The actual pipeline is determined by the `pipeline` field in orchestrator's JSON output, not by these definitions. The definitions serve as a reference.
+
+### Pipeline Activation
+
+Pipeline is activated when orchestrator outputs valid JSON with a `pipeline` array:
+
+```json
+{
+  "agent": "orchestrator",
+  "type": "DEV",
+  "complexity": "SIMPLE",
+  "plan_exists": true,
+  "pipeline": ["worker", "consistency-checker", "utility"]
+}
+```
+
+The plugin logs:
+```
+[INFO] Pipeline activated from JSON: [worker → consistency-checker → utility]
+```
+
+### Enforcement Rules
+
+#### 1. Skipped Steps — BLOCKED
+
+If orchestrator tries to call an agent that appears **later** in the pipeline:
+
+```
+⛔ PIPELINE VIOLATION — SKIPPED STEPS
+
+Current Pipeline: [worker → consistency-checker → utility]
+Expected Next Step: consistency-checker (step 2/3)
+Attempted Call: utility (step 3/3)
+Skipped Agents: consistency-checker
+
+You cannot skip pipeline steps. You must call agents in order.
+Call consistency-checker first before proceeding to utility.
+```
+
+#### 2. Duplicate Call — BLOCKED
+
+If orchestrator tries to call an agent that was **already completed**:
+
+```
+⛔ PIPELINE VIOLATION — DUPLICATE CALL
+
+Current Pipeline: [worker → consistency-checker → utility]
+Expected Next Step: utility (step 3/3)
+Attempted Call: consistency-checker (already completed at step 2)
+
+This agent has already been called. Do not call it again.
+```
+
+#### 3. Agent Not in Pipeline — WARNING (allowed)
+
+If orchestrator calls an agent not in the active pipeline (e.g., identity probe):
+
+```
+[WARN] Pipeline warning: orchestrator-identity-probe not in active pipeline [worker, consistency-checker, utility], allowing (may be identity probe or ad-hoc call)
+```
+
+#### 4. Out of Order — WARNING (allowed)
+
+If orchestrator calls a pipeline agent but not at the expected position:
+
+```
+[WARN] Pipeline order warning: expected consistency-checker, got utility
+```
+
+### Pipeline Advancement
+
+After a successful task call that matches the expected step, the plugin advances:
+
+```
+[INFO] Pipeline advanced: step 2/3 → utility
+  completed: consistency-checker
+  next: utility
+```
+
+When the last step completes:
+
+```
+[INFO] Pipeline COMPLETED: [worker → consistency-checker → utility]
+```
+
+### Incomplete Pipeline Warning
+
+If the session ends before all pipeline steps are completed:
+
+```
+[WARN] PIPELINE INCOMPLETE — session ended with 1 steps remaining
+  pipeline: [worker, consistency-checker, utility]
+  completed: [worker, consistency-checker]
+  remaining: [utility]
+```
+
+### Pipeline State Variables
+
+```typescript
+let activePipeline: string[] | null = null    // Current pipeline array
+let pipelineStepIndex: number = 0             // Index of next expected step
+let pipelineName: string | null = null        // Human-readable pipeline key
+```
+
+All pipeline state is reset on `session.created`.
+
+---
+
+## 6. Error Messages
 
 ### Routing Violation
 
@@ -280,7 +422,7 @@ Expected format:
 
 ---
 
-## 6. JSON Validation
+## 7. JSON Validation
 
 ### Required Fields per Agent
 
@@ -406,7 +548,7 @@ function validateJSONOutput(json: any, agent: string): ValidationResult {
 
 ---
 
-## 7. Agent Detection
+## 8. Agent Detection
 
 The plugin detects which agent is running using multiple methods, triggered at different points in the lifecycle:
 
@@ -511,7 +653,7 @@ Session Created Event
 
 ---
 
-## 8. Identity Drift Detection
+## 9. Identity Drift Detection
 
 ### What Is Identity Drift?
 
@@ -576,7 +718,7 @@ This allows legitimate agent switches while still tracking them for debugging.
 
 ---
 
-## 9. Debugging
+## 10. Debugging
 
 ### How to Check If Plugin Is Working
 
@@ -692,7 +834,7 @@ await client.app.log({
 
 ---
 
-## 10. Known Issues
+## 11. Known Issues
 
 ### 1. Agent Detection May Still Fail
 
@@ -751,7 +893,7 @@ grep -E "(WORKFLOW VIOLATION|IDENTITY DRIFT|INVALID JSON|Workflow enforcement)" 
 
 ---
 
-## 11. Configuration Reference
+## 12. Configuration Reference
 
 ### Full Plugin Configuration
 
@@ -826,7 +968,7 @@ const ROUTING_TABLES = {
 
 ---
 
-## 12. Summary
+## 13. Summary
 
 | Feature | Description |
 |---------|-------------|
@@ -834,6 +976,7 @@ const ROUTING_TABLES = {
 | **Identity Detection** | Detects current agent from session title, field, or JSON |
 | **Drift Detection** | Alerts when agent identity changes mid-session |
 | **JSON Validation** | Validates required fields and values in agent output |
+| **Pipeline Enforcement** | Blocks calls that skip steps or call out of order |
 | **Logging** | Comprehensive logging for debugging and auditing |
 
 ### Quick Reference
@@ -845,6 +988,11 @@ const ROUTING_TABLES = {
 | Routing violation | `WORKFLOW VIOLATION` |
 | Identity drift | `IDENTITY DRIFT DETECTED` |
 | Invalid JSON | `INVALID JSON OUTPUT` |
+| Pipeline activated | `Pipeline activated from JSON` |
+| Pipeline advanced | `Pipeline advanced: step X/Y` |
+| Pipeline completed | `Pipeline COMPLETED` |
+| Pipeline incomplete | `PIPELINE INCOMPLETE` |
+| Pipeline violation | `PIPELINE VIOLATION` |
 
 ### File Locations
 
