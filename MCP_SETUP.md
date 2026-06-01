@@ -474,10 +474,12 @@ DevOps агенты имеют `bash: allow` для выполнения ком�
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
 
-### plankestrator Whitelist (9 agents)
+### plankestrator Whitelist (10 agents)
 
-| Agent | Role |
-|-------|------|
+plankestrator can only call these agents:
+
+| Agent Name | Role |
+|------------|------|
 | plankestrator-identity-probe | Identity verification |
 | plan-writer-simple | Simple planning |
 | plan-writer-complex | Complex planning |
@@ -637,14 +639,47 @@ JSON output должен включать поле `agent`:
 2. **JSON validation** — через `message.updated` event hook
 3. **Identity drift detection** — через `message.updated` event hook
 4. **Agent detection** — из session.created, message.updated, tool.execute.before
+5. **Pipeline enforcement** — блокирует пропущенные шаги и дубликаты вызовов
+6. **Pipeline advancement** — автоматически продвигает pipeline после завершения шага
+7. **Incomplete pipeline warning** — предупреждает если сессия завершена с незавершённым pipeline
 
 ### Hooks
 
 | Hook | Purpose |
 |------|---------|
-| `event` | Session lifecycle, identity tracking, JSON validation |
-| `tool.execute.before` | Routing table enforcement before tool calls |
-| `tool.execute.after` | Log tool completion |
+| `event` | Session lifecycle, identity tracking, JSON validation, **pipeline activation** |
+| `tool.execute.before` | Routing table enforcement + **pipeline order enforcement** before tool calls |
+| `tool.execute.after` | Log tool completion + **advance pipeline step** |
+
+**Важно**: `session.created`, `session.idle`, `message.updated` — это НЕ top-level хуки, а **event types**, обрабатываемые внутри хука `event`.
+
+### Pipeline Definitions
+
+Плагин определяет ожидаемые последовательности агентов для каждого типа workflow:
+
+| Pipeline Key | Sequence |
+|---|---|
+| `BUGFIX_SIMPLE` | `bugfix-triage → worker → utility` |
+| `BUGFIX_DEEP` | `bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → utility` |
+| `DEV_SIMPLE_NO_PLAN` | `worker → utility` |
+| `DEV_SIMPLE_WITH_PLAN` | `worker → consistency-checker → utility` |
+| `DEV_COMPLEX` | `dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → utility` |
+| `DEVOPS` | `devops-agent → devops-reviewer` |
+| `DOCS` | `docs-writer → utility` |
+| `PLAN_SIMPLE` | `plan-writer-simple → plan-reviewer-simple` |
+| `PLAN_COMPLEX` | `plan-writer-complex → plan-reviewer-complex` |
+| `PLAN_BUG` | `plan-bug` |
+| `RESEARCH_SIMPLE` | `research-writer-simple → research-reviewer` |
+| `RESEARCH_COMPLEX` | `research-writer-complex → research-reviewer` |
+
+### Pipeline Enforcement Rules
+
+| Violation Type | Behavior |
+|----------------|----------|
+| **Skipped Steps** | BLOCKED — нельзя пропускать шаги pipeline |
+| **Duplicate Call** | BLOCKED — нельзя вызывать уже завершённого агента |
+| **Agent Not in Pipeline** | WARNING (allowed) — identity probes и ad-hoc вызовы |
+| **Out of Order** | WARNING — вызов не в ожидаемом порядке |
 
 ### Routing Tables in Plugin
 
@@ -1051,7 +1086,7 @@ opencode --agent plankestrator
 | MCP servers | 6 | Configured in opencode.json |
 | Plugin hooks | 3 | workflow-enforcement.ts |
 | Routing tables | 2 | orchestrator (21), plankestrator (10) |
-| Pipelines | 9 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
+| Pipelines | 12 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 | Custom commands | 5 | opencode.json |
 | Models | 5 | alibaba, bailian, kimi, minimax |
 
@@ -1069,6 +1104,6 @@ opencode --agent plankestrator
 
 ---
 
-**Document Version:** 3.0
-**Last Updated:** 2026-05-29
+**Document Version:** 4.0
+**Last Updated:** 2026-06-01
 **Author:** OpenCode Documentation Team

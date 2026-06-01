@@ -47,7 +47,7 @@ The plugin is configured in `~/.config/opencode/opencode.json`:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugins": ["./plugins/workflow-enforcement.ts"],
+  "plugin": ["./plugins/workflow-enforcement.ts"],
   "mcp": { ... },
   "agents": { ... }
 }
@@ -126,7 +126,7 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 
 ## 4. Routing Tables
 
-### orchestrator Whitelist (20 agents)
+### orchestrator Whitelist (21 agents)
 
 orchestrator can only call these agents:
 
@@ -152,6 +152,7 @@ orchestrator can only call these agents:
 | summarizer | Content summarization |
 | execute-bug | Bug fix implementation |
 | consistency-checker | Architecture consistency validation |
+| view-image | Image analysis |
 
 ### plankestrator Whitelist (9 agents)
 
@@ -193,7 +194,8 @@ const ROUTING_TABLES = {
     'docs-writer',
     'summarizer',
     'execute-bug',
-    'consistency-checker'
+    'consistency-checker',
+    'view-image'
   ],
   plankestrator: [
     'plankestrator-identity-probe',
@@ -204,7 +206,8 @@ const ROUTING_TABLES = {
     'research-writer-simple',
     'research-writer-complex',
     'research-reviewer',
-    'devops-readonly'
+    'devops-readonly',
+    'view-image'
   ]
 };
 ```
@@ -950,7 +953,8 @@ const ROUTING_TABLES = {
     'docs-writer',
     'summarizer',
     'execute-bug',
-    'consistency-checker'
+    'consistency-checker',
+    'view-image'
   ],
   plankestrator: [
     'plankestrator-identity-probe',
@@ -961,7 +965,8 @@ const ROUTING_TABLES = {
     'research-writer-simple',
     'research-writer-complex',
     'research-reviewer',
-    'devops-readonly'
+    'devops-readonly',
+    'view-image'
   ]
 };
 ```

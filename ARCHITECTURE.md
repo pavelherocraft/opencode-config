@@ -4,7 +4,7 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 
 ## 1. Routing Tables
 
-### orchestrator Whitelist (20 agents)
+### orchestrator Whitelist (21 agents)
 
 | # | Agent Name | Role |
 |---|------------|------|
@@ -17,17 +17,18 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 | 7 | rework | Rework on feedback |
 | 8 | mcp-read | File reading |
 | 9 | utility | Syntax checking, formatting |
-| 10 | devops-agent | DevOps tasks |
-| 11 | bugfix-triage | Initial bug analysis |
-| 12 | plan-bug | Bug fix planning |
-| 13 | devops-agent | DevOps operations |
-| 14 | devops-reviewer | DevOps review |
-| 15 | dev-planner | Development planning |
-| 16 | mcp-search | Web search |
-| 17 | docs-writer | Documentation writing |
-| 18 | summarizer | Content summarization |
-| 19 | execute-bug | Bug fix implementation |
-| 20 | consistency-checker | Architecture consistency validation |
+| 10 | bugfix-triage | Initial bug analysis |
+| 11 | plan-bug | Bug fix planning |
+| 12 | devops-agent | DevOps operations |
+| 13 | devops-reviewer | DevOps review |
+| 14 | dev-planner | Development planning |
+| 15 | mcp-search | Web search |
+| 16 | docs-writer | Documentation writing |
+| 17 | summarizer | Content summarization |
+| 18 | execute-bug | Bug fix implementation |
+| 19 | consistency-checker | Architecture consistency validation |
+| 20 | view-image | Image analysis |
+| 21 | devops | Legacy DevOps tasks (alias) |
 
 ### plankestrator Whitelist (9 agents)
 
@@ -47,11 +48,11 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 
 | Primary Agent | Whitelist Count | Total (primary + whitelist) |
 |---------------|-----------------|-----------------------------|
-| orchestrator | 20 | 21 (orchestrator + 20 subagents) |
+| orchestrator | 21 | 22 (orchestrator + 21 subagents) |
 | plankestrator | 9 | 10 (plankestrator + 9 subagents) |
-| **Grand Total** | **29** | **31** |
+| **Grand Total** | **30** | **32** |
 
-Note: 29 unique subagents + 2 primary agents = 31 unique agents total.
+Note: 30 unique subagents + 2 primary agents = 32 unique agents total.
 ## Subagent Models
 
 | Agent | Model |
@@ -187,20 +188,31 @@ bugfix-triage → worker → utility
 ### BUGFIX DEEP
 
 ```
-bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → utility
+bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility
 ```
+
+**Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes. Loop repeats up to 3 iterations. If consistency-checker passes → utility. If max iterations reached → failure report.
 
 ### DEV SIMPLE
 
-```
-worker → utility
-```
+DEV SIMPLE has two variants depending on whether a plan exists:
+
+| Variant | Flow | When to Use |
+|---------|------|-------------|
+| DEV SIMPLE (without plan) | `worker → utility` | plan_exists=false — direct implementation and validation |
+| DEV SIMPLE (with plan) | `worker → consistency-checker → [rework loop, max 3] → utility` | plan_exists=true — plan-validated implementation with rework loop |
+
+**Decision rule:** If plan_exists=true, use the "with plan" variant. Otherwise, use the "without plan" variant.
+
+**Rework loop:** If consistency-checker finds critical issues, task returns to worker for fixes. Loop repeats up to 3 iterations. If consistency-checker passes → utility. If max iterations reached → failure report.
 
 ### DEV COMPLEX
 
 ```
-dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → utility
+dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility
 ```
+
+**Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes. Loop repeats up to 3 iterations.
 
 ### DEVOPS
 
@@ -264,7 +276,35 @@ research-writer-* → research-reviewer
 | `issues_unfixable` | number | integer |
 | `details` | array | array of check result objects |
 | `files_modified` | array | list of file paths |
-| `escalate_to` | string \| null | `"dev-reviewer"` or `null` |
+| `escalate_to` | string \| null | `"dev-reviewer"` \| `"rework"` \| `"worker"` \| `"execute-bug"` \| `null` |
+
+### escalate_to Field — Expanded Values
+
+The `escalate_to` field in consistency-checker output determines which agent receives the task when issues are found.
+
+| Value | When to Use | Pipeline Context |
+|-------|-------------|------------------|
+| `"dev-reviewer"` | Issues require architectural review or design decisions | DEV COMPLEX, BUGFIX DEEP (before rework) |
+| `"rework"` | Issues are concrete and can be fixed by applying feedback | DEV COMPLEX (after rework), BUGFIX DEEP (after rework), DEV PLAN EXISTS |
+| `"worker"` | Issues are simple implementation fixes | DEV PLAN EXISTS (simple rework loop) |
+| `"execute-bug"` | Issues are bug-specific and require targeted bug fix | BUGFIX DEEP (if rework cannot fix) |
+| `null` | No escalation needed (consistency-checker passed) | All pipelines |
+
+**Decision logic for consistency-checker:**
+```
+if issues_found == 0:
+    escalate_to = null
+elif issues are architectural/design-level:
+    escalate_to = "dev-reviewer"
+elif issues are concrete fixable items and pipeline has rework agent:
+    escalate_to = "rework"
+elif issues are simple implementation fixes:
+    escalate_to = "worker"
+elif issues are bug-specific:
+    escalate_to = "execute-bug"
+else:
+    escalate_to = "dev-reviewer"  # default fallback
+```
 
 ## 4. MCP Servers
 

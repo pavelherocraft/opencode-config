@@ -285,7 +285,7 @@ Simple bug fixes use the straightforward pipeline with triage, implementation, a
 
 ### BUGFIX DEEP
 
-bugfix-triage -> plan-bug -> execute-bug -> dev-reviewer -> rework -> consistency-checker -> utility
+bugfix-triage -> plan-bug -> execute-bug -> dev-reviewer -> rework -> consistency-checker -> [rework loop, max 3] -> utility
 
 Complex bug fixes include planning, execution, review, rework cycles, and consistency validation.
 
@@ -296,7 +296,7 @@ DEV SIMPLE has two variants depending on whether a plan exists:
 | Variant | Flow | When to Use |
 |---------|------|-------------|
 | DEV SIMPLE (без плана) | worker → utility | Straightforward tasks with no prior planning — direct implementation and validation. |
-| DEV SIMPLE (с планом) | worker → consistency-checker → utility | Tasks where a plan was created beforehand — implementation is validated against the plan by consistency-checker before final validation. |
+| DEV SIMPLE (с планом) | worker → consistency-checker → [rework loop, max 3] → utility | Tasks where a plan was created beforehand — implementation is validated against the plan by consistency-checker. If issues found, returns to worker for fixes (up to 3 iterations). |
 
 **Decision rule:** If plan_exists=true, use the "с планом" variant. Otherwise, use the "без плана" variant.
 
@@ -304,7 +304,7 @@ DEV SIMPLE has two variants depending on whether a plan exists:
 ### DEV COMPLEX
 
 
-dev-planner -> dev-professor -> dev-reviewer -> rework -> consistency-checker -> utility
+dev-planner -> dev-professor -> dev-reviewer -> rework -> consistency-checker -> [rework loop, max 3] -> utility
 
 
 Complex development tasks include planning, guidance, review, rework, and consistency validation.
