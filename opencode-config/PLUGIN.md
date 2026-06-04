@@ -152,6 +152,7 @@ orchestrator can only call these agents:
 | summarizer | Content summarization |
 | execute-bug | Bug fix implementation |
 | consistency-checker | Architecture consistency validation |
+| explore | Fast codebase exploration |
 | view-image | Image analysis |
 
 ### plankestrator Whitelist (9 agents)

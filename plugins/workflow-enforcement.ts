@@ -24,7 +24,8 @@ const ROUTING_TABLES = {
     "docs-writer",
     "summarizer",
     "execute-bug",
-    "consistency-checker"
+    "consistency-checker",
+    "explore"
   ],
   plankestrator: [
     "plankestrator-identity-probe",
