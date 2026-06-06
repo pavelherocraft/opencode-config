@@ -73,6 +73,7 @@ const IDENTITY_PROBE_AGENTS = [
 let currentAgent: string | null = null
 let hasOutputtedJSON: Map<string, boolean> = new Map()
 let workflowSteps: Array<{timestamp: number, tool: string, agent: string, target?: string}> = []
+let currentMode: "plan" | "build" = "build"
 
 // ============================================================
 // Plugin Entry Point
@@ -102,6 +103,47 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         const sessionData = (event as any).properties?.session
           || (event as any).properties
           || event
+
+        // NEW: Detect OpenCode's built-in Plan mode (Shift+Tab toggle).
+        // Built-in Plan mode is a UI-level read-only mode that uses the
+        // default primary agent (e.g. "build"), NOT orchestrator/plankestrator.
+        // Custom agent routing must be bypassed in this mode.
+        const previousMode = currentMode
+        currentMode = detectPlanMode(sessionData)
+        if (currentMode === "plan") {
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "info",
+              message: `Built-in Plan mode detected — workflow enforcement BYPASSED (mode: ${previousMode} → ${currentMode})`
+            }
+          })
+        } else {
+          // DEBUG-DUMP: detector returned "build". If the user is actually
+          // in built-in Plan mode, this dump will reveal the real field
+          // name(s) OpenCode uses, so detectPlanMode() can be updated.
+          const sessionKeys = sessionData && typeof sessionData === "object"
+            ? Object.keys(sessionData)
+            : []
+          const suspectFields = ["agent", "mode", "planMode", "plan_mode", "permission", "plan", "title", "parentID", "time"]
+          const foundFields: Record<string, unknown> = {}
+          for (const f of suspectFields) {
+            if (sessionData && f in sessionData) {
+              foundFields[f] = (sessionData as any)[f]
+            }
+          }
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "info",
+              message: `[DEBUG-DUMP] session.created — plan mode NOT detected. sessionData keys: [${sessionKeys.join(", ")}]`,
+              extra: {
+                foundFields,
+                fullKeys: sessionKeys
+              }
+            }
+          })
+        }
 
         const detected = detectAgentFromSessionData(sessionData)
 
@@ -168,6 +210,26 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
           || (event as any).message
 
         if (!message) return
+
+        // NEW: Detect mode change mid-session (user toggles Shift+Tab).
+        // Some opencode versions include session metadata in the message
+        // event payload, so re-check the plan mode indicator here.
+        const sessionDataMid = (event as any).properties?.session
+          || (event as any).session
+        if (sessionDataMid) {
+          const newMode = detectPlanMode(sessionDataMid)
+          if (newMode !== currentMode) {
+            const prevMode = currentMode
+            currentMode = newMode
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "info",
+                message: `Mode changed mid-session: ${prevMode} → ${newMode} — ${newMode === "plan" ? "enforcement BYPASSED" : "enforcement ACTIVE"}`
+              }
+            })
+          }
+        }
 
         const jsonContent = extractJSONFromMessage(message)
         const identityText = extractIdentityFromMessage(message)
@@ -282,6 +344,23 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
     // ==========================================================
     "tool.execute.before": async (input, output) => {
       const timestamp = Date.now()
+
+      // BYPASS: Built-in OpenCode Plan mode (Shift+Tab toggle).
+      // In Plan mode the user is on the default primary agent (e.g. "build")
+      // with read-only restrictions enforced by OpenCode itself. Custom agent
+      // routing tables and JSON-output requirements do NOT apply here.
+      if (currentMode === "plan") {
+        const targetForLog = input.tool === "task"
+          ? ((output as any)?.args?.subagent_type || (input as any)?.args?.subagent_type)
+          : undefined
+        workflowSteps.push({
+          timestamp,
+          tool: input.tool,
+          agent: "plan-mode-bypass",
+          target: targetForLog
+        })
+        return
+      }
 
       // Check: is this the first task tool call? (race condition mitigation)
       // IMPORTANT: Check BEFORE pushing to workflowSteps — moved here so it's
@@ -464,6 +543,54 @@ function detectAgentFromSessionData(sessionData: any): string | null {
   }
 
   return null
+}
+
+/**
+ * Detect OpenCode's built-in Plan mode (Shift+Tab toggle).
+ * Plan mode is a UI-level read-only mode that uses the default primary
+ * agent (e.g. "build"), NOT orchestrator/plankestrator. Custom agent
+ * routing tables and JSON-output requirements must be bypassed.
+ *
+ * Detection is intentionally permissive: tries multiple field names
+ * because OpenCode's session payload structure varies by version.
+ * Defaults to "build" (enforce) when uncertain — conservative.
+ */
+function detectPlanMode(sessionData: any): "plan" | "build" {
+  if (!sessionData) return "build"
+
+  // Method 1: explicit planMode boolean flag
+  if (sessionData.planMode === true || sessionData.plan_mode === true) {
+    return "plan"
+  }
+
+  // Method 2: mode field as string
+  if (typeof sessionData.mode === "string") {
+    const m = sessionData.mode.toLowerCase()
+    if (m === "plan" || m === "planning") return "plan"
+    if (m === "build" || m === "normal" || m === "edit") return "build"
+  }
+
+  // Method 3: permission field restricted to read-only indicates plan
+  const perm = sessionData.permission
+  if (perm === "read" || perm === "readonly" || perm === "plan") {
+    return "plan"
+  }
+
+  // Method 4: nested in properties (some opencode versions wrap it)
+  const props = (sessionData as any).properties
+  if (props) {
+    if (props.planMode === true || props.plan_mode === true) return "plan"
+    if (typeof props.mode === "string" && props.mode.toLowerCase() === "plan") {
+      return "plan"
+    }
+  }
+
+  // Method 5: nested plan object
+  if (sessionData.plan && typeof sessionData.plan === "object") {
+    return "plan"
+  }
+
+  return "build"
 }
 
 /**
