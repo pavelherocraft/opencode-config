@@ -59,24 +59,24 @@ Note: 30 unique subagents + 2 primary agents = 32 unique agents total.
 
 | Agent | Model |
 |-------|-------|
-| worker | alibaba-coding-plan/qwen3.6-plus |
-| bugfix-triage | alibaba-coding-plan/qwen3.6-plus |
-| bugfix | alibaba-coding-plan/qwen3.6-plus |
-| plan-bug | alibaba-coding-plan/qwen3.6-plus |
+| worker | alibaba-coding-plan/qwen3.7-plus |
+| bugfix-triage | alibaba-coding-plan/qwen3.7-plus |
+| bugfix | alibaba-coding-plan/qwen3.7-plus |
+| plan-bug | alibaba-coding-plan/qwen3.7-plus |
 | execute-bug | zai-coding-plan/glm-5.1 |
-| dev-planner | alibaba-coding-plan/qwen3.6-plus |
+| dev-planner | alibaba-coding-plan/qwen3.7-plus |
 | dev-professor | zai-coding-plan/glm-5.1 |
 | dev-reviewer | kimi-for-coding/k2p6 |
 | rework | zai-coding-plan/glm-5.1 |
-| consistency-checker | alibaba-coding-plan/qwen3.6-plus |
+| consistency-checker | alibaba-coding-plan/qwen3.7-plus |
 | docs-writer | alibaba-coding-plan/glm-5 |
 | utility | minimax-coding-plan/MiniMax-M2.7 |
 | mcp-github | minimax-coding-plan/MiniMax-M2.7 |
 | mcp-read | minimax-coding-plan/MiniMax-M2.7 |
 | mcp-search | minimax-coding-plan/MiniMax-M2.7 |
 | summarizer | minimax-coding-plan/MiniMax-M2.7 |
-| devops-agent | alibaba-coding-plan/qwen3.6-plus |
-| devops-reviewer | alibaba-coding-plan/qwen3.6-plus |
+| devops-agent | alibaba-coding-plan/qwen3.7-plus |
+| devops-reviewer | alibaba-coding-plan/qwen3.7-plus |
 
 ### Permission Notes
 

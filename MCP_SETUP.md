@@ -350,34 +350,34 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | Agent | Mode | Model | Temperature | edit | write | read | bash | task whitelist extras |
 |-------|------|-------|-------------|------|-------|------|------|----------------------|
 | **mcp-github** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
-| **dev-planner** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | - | deny | view-image |
-| **bugfix** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.2 | allow | - | - | deny | view-image |
+| **dev-planner** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | deny | - | deny | view-image |
+| **bugfix** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.2 | allow | - | - | deny | view-image |
 | **mcp-read** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
 | **plan-writer-complex** | subagent | zai-coding-plan/glm-5.1 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **worker** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.2 | allow | - | - | **allow** | view-image |
-| **utility** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | - | **allow** | view-image |
+| **worker** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.2 | allow | - | - | **allow** | view-image |
+| **utility** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | deny | - | **allow** | view-image |
 | **rework** | subagent | zai-coding-plan/glm-5.1 | 0.2 | allow | - | - | deny | view-image |
 | **research-writer-simple** | subagent | alibaba-coding-plan/glm-5 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
 | **plan-reviewer-simple** | subagent | alibaba-coding-plan/glm-5 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **plan-bug** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | - | deny | view-image |
+| **plan-bug** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | deny | - | deny | view-image |
 | **devops** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | **allow** | view-image |
 | **docs-writer** | subagent | alibaba-coding-plan/glm-5 | 0.3 | allow | - | - | deny | view-image |
 | **dev-professor** | subagent | zai-coding-plan/glm-5.1 | 0.2 | allow | - | - | deny | view-image |
 | **devops-readonly** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | allow | - | allow | deny | view-image |
 | **devops-agent** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | - | **allow** | view-image |
-| **devops-reviewer** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | allow | deny | view-image |
+| **devops-reviewer** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | deny | allow | deny | view-image |
 | **orchestrator-identity-probe** | subagent | alibaba-coding-plan/glm-5 | 0.1 | deny | deny | - | deny | view-image |
 | **plankestrator-identity-probe** | subagent | alibaba-coding-plan/glm-5 | 0.1 | deny | deny | - | deny | view-image |
 | **mcp-search** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
 | **summarizer** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
-| **bugfix-triage** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | deny | deny | - | deny | view-image |
+| **bugfix-triage** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | deny | - | deny | view-image |
 | **research-reviewer** | subagent | kimi-for-coding/k2p6 | 0.1 | allow | - | allow | deny | view-image |
 | **dev-reviewer** | subagent | kimi-for-coding/k2p6 | 0.1 | allow | - | - | deny | view-image |
 | **research-writer-complex** | subagent | zai-coding-plan/glm-5.1 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
-| **plan-writer-simple** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
+| **plan-writer-simple** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **execute-bug** | subagent | zai-coding-plan/glm-5.1 | 0.2 | allow | - | - | deny | view-image |
 | **plan-reviewer-complex** | subagent | kimi-for-coding/k2p6 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **consistency-checker** | subagent | alibaba-coding-plan/qwen3.6-plus | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
+| **consistency-checker** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
 | **view-image** | subagent | kimi-for-coding/k2p6 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
 
 ### view-image — Special Configuration
