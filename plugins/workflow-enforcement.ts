@@ -125,7 +125,7 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
           const sessionKeys = sessionData && typeof sessionData === "object"
             ? Object.keys(sessionData)
             : []
-          const suspectFields = ["agent", "mode", "planMode", "plan_mode", "permission", "plan", "title", "parentID", "time"]
+          const suspectFields = ["agent", "mode", "planMode", "plan_mode", "permission", "plan", "title", "parentID", "time", "primary"]
           const foundFields: Record<string, unknown> = {}
           for (const f of suspectFields) {
             if (sessionData && f in sessionData) {
@@ -547,45 +547,63 @@ function detectAgentFromSessionData(sessionData: any): string | null {
 
 /**
  * Detect OpenCode's built-in Plan mode (Shift+Tab toggle).
- * Plan mode is a UI-level read-only mode that uses the default primary
- * agent (e.g. "build"), NOT orchestrator/plankestrator. Custom agent
- * routing tables and JSON-output requirements must be bypassed.
+ * Plan mode is a UI-level read-only mode that uses a DEDICATED primary
+ * agent named "plan" (NOT "build" and NOT orchestrator/plankestrator).
+ * Custom agent routing tables and JSON-output requirements must be
+ * bypassed in this mode.
  *
- * Detection is intentionally permissive: tries multiple field names
- * because OpenCode's session payload structure varies by version.
- * Defaults to "build" (enforce) when uncertain — conservative.
+ * The most reliable signal — confirmed from OpenCode LLM logs — is
+ * that `sessionData.agent === "plan"` when Plan mode is active, and
+ * `sessionData.agent === "build"` otherwise. This check is checked
+ * first because it is the source of truth.
+ *
+ * Other detection methods are kept as fallbacks for other OpenCode
+ * versions / payload shapes. Defaults to "build" (enforce) when
+ * uncertain — conservative.
  */
 function detectPlanMode(sessionData: any): "plan" | "build" {
   if (!sessionData) return "build"
 
-  // Method 1: explicit planMode boolean flag
+  // Method 1 (PRIMARY): agent name itself is the mode indicator.
+  // OpenCode switches the primary agent from "build" to "plan" on Shift+Tab.
+  // This is verified from real LLM-request logs (agent=plan, mode=primary).
+  if (typeof sessionData.agent === "string") {
+    const a = sessionData.agent.toLowerCase()
+    if (a === "plan" || a === "plan-mode" || a === "planning") return "plan"
+    if (a === "build" || a === "build-mode" || a === "normal" || a === "edit") return "build"
+  }
+
+  // Method 2: explicit planMode boolean flag
   if (sessionData.planMode === true || sessionData.plan_mode === true) {
     return "plan"
   }
 
-  // Method 2: mode field as string
+  // Method 3: mode field as string
   if (typeof sessionData.mode === "string") {
     const m = sessionData.mode.toLowerCase()
     if (m === "plan" || m === "planning") return "plan"
     if (m === "build" || m === "normal" || m === "edit") return "build"
   }
 
-  // Method 3: permission field restricted to read-only indicates plan
+  // Method 4: permission field restricted to read-only indicates plan
   const perm = sessionData.permission
   if (perm === "read" || perm === "readonly" || perm === "plan") {
     return "plan"
   }
 
-  // Method 4: nested in properties (some opencode versions wrap it)
+  // Method 5: nested in properties (some opencode versions wrap it)
   const props = (sessionData as any).properties
   if (props) {
     if (props.planMode === true || props.plan_mode === true) return "plan"
     if (typeof props.mode === "string" && props.mode.toLowerCase() === "plan") {
       return "plan"
     }
+    if (typeof props.agent === "string" && props.agent.toLowerCase() === "plan") {
+      return "plan"
+    }
   }
 
-  // Method 5: nested plan object
+  // Method 6: nested plan object
   if (sessionData.plan && typeof sessionData.plan === "object") {
     return "plan"
   }
