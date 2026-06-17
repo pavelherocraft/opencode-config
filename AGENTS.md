@@ -310,6 +310,12 @@ dev-planner -> dev-professor -> dev-reviewer -> rework -> consistency-checker ->
 
 Complex development tasks include planning, guidance, review, rework, and consistency validation.
 
+### DEV SUPERCOMPLEX
+
+PER PLAN STEP: dev-planner -> dev-professor -> dev-reviewer -> consistency-checker -> [rework loop, max 3] -> utility
+
+Super-complex tasks with a large plan (>3 steps) or huge volume of work. The full review/consistency/syntax chain runs **for every step** of the plan. Triggered by explicit request OR when a plan with more than 3 steps and huge volume of work exists.
+
 ### DEVOPS
 
 devops-agent -> devops-reviewer

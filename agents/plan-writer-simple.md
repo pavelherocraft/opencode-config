@@ -1,5 +1,5 @@
 ﻿---
-description: Simple plan writer. Creates implementation plans for straightforward tasks. Qwen3.6 Plus.
+description: Simple plan writer. Creates implementation plans for straightforward tasks. Qwen3.7 Plus.
 mode: subagent
 model: alibaba-coding-plan/qwen3.7-plus
 temperature: 0.1

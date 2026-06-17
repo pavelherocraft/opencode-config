@@ -269,7 +269,7 @@ Expected format:
 {
   "agent": "orchestrator",
   "type": "BUGFIX|DEVOPS|DEV|DOCS|null",
-  "complexity": "SIMPLE|COMPLEX|DEEP|null",
+  "complexity": "SIMPLE|COMPLEX|DEEP|SUPERCOMPLEX|null",
   "plan_exists": true|false|null,
   "plan_source": "description or null",
   "goal": "one sentence description",
@@ -290,7 +290,7 @@ Expected format:
 {
   "agent": "orchestrator",
   "type": "BUGFIX|DEVOPS|DEV|DOCS|null",
-  "complexity": "SIMPLE|COMPLEX|DEEP|null",
+  "complexity": "SIMPLE|COMPLEX|DEEP|SUPERCOMPLEX|null",
   "plan_exists": true|false|null,
   "plan_source": "description of plan source if exists, null if not",
   "goal": "one sentence description",
@@ -321,7 +321,7 @@ Expected format:
 |-------|--------------|
 | `agent` | `["orchestrator"]` |
 | `type` | `["BUGFIX", "DEVOPS", "DEV", "DOCS", null]` |
-| `complexity` | `["SIMPLE", "COMPLEX", "DEEP", null]` |
+| `complexity` | `["SIMPLE", "COMPLEX", "DEEP", "SUPERCOMPLEX", null]` |
 | `plan_exists` | `[true, false, null]` |
 | `plan_source` | `[string, null]` |
 | `goal` | `[string]` |

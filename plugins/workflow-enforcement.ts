@@ -36,7 +36,8 @@ const ROUTING_TABLES = {
     "research-writer-simple",
     "research-writer-complex",
     "research-reviewer",
-    "devops-readonly"
+    "devops-readonly",
+    "explore"
   ]
 }
 
@@ -52,7 +53,7 @@ const VALID_VALUES: Record<string, Record<string, (string | null)[]>> = {
   orchestrator: {
     agent: ["orchestrator"],
     type: ["BUGFIX", "DEVOPS", "DEV", "DOCS", null],
-    complexity: ["SIMPLE", "COMPLEX", "DEEP", null]
+    complexity: ["SIMPLE", "COMPLEX", "DEEP", "SUPERCOMPLEX", null]
   },
   plankestrator: {
     agent: ["plankestrator"],
@@ -449,6 +450,22 @@ This is enforced by the workflow-enforcement plugin.
         `)
       }
 
+      // BUILT-IN OPENCODE AGENTS — never block these, even when enforcement is active.
+      // These are native OpenCode subagents (not custom agents in our routing tables)
+      // and are safe to call from any primary agent / mode, including built-in Plan mode.
+      const BUILTIN_OPENCODE_AGENTS = ["explore", "general"]
+      if (targetAgent && BUILTIN_OPENCODE_AGENTS.includes(targetAgent)) {
+        await client.app.log({
+          body: {
+            service: "workflow-enforcement",
+            level: "info",
+            message: `Bypass: built-in OpenCode agent ${targetAgent} (routing bypassed)`,
+            extra: { currentAgent, mode: currentMode }
+          }
+        })
+        return
+      }
+
       // Check: target agent must be in the current agent's routing table
       const allowedAgents = ROUTING_TABLES[currentAgent as keyof typeof ROUTING_TABLES] || []
       if (targetAgent && !allowedAgents.includes(targetAgent)) {
@@ -606,6 +623,26 @@ function detectPlanMode(sessionData: any): "plan" | "build" {
   // Method 6: nested plan object
   if (sessionData.plan && typeof sessionData.plan === "object") {
     return "plan"
+  }
+
+  // Method 7: permissions object without write/edit/bash tools (read-only mode).
+  // Newer OpenCode versions represent Plan mode as a permissions map with only
+  // read-only tools allowed (no edit, write, bash, or task). If we see such a
+  // shape, treat it as plan-mode regardless of agent/mode fields.
+  if (perm && typeof perm === "object" && !Array.isArray(perm)) {
+    const writeLikeKeys = ["edit", "write", "bash", "task", "patch", "apply"]
+    const hasWriteLike = writeLikeKeys.some(k => k in perm)
+    if (!hasWriteLike) {
+      return "plan"
+    }
+  }
+  if (Array.isArray(perm)) {
+    // permission array of allowed tool names
+    const writeLike = new Set(["edit", "write", "bash", "task", "patch", "apply"])
+    const hasWriteLike = perm.some((p: any) => typeof p === "string" && writeLike.has(p))
+    if (!hasWriteLike) {
+      return "plan"
+    }
   }
 
   return "build"

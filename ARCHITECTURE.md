@@ -61,11 +61,11 @@ Note: 30 unique subagents + 2 primary agents = 32 unique agents total.
 | bugfix-triage | alibaba-coding-plan/qwen3.7-plus |
 | bugfix | alibaba-coding-plan/qwen3.7-plus |
 | plan-bug | alibaba-coding-plan/qwen3.7-plus |
-| execute-bug | zai-coding-plan/glm-5.1 |
+| execute-bug | zai-coding-plan/glm-5.2 |
 | dev-planner | alibaba-coding-plan/qwen3.7-plus |
-| dev-professor | zai-coding-plan/glm-5.1 |
+| dev-professor | zai-coding-plan/glm-5.2 |
 | dev-reviewer | kimi-for-coding/k2p6 |
-| rework | zai-coding-plan/glm-5.1 |
+| rework | zai-coding-plan/glm-5.2 |
 | consistency-checker | alibaba-coding-plan/qwen3.7-plus |
 | docs-writer | alibaba-coding-plan/glm-5 |
 | utility | minimax-coding-plan/MiniMax-M2.7 |
@@ -214,6 +214,25 @@ dev-planner → dev-professor → dev-reviewer → rework → consistency-checke
 
 **Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes. Loop repeats up to 3 iterations.
 
+### DEV SUPERCOMPLEX
+
+```
+PER PLAN STEP (repeated for each step in the plan):
+  dev-planner → dev-professor → dev-reviewer → consistency-checker → [rework loop, max 3] → utility
+```
+
+Super-complex development tasks with a large pre-existing plan (>3 steps) or huge volume of work. The orchestrator executes the full review/consistency/syntax chain **for every step** of the plan.
+
+**Trigger conditions:**
+- Explicit user request (e.g. "use SUPERcomplex", "run the super-complex pipeline"), OR
+- A plan exists with more than 3 steps AND a huge volume of work
+
+**Per-step chain:** For each step, `dev-planner` plans the step, `dev-professor` implements the step, `dev-reviewer` reviews the code, `consistency-checker` validates architecture, then `utility` runs the syntax check before advancing to the next step.
+
+**Rework loop:** If consistency-checker finds critical issues within a step, the task returns to `rework` for fixes. Loop repeats up to 3 iterations per step. If a step passes, the orchestrator advances to the next plan step and repeats the chain.
+
+**Note:** This pipeline overrides the standard "PLAN EXISTS OVERRIDE" complexity rule — when the plan is large (>3 steps), complexity is classified as `SUPERCOMPLEX` instead of `SIMPLE`.
+
 ### DEVOPS
 
 ```
@@ -246,7 +265,7 @@ research-writer-* → research-reviewer
 |-------|------|--------------|
 | `agent` | string | `"orchestrator"` |
 | `type` | string \| null | `"BUGFIX"`, `"DEVOPS"`, `"DEV"`, `"DOCS"`, `null` |
-| `complexity` | string \| null | `"SIMPLE"`, `"COMPLEX"`, `"DEEP"`, `null` |
+| `complexity` | string \| null | `"SIMPLE"`, `"COMPLEX"`, `"DEEP"`, `"SUPERCOMPLEX"`, `null` |
 | `plan_exists` | boolean \| null | `true`, `false`, `null` |
 | `plan_source` | string \| null | description or `null` |
 | `goal` | string | one sentence description |
