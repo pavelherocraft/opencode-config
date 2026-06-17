@@ -64,7 +64,7 @@ Note: 30 unique subagents + 2 primary agents = 32 unique agents total.
 | execute-bug | zai-coding-plan/glm-5.2 |
 | dev-planner | alibaba-coding-plan/qwen3.7-plus |
 | dev-professor | zai-coding-plan/glm-5.2 |
-| dev-reviewer | kimi-for-coding/k2p6 |
+| dev-reviewer | kimi-for-coding/k2p7 |
 | rework | zai-coding-plan/glm-5.2 |
 | consistency-checker | alibaba-coding-plan/qwen3.7-plus |
 | docs-writer | alibaba-coding-plan/glm-5 |

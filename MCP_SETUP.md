@@ -48,9 +48,9 @@ OpenCode использует архитектуру с двумя primary-аг�
 | Model | Provider | Agents Count | Agents |
 |-------|----------|--------------|--------|
 | `glm-5` | alibaba-coding-plan | 7 | orchestrator, plankestrator, orchestrator-identity-probe, plankestrator-identity-probe, docs-writer, research-writer-simple, plan-reviewer-simple |
-| `qwen3.6-plus` | alibaba-coding-plan | 11 | worker, bugfix, bugfix-triage, plan-bug, dev-planner, devops-reviewer, plan-writer-simple, consistency-checker, utility |
+| `qwen3.7-plus` | alibaba-coding-plan | 9 | worker, bugfix, bugfix-triage, plan-bug, dev-planner, devops-reviewer, plan-writer-simple, consistency-checker, utility |
 | `glm-5.2` | zai-coding-plan | 5 | dev-professor, plan-writer-complex, research-writer-complex, execute-bug, rework |
-| `k2p6` | kimi-for-coding | 4 | dev-reviewer, plan-reviewer-complex, research-reviewer, view-image |
+| `k2p7` | kimi-for-coding | 3 | dev-reviewer, plan-reviewer-complex, research-reviewer |
 | `MiniMax-M2.7` | minimax-coding-plan | 7 | mcp-github, mcp-read, mcp-search, summarizer, devops, devops-agent, devops-readonly |
 
 ### MCP Servers
@@ -89,7 +89,7 @@ OpenCode использует архитектуру с двумя primary-аг�
 
 | Provider | Key | Purpose |
 |----------|-----|---------|
-| Alibaba (bailian-token-plan) | `sk-sp-*` | Qwen, GLM models (glm-5, qwen3.6-plus) |
+| Alibaba (bailian-token-plan) | `sk-sp-*` | Qwen, GLM models (glm-5, qwen3.7-plus) |
 | Z.AI (zai-coding-plan) | через API | GLM-5.2 модели |
 | Z.AI | `a8d38aaca0e04f678f11c7f8bd135a12.*` | zread, webSearchPrime, webReader, zai-mcp-server |
 
@@ -199,7 +199,7 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
     },
     "models": {
       "qwen3.7-max": { "name": "Qwen3.7 Max", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-      "qwen3.6-plus": { "name": "Qwen3.6 Plus", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
+      "qwen3.7-plus": { "name": "Qwen3.7 Plus", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
       "qwen3.6-flash": { "name": "Qwen3.6 Flash", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
       "deepseek-v4-pro": { "name": "DeepSeek V4 Pro" },
       "deepseek-v4-flash": { "name": "DeepSeek V4 Flash" },
@@ -393,12 +393,12 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **mcp-search** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
 | **summarizer** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
 | **bugfix-triage** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | deny | - | deny | view-image |
-| **research-reviewer** | subagent | kimi-for-coding/k2p6 | 0.1 | allow | - | allow | deny | view-image |
-| **dev-reviewer** | subagent | kimi-for-coding/k2p6 | 0.1 | allow | - | - | deny | view-image |
+| **research-reviewer** | subagent | kimi-for-coding/k2p7 | 0.1 | allow | - | allow | deny | view-image |
+| **dev-reviewer** | subagent | kimi-for-coding/k2p7 | 0.1 | allow | - | - | deny | view-image |
 | **research-writer-complex** | subagent | zai-coding-plan/glm-5.2 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
 | **plan-writer-simple** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **execute-bug** | subagent | zai-coding-plan/glm-5.2 | 0.2 | allow | - | - | deny | view-image |
-| **plan-reviewer-complex** | subagent | kimi-for-coding/k2p6 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
+| **plan-reviewer-complex** | subagent | kimi-for-coding/k2p7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **consistency-checker** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
 | **view-image** | subagent | kimi-for-coding/k2p6 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
 
@@ -1128,7 +1128,7 @@ opencode --agent plankestrator
 
 ---
 
-**Document Version:** 5.0
+**Document Version:** 6.0
 **Last Updated:** 2026-06-17
-**Changes:** Added DEV SUPERCOMPLEX pipeline, universalized paths for cross-machine deployment, improved PowerShell instructions
+**Changes:** Updated models (qwen3.6-plus→qwen3.7-plus, k2p6→k2p7 for dev-reviewer/plan-reviewer-complex/research-reviewer), added DEV SUPERCOMPLEX pipeline, universalized paths for cross-machine deployment
 **Author:** OpenCode Documentation Team
