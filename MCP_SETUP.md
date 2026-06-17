@@ -97,6 +97,14 @@ OpenCode использует архитектуру с двумя primary-аг�
 
 ## 3. Installation Steps
 
+### Step 0: Clone Repository
+
+```powershell
+# Клонировать репозиторий с конфигурацией
+git clone https://github.com/pavelherocraft/opencode-config.git
+cd opencode-config
+```
+
 ### Step 1: Install OpenCode CLI
 
 ```bash
@@ -107,19 +115,24 @@ npm install -g opencode
 
 Serena — MCP сервер для операций с кодовыми символами (поиск классов, функций, рефакторинг).
 
-```bash
-# Скачать Serena и установить serena.exe в PATH
-# Рекомендуемое расположение: %USERPROFILE%\.local\bin\serena.exe
+```powershell
+# Скачать Serena с https://github.com/mrworkwhile/serena/releases
+# Установить serena.exe в:
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.local\bin"
+Move-Item serena.exe "$env:USERPROFILE\.local\bin\serena.exe"
+
+# Добавить в PATH (опционально)
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";$env:USERPROFILE\.local\bin", "User")
 ```
 
 Проверка установки:
-```bash
+```powershell
 serena --version
 ```
 
 ### Step 3: Install zai-mcp-server
 
-```bash
+```powershell
 # Устанавливается автоматически через npx при первом запуске
 npx -y @z_ai/mcp-server
 ```
@@ -138,24 +151,30 @@ npx -y @z_ai/mcp-server
 
 ```powershell
 # Windows (PowerShell)
-mkdir -p $HOME\.config\opencode\plugins
-mkdir -p $HOME\.config\opencode\agents
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.config\opencode\plugins"
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.config\opencode\agents"
 ```
 
 ### Step 6: Copy Configuration Files
 
 ```powershell
 # Скопировать opencode.json
-cp opencode-config/opencode.json $HOME\.config\opencode\opencode.json
+Copy-Item "opencode-config\opencode.json" "$env:USERPROFILE\.config\opencode\opencode.json" -Force
 
 # Скопировать plugin
-cp plugins/workflow-enforcement.ts $HOME\.config\opencode\plugins\workflow-enforcement.ts
+Copy-Item "plugins\workflow-enforcement.ts" "$env:USERPROFILE\.config\opencode\plugins\workflow-enforcement.ts" -Force
 
 # Скопировать все agent файлы
-cp agents/*.md $HOME\.config\opencode\agents\
+Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 ```
 
-### Step 7: Copy Project Files
+### Step 7: Configure API Keys
+
+Откройте `$env:USERPROFILE\.config\opencode\opencode.json` и замените:
+- `sk-sp-YOUR_API_KEY` → ваш Alibaba Token Plan API key
+- `YOUR_Z_AI_KEY` → ваш Z.AI API key (для zread, webSearchPrime, webReader, zai-mcp-server)
+
+### Step 8: Copy Project Files
 
 Скопировать в корень проекта:
 - `AGENTS.md` — Правила проекта и разрешения агентов
@@ -226,7 +245,7 @@ cp agents/*.md $HOME\.config\opencode\agents\
   },
   "serena": {
     "type": "local",
-    "command": ["C:\\Users\\Admin\\.local\\bin\\serena.exe", "start-mcp-server", "--transport", "stdio", "--context=ide", "--project-from-cwd"],
+    "command": ["%USERPROFILE%\\.local\\bin\\serena.exe", "start-mcp-server", "--transport", "stdio", "--context=ide", "--project-from-cwd"],
     "enabled": true
   },
   "unity-mcp": {
@@ -773,7 +792,7 @@ const REQUIRED_JSON_FIELDS = {
 |-------|-------|
 | Type | Local |
 | Command | `serena start-mcp-server --transport stdio --context=ide --project-from-cwd` |
-| Executable | `C:\Users\Admin\.local\bin\serena.exe` (adjust path per machine) |
+| Executable | `%USERPROFILE%\.local\bin\serena.exe` (adjust path per machine) |
 
 **Tools:**
 | Tool | Purpose |
@@ -1109,6 +1128,7 @@ opencode --agent plankestrator
 
 ---
 
-**Document Version:** 4.0
-**Last Updated:** 2026-06-01
+**Document Version:** 5.0
+**Last Updated:** 2026-06-17
+**Changes:** Added DEV SUPERCOMPLEX pipeline, universalized paths for cross-machine deployment, improved PowerShell instructions
 **Author:** OpenCode Documentation Team
