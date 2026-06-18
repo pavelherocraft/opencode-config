@@ -484,6 +484,107 @@ Utility имеет `bash: allow` для запуска линтеров, фор�
 
 DevOps агенты имеют `bash: allow` для выполнения команд деплоя, сборки, управления инфраструктурой.
 
+### Permission Model: edit vs write — CRITICAL
+
+**⚠️ COMMON MISTAKE: Using `write` as a permission key**
+
+#### The Problem
+
+Many users mistakenly configure permissions like this:
+
+```json
+{
+  "edit": "deny",
+  "write": "*.md"  // ❌ WRONG — this is a DEAD KEY
+}
+```
+
+This configuration **DOES NOT WORK** because:
+
+1. **`write` is a TOOL NAME, not a permission key**
+   - The permission system uses `edit` as the key
+   - `write`, `patch`, `multiedit` are all controlled by the `edit` permission
+
+2. **`write: "*.md"` creates a DEAD KEY**
+   - OpenCode does not recognize `write` as a valid permission key
+   - The configuration is silently ignored
+   - Agent cannot write files despite the apparent permission
+
+#### The Solution
+
+To restrict file writing to specific file types, use `edit` with a glob pattern:
+
+```json
+{
+  "edit": { "*.md": "allow", "*": "deny" }  // ✅ CORRECT
+}
+```
+
+This configuration:
+- Allows editing/writing `.md` files
+- Denies editing/writing all other files
+- Controls `edit`, `write`, `patch`, and `multiedit` tools
+
+#### Permission Key vs Tool Name
+
+| Permission Key | Controls These Tools |
+|----------------|----------------------|
+| `edit` | `edit`, `write`, `patch`, `multiedit` |
+| `read` | `read` |
+| `bash` | `bash` |
+| `glob` | `glob` |
+| `grep` | `grep` |
+
+**Rule:** Always use the permission KEY, not the tool NAME.
+
+#### Case Study: dev-planner Permission Fix
+
+**Original (broken) configuration:**
+```json
+{
+  "edit": "deny",
+  "write": "*.md"  // DEAD KEY — dev-planner couldn't write files
+}
+```
+
+**Symptoms:**
+- dev-planner could not write `dev_plan.md`
+- Pipeline failed at DEV COMPLEX step
+- Error: "Permission denied for write tool"
+
+**Fixed configuration:**
+```json
+{
+  "edit": { "*.md": "allow", "*": "deny" }  // Now works correctly
+}
+```
+
+**Result:**
+- dev-planner can write `.md` files (including `dev_plan.md`)
+- dev-planner cannot edit other file types
+- DEV COMPLEX pipeline works correctly
+
+#### Valid Permission Patterns
+
+| Pattern | Meaning | Example Use Case |
+|---------|---------|------------------|
+| `"allow"` | Allow all operations | Full access agent |
+| `"deny"` | Deny all operations | Read-only agent |
+| `"ask"` | Ask user for permission | Interactive agent |
+| `{ "*.md": "allow", "*": "deny" }` | Allow specific file types | dev-planner (writes plans) |
+| `{ "*.py": "ask", "*.ts": "ask", "*": "allow" }` | Ask for code files, allow others | orchestrator (reads code, asks before editing) |
+| `{ "src/**": "allow", "*": "deny" }` | Allow specific directory | Agent restricted to src/ |
+
+#### Quick Reference
+
+| Mistake | Correction |
+|---------|------------|
+| `"write": "*.md"` | `"edit": { "*.md": "allow" }` |
+| `"patch": "allow"` | `"edit": "allow"` |
+| `"multiedit": "deny"` | `"edit": "deny"` |
+
+**Remember:** `edit` is the permission key that controls all file modification tools.
+
 ---
 
 ## 6. Routing Tables
@@ -1146,7 +1247,7 @@ opencode --agent plankestrator
 
 ---
 
-**Document Version:** 10.0
-**Last Updated:** 2026-06-17
-**Changes:** Added MANDATORY Prompt Requirements section to Pipeline Logic (matches orchestrator.md), dev-planner writes plan to dev_plan.md, dev-professor reads and reviews dev_plan.md before implementing, updated models (qwen3.6-plus→qwen3.7-plus, k2p6→k2p7), added DEV SUPERCOMPLEX pipeline
+**Document Version:** 11.0
+**Last Updated:** 2026-06-18
+**Changes:** Added "Permission Model: edit vs write" section explaining that `write` is a tool name (not a permission key), `edit` permission controls edit/write/patch/multiedit tools, using `write: "*.md"` creates a DEAD KEY, correct syntax for file type restrictions, and dev-planner permission fix case study
 **Author:** OpenCode Documentation Team
