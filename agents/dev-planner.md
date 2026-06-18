@@ -4,8 +4,9 @@ mode: subagent
 model: alibaba-coding-plan/qwen3.7-plus
 temperature: 0.1
 permission:
-  edit: deny
-  write: "*.md"
+  edit:
+    "*.md": "allow"
+    "*": "deny"
   bash: deny
 ---
 

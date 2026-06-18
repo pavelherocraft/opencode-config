@@ -103,18 +103,20 @@ Worker is the implementation agent — it MUST have `bash: allow` to execute com
 **Critical:** Without `bash: allow`, worker cannot implement changes — it would be unable to run tests, install dependencies, or execute any commands.
 
 
-### Write Permissions (plankestrator subagents)
+### Edit Permissions (plankestrator subagents)
+
+**Important:** `write` is a TOOL NAME, not a permission key. The `edit` permission key controls the `edit`, `write`, `patch`, and `multiedit` tools. Setting `edit: { "*.md": "allow" }` allows the `write` tool for `.md` files only.
 
 | Agent | Permission | Restriction |
 |-------|------------|-------------|
-| plan-writer-simple | `write: allow` | Only .md files, user request required |
-| plan-writer-complex | `write: allow` | Only .md files, user request required |
-| plan-reviewer-simple | `write: allow` | Only .md files, user request required |
-| plan-reviewer-complex | `write: allow` | Only .md files, user request required |
-| research-writer-simple | `write: allow` | Only .md files, user request required |
-| research-writer-complex | `write: allow` | Only .md files, user request required |
-| research-reviewer | `write: allow` | Only .md files, user request required |
-| devops-readonly | `write: allow` | Only .md files, user request required (backup) |
+| plan-writer-simple | `edit: allow` (`.md` only) | Only .md files, user request required |
+| plan-writer-complex | `edit: allow` (`.md` only) | Only .md files, user request required |
+| plan-reviewer-simple | `edit: allow` (`.md` only) | Only .md files, user request required |
+| plan-reviewer-complex | `edit: allow` (`.md` only) | Only .md files, user request required |
+| research-writer-simple | `edit: allow` (`.md` only) | Only .md files, user request required |
+| research-writer-complex | `edit: allow` (`.md` only) | Only .md files, user request required |
+| research-reviewer | `edit: allow` (`.md` only) | Only .md files, user request required |
+| devops-readonly | `edit: allow` (`.md` only) | Only .md files, user request required (backup) |
 
 ### Permission Authority
 
@@ -125,25 +127,32 @@ They are **overridden by opencode.json** configuration.
 
 **Rule:** Always ensure opencode.json matches the intended permissions defined in ARCHITECTURE.md.
 
-**Warning:** If frontmatter says `write: allow` but opencode.json says `"write": "deny"`, the agent will NOT have write access. The write tool will NOT be injected.
+**Warning:** If frontmatter says `edit: allow` but opencode.json says `"edit": "deny"`, the agent will NOT have write access. The `write`, `edit`, `patch`, and `multiedit` tools will NOT be injected.
 
 **Example:**
 ```yaml
 # agent.md frontmatter (documentation only)
 permission:
-  write: allow  # ← This is NOT used by opencode!
+  edit:
+    "*.md": "allow"
+    "*": "deny"
 ```
 
 ```json
 // opencode.json (authoritative)
 "permission": {
-  "write": "allow"  // ← This is what opencode actually uses!
+  "edit": {
+    "*.md": "allow",
+    "*": "deny"
+  }
 }
 ```
 
 **Both must match for the agent to work correctly.**
 
-**Note:** plankestrator has `write: deny` — it MUST delegate to subagents, never write directly.
+**Note:** `write` is NOT a permission key — it is a tool name. To allow/deny the `write` tool, use the `edit` permission key. `write: "*.md"` as a permission key is a DEAD KEY — it is silently ignored by opencode.
+
+**Note:** plankestrator has `edit: deny` — it MUST delegate to subagents, never write directly.
 
 **Restrictions enforced in agent prompts:**
 - File type: ONLY `.md` (Markdown) files
@@ -154,7 +163,7 @@ permission:
 
 All writer agents have a "Direct Write Instruction" section in their prompts:
 
-- **Write directly** using `write: allow` permission
+- **Write directly** using `edit` permission (controls the `write` tool)
 - **DO NOT call other agents** for file operations
 - **DO NOT delegate** to devops-readonly or any other agent
 
@@ -174,7 +183,7 @@ plankestrator is a pure orchestrator — it MUST ALWAYS delegate to subagents:
 
 **File output handling:**
 - If user requests "write plan to X.md", plankestrator passes instruction to subagent
-- Subagent (with `write: allow`) handles the actual file writing
+- Subagent (with `edit: allow` for .md) handles the actual file writing
 - plankestrator NEVER writes files directly
 
 ## 2. Pipelines
