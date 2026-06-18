@@ -317,8 +317,8 @@ For image analysis tasks, ALWAYS use view-image agent FIRST (NOT zai-mcp-server)
 |-----------|-------------|----------|
 | DEV SIMPLE | false | worker → utility |
 | DEV SIMPLE | true | worker → consistency-checker → utility |
-| DEV COMPLEX | any | dev-planner (writes plan.md) → dev-professor (reviews plan.md, implements) → dev-reviewer → rework → consistency-checker → utility |
-| DEV SUPERCOMPLEX | large plan (>3 steps) | PER STEP: dev-planner (writes plan.md) → dev-professor (reviews plan.md, implements) → dev-reviewer → consistency-checker → [rework loop] → utility |
+| DEV COMPLEX | any | dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → rework → consistency-checker → utility |
+| DEV SUPERCOMPLEX | large plan (>3 steps) | PER STEP: dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → consistency-checker → [rework loop] → utility |
 
 **Decision rules:**
 - When `plan_exists=true` for DEV SIMPLE, add consistency-checker before utility. When `plan_exists=false`, skip consistency-checker.
@@ -384,7 +384,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **plan-bug** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | deny | - | deny | view-image |
 | **devops** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | **allow** | view-image |
 | **docs-writer** | subagent | alibaba-coding-plan/glm-5 | 0.3 | allow | - | - | deny | view-image |
-| **dev-professor** | subagent | zai-coding-plan/glm-5.2 | 0.2 | allow | - | - | deny | view-image | Reviews plan from plan.md before implementing |
+| **dev-professor** | subagent | zai-coding-plan/glm-5.2 | 0.2 | allow | - | - | deny | view-image | Reviews plan from dev_plan.md before implementing |
 | **devops-readonly** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | allow | - | allow | deny | view-image |
 | **devops-agent** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | - | **allow** | view-image |
 | **devops-reviewer** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | deny | allow | deny | view-image |
@@ -538,8 +538,8 @@ plankestrator can only call these agents:
 |----------|------|-------------|
 | **DEV SIMPLE (без плана)** | worker → utility | Простые задачи без предварительного планирования |
 | **DEV SIMPLE (с планом)** | worker → consistency-checker → utility | Задачи с существующим планом — валидация против плана |
-| **DEV COMPLEX** | dev-planner (writes plan.md) → dev-professor (reviews plan.md, implements) → dev-reviewer → rework → consistency-checker → utility | Сложные задачи с планированием — dev-planner пишет план в plan.md, dev-professor читает и ревьюит план перед реализацией |
-| **DEV SUPERCOMPLEX** | PER PLAN STEP: dev-planner → dev-professor → dev-reviewer → consistency-checker → [rework loop, max 3] → utility | Очень большие планы (>3 шагов) или огромный объём работ — на каждом шаге dev-planner пишет план в plan.md, dev-professor читает и ревьюит план перед реализацией |
+| **DEV COMPLEX** | dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → rework → consistency-checker → utility | Сложные задачи с планированием — dev-planner пишет план в dev_plan.md, dev-professor читает и ревьюит план перед реализацией |
+| **DEV SUPERCOMPLEX** | PER PLAN STEP: dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → consistency-checker → [rework loop, max 3] → utility | Очень большие планы (>3 шагов) или огромный объём работ — на каждом шаге dev-planner пишет план в dev_plan.md, dev-professor читает и ревьюит план перед реализацией |
 
 **Decision rule:** Если `plan_exists=true` для DEV SIMPLE, добавить consistency-checker перед utility. Если `plan_exists=false`, пропустить consistency-checker.
 
@@ -686,8 +686,8 @@ JSON output должен включать поле `agent`:
 | `BUGFIX_DEEP` | `bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → utility` |
 | `DEV_SIMPLE_NO_PLAN` | `worker → utility` |
 | `DEV_SIMPLE_WITH_PLAN` | `worker → consistency-checker → utility` |
-| `DEV_COMPLEX` | `dev-planner (writes plan.md) → dev-professor (reviews plan.md, implements) → dev-reviewer → rework → consistency-checker → utility` |
-| `DEV_SUPERCOMPLEX` | `PER PLAN STEP: dev-planner (writes plan.md) → dev-professor (reviews plan.md, implements) → dev-reviewer → consistency-checker → [rework loop, max 3] → utility` |
+| `DEV_COMPLEX` | `dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → rework → consistency-checker → utility` |
+| `DEV_SUPERCOMPLEX` | `PER PLAN STEP: dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → consistency-checker → [rework loop, max 3] → utility` |
 | `DEVOPS` | `devops-agent → devops-reviewer` |
 | `DOCS` | `docs-writer → utility` |
 | `PLAN_SIMPLE` | `plan-writer-simple → plan-reviewer-simple` |
@@ -892,7 +892,7 @@ All commands are `subtask: true` — they run as subagent tasks.
 | ARCHITECTURE.md | Project root | Architecture requirements |
 | PLUGIN.md | Project root | Plugin documentation |
 | MCP_SETUP.md | Project root | This setup guide |
-| PLAN.md | Project root | Current implementation plan |
+| dev_plan.md | Project root | Implementation plan (written by dev-planner) |
 
 ### Agent Files List (33 files)
 
@@ -1128,7 +1128,7 @@ opencode --agent plankestrator
 
 ---
 
-**Document Version:** 7.0
+**Document Version:** 8.0
 **Last Updated:** 2026-06-17
-**Changes:** dev-planner now writes plan to plan.md file, dev-professor reads and reviews plan before implementing, updated models (qwen3.6-plus→qwen3.7-plus, k2p6→k2p7), added DEV SUPERCOMPLEX pipeline
+**Changes:** dev-planner writes plan to dev_plan.md (restricted write permission), dev-professor reads and reviews dev_plan.md before implementing, updated models (qwen3.6-plus→qwen3.7-plus, k2p6→k2p7), added DEV SUPERCOMPLEX pipeline
 **Author:** OpenCode Documentation Team

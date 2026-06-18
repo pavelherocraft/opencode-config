@@ -229,7 +229,7 @@ Super-complex development tasks with a large pre-existing plan (>3 steps) or hug
 - Explicit user request (e.g. "use SUPERcomplex", "run the super-complex pipeline"), OR
 - A plan exists with more than 3 steps AND a huge volume of work
 
-**Per-step chain:** For each step, `dev-planner` writes the plan to `plan.md`, `dev-professor` reads the plan file, critically reviews it, then implements the step, `dev-reviewer` reviews the code, `consistency-checker` validates architecture, then `utility` runs the syntax check before advancing to the next step.
+**Per-step chain:** For each step, `dev-planner` writes the plan to `dev_plan.md`, `dev-professor` reads the plan file, critically reviews it, then implements the step, `dev-reviewer` reviews the code, `consistency-checker` validates architecture, then `utility` runs the syntax check before advancing to the next step.
 
 **Rework loop:** If consistency-checker finds critical issues within a step, the task returns to `rework` for fixes. Loop repeats up to 3 iterations per step. If a step passes, the orchestrator advances to the next plan step and repeats the chain.
 
