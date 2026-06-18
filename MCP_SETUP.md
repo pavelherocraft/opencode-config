@@ -323,6 +323,24 @@ For image analysis tasks, ALWAYS use view-image agent FIRST (NOT zai-mcp-server)
 **Decision rules:**
 - When `plan_exists=true` for DEV SIMPLE, add consistency-checker before utility. When `plan_exists=false`, skip consistency-checker.
 - When plan has >3 steps AND huge volume, use DEV SUPERCOMPLEX (complexity: SUPERCOMPLEX).
+
+### ⚠️ MANDATORY Prompt Requirements — FAILURE TO COMPLY BREAKS THE PIPELINE ⚠️
+
+When the orchestrator calls agents in DEV pipelines, it MUST include these instructions in the prompt. This is NOT optional. The pipeline WILL FAIL if dev-planner does not write to dev_plan.md and dev-professor does not read from it.
+
+**dev-planner**: ALWAYS include "Write the plan to dev_plan.md." in the prompt. The prompt template is:
+```
+Plan implementation for: [task description]. Write the plan to dev_plan.md.
+```
+DO NOT call dev-planner without this suffix. DO NOT let dev-planner return plan as plain text — it MUST go to dev_plan.md file.
+
+**dev-professor**: ALWAYS include "Review dev_plan.md" in the prompt. The prompt template is:
+```
+Review dev_plan.md and implement step by step.
+```
+DO NOT call dev-professor without this prefix. dev-professor MUST read dev_plan.md before implementing.
+
+**DEV COMPLEX / DEV SUPERCOMPLEX pipelines MUST follow these prompt requirements.** For each step in SUPERCOMPLEX, apply these requirements per step.
 ```
 
 **Permissions:**
@@ -1128,7 +1146,7 @@ opencode --agent plankestrator
 
 ---
 
-**Document Version:** 9.0
+**Document Version:** 10.0
 **Last Updated:** 2026-06-17
-**Changes:** Added MANDATORY prompt requirements with warnings directly in PIPELINES section, dev-planner writes plan to dev_plan.md, dev-professor reads and reviews dev_plan.md before implementing, updated models (qwen3.6-plus→qwen3.7-plus, k2p6→k2p7), added DEV SUPERCOMPLEX pipeline
+**Changes:** Added MANDATORY Prompt Requirements section to Pipeline Logic (matches orchestrator.md), dev-planner writes plan to dev_plan.md, dev-professor reads and reviews dev_plan.md before implementing, updated models (qwen3.6-plus→qwen3.7-plus, k2p6→k2p7), added DEV SUPERCOMPLEX pipeline
 **Author:** OpenCode Documentation Team
