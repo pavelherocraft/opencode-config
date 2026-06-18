@@ -342,6 +342,16 @@ MUST follow these pipelines exactly:
 **DEV SUPERCOMPLEX:** PER PLAN STEP: dev-planner → dev-professor → dev-reviewer → consistency-checker → [rework loop, max 3] → utility (repeated for each step in the plan)
 **DOCS:** docs-writer → utility
 
+### Prompt Requirements
+
+When calling agents in pipelines, you MUST include these instructions in the prompt:
+
+**dev-planner**: ALWAYS include "Write the plan to dev_plan.md." in the prompt.
+Example: "Plan implementation for: [task]. Write the plan to dev_plan.md."
+
+**dev-professor**: ALWAYS include "Review dev_plan.md" in the prompt.
+Example: "Review dev_plan.md and implement step by step."
+
 ## EXECUTION RULES
 
 Step 0 — IDENTITY PROBE (MANDATORY FIRST STEP — CANNOT BE SKIPPED):
