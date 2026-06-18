@@ -400,10 +400,13 @@ Then call the next agent with prompt including:
 
 ```
 Step 0: Call dev-planner
-  → Wait for plan
+  → Prompt: "Plan implementation for: [task description]. Write the plan to dev_plan.md."
+  → dev-planner writes plan to `dev_plan.md`
+  → Wait for confirmation: "Plan written to dev_plan.md"
 
 Step 1: Call dev-professor
-  → Prompt: "Implement this plan: [plan from dev-planner]"
+  → Prompt: "Review dev_plan.md and implement step by step"
+  → dev-professor reads dev_plan.md, reviews it, then implements
   → Wait for implementation
 
 Step 2: Call dev-reviewer
@@ -568,8 +571,10 @@ dev-planner (plan step N)
 **Orchestrator decision logic per step:**
 ```
 for each step in plan:
-    call dev-planner with "Plan implementation for step {N}: {step_description}"
-    call dev-professor with "Implement plan step {N}: {plan from dev-planner for step N}"
+    call dev-planner with "Plan implementation for step {N}: {step_description}. Write the plan to dev_plan.md."
+    # dev-planner writes plan to dev_plan.md
+    call dev-professor with "Review dev_plan.md and implement step {N}"
+    # dev-professor reads dev_plan.md, reviews it, then implements
     call dev-reviewer with "Review implementation of step {N}"
     iteration_count = 0
     loop:
@@ -834,8 +839,10 @@ Step 2 — Output JSON:
 
 Step 3 — Execute per-step chain for EACH of the 6 steps:
 For step 1:
-- Call dev-planner: "Plan implementation for step 1: [step description]"
-- Call dev-professor: "Implement plan step 1: [plan from dev-planner]"
+- Call dev-planner: "Plan implementation for step 1: [step description]. Write the plan to dev_plan.md."
+  → dev-planner writes plan to `dev_plan.md`
+- Call dev-professor: "Review dev_plan.md and implement step 1"
+  → dev-professor reads dev_plan.md, reviews it, then implements
 - Call dev-reviewer: "Review implementation of step 1"
 - Call consistency-checker: "Validate step 1 against architecture"
 - If issues → rework (loop, max 3) → re-validate
