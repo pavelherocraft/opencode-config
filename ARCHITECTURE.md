@@ -105,7 +105,7 @@ Worker is the implementation agent — it MUST have `bash: allow` to execute com
 
 ### Edit Permissions (plankestrator subagents)
 
-**Important:** `write` is a TOOL NAME, not a permission key. The `edit` permission key controls the `edit`, `write`, `patch`, and `multiedit` tools. Setting `edit: { "*.md": "allow" }` allows the `write` tool for `.md` files only.
+**Important:** `write` is a TOOL NAME, not a permission key. The `edit` permission key controls the `edit`, `write`, `patch`, and `multiedit` tools. However, `"*": "deny"` does NOT just restrict to other file types — it REMOVES the `edit`/`write`/`patch`/`multiedit` tools entirely from the agent's toolset. Use `"*": "ask"` to restrict by glob while keeping tools available, paired with explicit `"*.md": "allow"` (or similar) to whitelist intended targets.
 
 | Agent | Permission | Restriction |
 |-------|------------|-------------|
