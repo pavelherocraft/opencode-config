@@ -5,7 +5,7 @@ model: alibaba-coding-plan/qwen3.7-plus
 temperature: 0.1
 permission:
   edit: deny
-  write: allow
+  write: "*.md"
   bash: deny
 ---
 

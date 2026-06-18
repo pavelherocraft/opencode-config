@@ -372,7 +372,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | Agent | Mode | Model | Temperature | edit | write | read | bash | task whitelist extras |
 |-------|------|-------|-------------|------|-------|------|------|----------------------|
 | **mcp-github** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
-| **dev-planner** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | **allow** | - | deny | view-image |
+| **dev-planner** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | *.md | - | deny | view-image |
 | **bugfix** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.2 | allow | - | - | deny | view-image |
 | **mcp-read** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
 | **plan-writer-complex** | subagent | zai-coding-plan/glm-5.2 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
