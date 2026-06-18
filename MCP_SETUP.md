@@ -1128,7 +1128,7 @@ opencode --agent plankestrator
 
 ---
 
-**Document Version:** 8.0
+**Document Version:** 9.0
 **Last Updated:** 2026-06-17
-**Changes:** dev-planner writes plan to dev_plan.md (restricted write permission), dev-professor reads and reviews dev_plan.md before implementing, updated models (qwen3.6-plus→qwen3.7-plus, k2p6→k2p7), added DEV SUPERCOMPLEX pipeline
+**Changes:** Added MANDATORY prompt requirements with warnings directly in PIPELINES section, dev-planner writes plan to dev_plan.md, dev-professor reads and reviews dev_plan.md before implementing, updated models (qwen3.6-plus→qwen3.7-plus, k2p6→k2p7), added DEV SUPERCOMPLEX pipeline
 **Author:** OpenCode Documentation Team

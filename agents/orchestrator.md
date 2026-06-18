@@ -339,18 +339,30 @@ MUST follow these pipelines exactly:
 **DEV SIMPLE:** worker → utility
 **DEV PLAN EXISTS:** worker → consistency-checker → [rework loop, max 3] → utility
 **DEV COMPLEX:** dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility
+  ⚠️ PROMPT REQUIREMENTS:
+  - dev-planner prompt MUST end with: "Write the plan to dev_plan.md"
+  - dev-professor prompt MUST start with: "Review dev_plan.md"
 **DEV SUPERCOMPLEX:** PER PLAN STEP: dev-planner → dev-professor → dev-reviewer → consistency-checker → [rework loop, max 3] → utility (repeated for each step in the plan)
+  ⚠️ PROMPT REQUIREMENTS (apply to EACH step):
+  - dev-planner prompt MUST end with: "Write the plan to dev_plan.md"
+  - dev-professor prompt MUST start with: "Review dev_plan.md"
 **DOCS:** docs-writer → utility
 
-### Prompt Requirements
+### ⚠️ MANDATORY Prompt Requirements — FAILURE TO COMPLY BREAKS THE PIPELINE ⚠️
 
-When calling agents in pipelines, you MUST include these instructions in the prompt:
+When calling agents in pipelines, you MUST include these instructions in the prompt. This is NOT optional. The pipeline WILL FAIL if dev-planner does not write to dev_plan.md and dev-professor does not read from it.
 
-**dev-planner**: ALWAYS include "Write the plan to dev_plan.md." in the prompt.
-Example: "Plan implementation for: [task]. Write the plan to dev_plan.md."
+**dev-planner**: ALWAYS include "Write the plan to dev_plan.md." in the prompt. The prompt template is:
+```
+Plan implementation for: [task description]. Write the plan to dev_plan.md.
+```
+DO NOT call dev-planner without this suffix. DO NOT let dev-planner return plan as plain text — it MUST go to dev_plan.md file.
 
-**dev-professor**: ALWAYS include "Review dev_plan.md" in the prompt.
-Example: "Review dev_plan.md and implement step by step."
+**dev-professor**: ALWAYS include "Review dev_plan.md" in the prompt. The prompt template is:
+```
+Review dev_plan.md and implement step by step.
+```
+DO NOT call dev-professor without this prefix. dev-professor MUST read dev_plan.md before implementing.
 
 ## EXECUTION RULES
 
