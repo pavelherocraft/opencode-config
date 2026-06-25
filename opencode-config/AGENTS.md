@@ -286,9 +286,9 @@ Simple bug fixes use the straightforward pipeline with triage, implementation, a
 
 ### BUGFIX DEEP
 
-bugfix-triage -> plan-bug -> execute-bug -> dev-reviewer -> rework -> consistency-checker -> [rework loop, max 3] -> utility
+bugfix-triage -> plan-bug (writes bug_plan.md) -> execute-bug (reads bug_plan.md) -> dev-reviewer -> rework -> consistency-checker -> [rework loop, max 3] -> utility
 
-Complex bug fixes include planning, execution, review, rework cycles, and consistency validation.
+Complex bug fixes include planning (plan-bug writes to bug_plan.md), execution (execute-bug reads from bug_plan.md), review, rework cycles, and consistency validation.
 
 ### DEV SIMPLE
 

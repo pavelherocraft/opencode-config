@@ -86,6 +86,7 @@ Note: 30 unique subagents + 2 primary agents = 32 unique agents total.
 | bugfix | `bash: allow` | Bug fixing agent — needs bash for running tests, git operations |
 | execute-bug | `bash: allow` | Bug fix implementation — needs bash for running tests, executing commands |
 | rework | `bash: allow` | Rework agent — needs bash for running tests, git operations |
+| plan-bug | `edit: allow` (`.md` only) | Bug fix planning — writes plan to `bug_plan.md` for execute-bug to read |
 | devops-reviewer | `read: allow` in addition to `bash: allow` | DevOps review — needs bash for running commands, read for checking files |
 | devops-agent | `bash: allow` only | DevOps operations — needs bash for npm, docker, deployment commands |
 
@@ -105,18 +106,21 @@ Worker is the implementation agent — it MUST have `bash: allow` to execute com
 **Critical:** Without `bash: allow`, worker cannot implement changes — it would be unable to run tests, install dependencies, or execute any commands.
 
 
-### Write Permissions (plankestrator subagents)
+### Edit Permissions (plankestrator subagents)
+
+**Important:** `write` is a TOOL NAME, not a permission key. The `edit` permission key controls the `edit`, `write`, `patch`, and `multiedit` tools. To restrict writer agents to `.md` files only, use `edit: { "*.md": "allow", "*": "deny" }`.
 
 | Agent | Permission | Restriction |
 |-------|------------|-------------|
-| plan-writer-simple | `write: allow` | Only .md files, user request required |
-| plan-writer-complex | `write: allow` | Only .md files, user request required |
-| plan-reviewer-simple | `write: allow` | Only .md files, user request required |
-| plan-reviewer-complex | `write: allow` | Only .md files, user request required |
-| research-writer-simple | `write: allow` | Only .md files, user request required |
-| research-writer-complex | `write: allow` | Only .md files, user request required |
-| research-reviewer | `write: allow` | Only .md files, user request required |
-| devops-readonly | `write: allow` | Only .md files, user request required (backup) |
+| plan-bug | `edit: allow` (`.md` only) | Only .md files, writes bug_plan.md |
+| plan-writer-simple | `edit: allow` (`.md` only) | Only .md files, user request required |
+| plan-writer-complex | `edit: allow` (`.md` only) | Only .md files, user request required |
+| plan-reviewer-simple | `edit: allow` (`.md` only) | Only .md files, user request required |
+| plan-reviewer-complex | `edit: allow` (`.md` only) | Only .md files, user request required |
+| research-writer-simple | `edit: allow` (`.md` only) | Only .md files, user request required |
+| research-writer-complex | `edit: allow` (`.md` only) | Only .md files, user request required |
+| research-reviewer | `edit: allow` (`.md` only) | Only .md files, user request required |
+| devops-readonly | `edit: allow` (`.md` only) | Only .md files, user request required (backup) |
 
 ### Permission Authority
 
@@ -127,25 +131,32 @@ They are **overridden by opencode.json** configuration.
 
 **Rule:** Always ensure opencode.json matches the intended permissions defined in ARCHITECTURE.md.
 
-**Warning:** If frontmatter says `write: allow` but opencode.json says `"write": "deny"`, the agent will NOT have write access. The write tool will NOT be injected.
+**Warning:** If frontmatter says `edit: allow` but opencode.json says `"edit": "deny"`, the agent will NOT have write access. The `write`, `edit`, `patch`, and `multiedit` tools will NOT be injected.
 
 **Example:**
 ```yaml
 # agent.md frontmatter (documentation only)
 permission:
-  write: allow  # ← This is NOT used by opencode!
+  edit:
+    "*.md": "allow"
+    "*": "deny"
 ```
 
 ```json
 // opencode.json (authoritative)
 "permission": {
-  "write": "allow"  // ← This is what opencode actually uses!
+  "edit": {
+    "*.md": "allow",
+    "*": "deny"
+  }
 }
 ```
 
 **Both must match for the agent to work correctly.**
 
-**Note:** plankestrator has `write: deny` — it MUST delegate to subagents, never write directly.
+**Note:** `write` is NOT a permission key — it is a tool name. To allow/deny the `write` tool, use the `edit` permission key. `write: "*.md"` as a permission key is a DEAD KEY — it is silently ignored by opencode.
+
+**Note:** plankestrator has `edit: deny` — it MUST delegate to subagents, never write directly.
 
 **Restrictions enforced in agent prompts:**
 - File type: ONLY `.md` (Markdown) files
@@ -156,7 +167,7 @@ permission:
 
 All writer agents have a "Direct Write Instruction" section in their prompts:
 
-- **Write directly** using `write: allow` permission
+- **Write directly** using `edit` permission (controls the `write` tool)
 - **DO NOT call other agents** for file operations
 - **DO NOT delegate** to devops-readonly or any other agent
 
@@ -176,7 +187,7 @@ plankestrator is a pure orchestrator — it MUST ALWAYS delegate to subagents:
 
 **File output handling:**
 - If user requests "write plan to X.md", plankestrator passes instruction to subagent
-- Subagent (with `write: allow`) handles the actual file writing
+- Subagent (with `edit: allow` for .md) handles the actual file writing
 - plankestrator NEVER writes files directly
 
 ## 2. Pipelines
@@ -190,8 +201,10 @@ bugfix-triage → worker → utility
 ### BUGFIX DEEP
 
 ```
-bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility
+bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility
 ```
+
+**Plan file:** `plan-bug` writes the bug fix plan to `bug_plan.md` in the project root. `execute-bug` reads this file before implementing. The orchestrator MUST include "Write the plan to bug_plan.md" in the plan-bug prompt and "Read bug_plan.md" in the execute-bug prompt.
 
 **Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes. Loop repeats up to 3 iterations. If consistency-checker passes → utility. If max iterations reached → failure report.
 

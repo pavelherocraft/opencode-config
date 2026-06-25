@@ -84,6 +84,7 @@ Note: 30 unique subagents + 2 primary agents = 32 unique agents total.
 | bugfix | `bash: allow` | Bug fixing agent — needs bash for running tests, git operations |
 | execute-bug | `bash: allow` | Bug fix implementation — needs bash for running tests, executing commands |
 | rework | `bash: allow` | Rework agent — needs bash for running tests, git operations |
+| plan-bug | `edit: allow` (`.md` only) | Bug fix planning — writes plan to `bug_plan.md` for execute-bug to read |
 | devops-reviewer | `read: allow` in addition to `bash: allow` | DevOps review — needs bash for running commands, read for checking files |
 | devops-agent | `bash: allow` only | DevOps operations — needs bash for npm, docker, deployment commands |
 
@@ -109,6 +110,7 @@ Worker is the implementation agent — it MUST have `bash: allow` to execute com
 
 | Agent | Permission | Restriction |
 |-------|------------|-------------|
+| plan-bug | `edit: allow` (`.md` only) | Only .md files, writes bug_plan.md |
 | plan-writer-simple | `edit: allow` (`.md` only) | Only .md files, user request required |
 | plan-writer-complex | `edit: allow` (`.md` only) | Only .md files, user request required |
 | plan-reviewer-simple | `edit: allow` (`.md` only) | Only .md files, user request required |
@@ -197,8 +199,10 @@ bugfix-triage → worker → utility
 ### BUGFIX DEEP
 
 ```
-bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility
+bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility
 ```
+
+**Plan file:** `plan-bug` writes the bug fix plan to `bug_plan.md` in the project root. `execute-bug` reads this file before implementing. The orchestrator MUST include "Write the plan to bug_plan.md" in the plan-bug prompt and "Read bug_plan.md" in the execute-bug prompt.
 
 **Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes. Loop repeats up to 3 iterations. If consistency-checker passes → utility. If max iterations reached → failure report.
 
@@ -448,7 +452,7 @@ All agents can use these unity-mcp tools:
 | orchestrator | `orchestrator-identity-probe` ✅ | `plankestrator-identity-probe` ❌ |
 | plankestrator | `plankestrator-identity-probe` ✅ | `orchestrator-identity-probe` ❌ |
 
-### Probe Procedure
+### Probe Procedure (legacy — superseded by Identity Lock v3)
 
 ```
 Step 0 — IDENTITY PROBE (MANDATORY FIRST STEP):
@@ -458,6 +462,29 @@ Step 0 — IDENTITY PROBE (MANDATORY FIRST STEP):
 4. If SUCCESS → You are plankestrator → Output identity verification
 5. If DENIED → IDENTITY ERROR → STOP
 ```
+
+### Identity Lock Mechanism (v3) — REPLACES Probe Procedure
+
+To prevent orchestrator↔plankestrator confusion mode, the system uses a **machine-asserted identity lock** at session start:
+
+1. **Session start** — `workflow-enforcement.ts` reads `session.agent` from the `session.created` event (priority order: explicit `agent` field → alternate field names → title → description). If it identifies `orchestrator` or `plankestrator`, it sets `identityLocked = true` and records `lockedAgentName`. The agent cannot be re-bound after this point.
+2. **RUNTIME IDENTITY block** — both primary agent prompts (`agents/orchestrator.md`, `agents/plankestrator.md`) start with an explicit `OPENCODE_AGENT_NAME = ...` block asserted by opencode (machine-injected, not self-claimed). The agent MUST check this block before any output; if it contradicts the agent file, the agent must refuse.
+3. **Identity drift = hard error** — once `identityLocked = true`, any JSON output where `agent` does not match `lockedAgentName` is logged as `error` (not `warn`) and the agent's `currentAgent` value is NOT updated. Downstream Task calls are still validated against the locked routing table.
+4. **Forbidden vocabulary check** — the plugin greps locked-agent message text for terminology that belongs to the other primary agent (e.g. orchestrator message containing "I am plankestrator" or "## PLAN"). Violations are logged as `error`.
+5. **Model** — both primary agents run on `bifrost-litellm/QWEN3.7-plus` (Qwen 3.7 Plus via the bifrost-litellm provider). Other agents use their own providers as listed in the Subagent Models table above.
+
+**Why the probe procedure is now legacy:** the probe relied on the agent following instructions in its own prompt — a self-claim. The v3 lock reads identity from opencode's session metadata (which opencode controls, not the model) and from the system-prompt-injected RUNTIME IDENTITY block. Self-claims are no longer authoritative.
+
+### Session Naming Convention
+
+Give every new session a clear name. The plugin uses the title as a fallback for identity detection if `session.agent` is not available. Recommended patterns:
+
+- `orchestrator — fix login bug`
+- `orchestrator — add user settings page`
+- `plankestrator — plan auth refactor`
+- `plankestrator — research state-management libs`
+
+Avoid generic names like `New session` or `Untitled`. They prevent the plugin from locking identity early.
 
 ## 6. Outdated Terms
 

@@ -286,9 +286,9 @@ Simple bug fixes use the straightforward pipeline with triage, implementation, a
 
 ### BUGFIX DEEP
 
-bugfix-triage -> plan-bug -> execute-bug -> dev-reviewer -> rework -> consistency-checker -> [rework loop, max 3] -> utility
+bugfix-triage -> plan-bug (writes bug_plan.md) -> execute-bug (reads bug_plan.md) -> dev-reviewer -> rework -> consistency-checker -> [rework loop, max 3] -> utility
 
-Complex bug fixes include planning, execution, review, rework cycles, and consistency validation.
+Complex bug fixes include planning (plan-bug writes to bug_plan.md), execution (execute-bug reads from bug_plan.md), review, rework cycles, and consistency validation.
 
 ### DEV SIMPLE
 
@@ -356,6 +356,27 @@ Agents must include an agent field in their JSON output:
   agent: orchestrator | plankestrator,
   ...
 }
+
+## Identity Lock Mechanism (v3)
+
+To prevent the orchestrator↔plankestrator confusion mode, the system uses a **machine-asserted identity lock** at session start:
+
+1. **Session start** — `workflow-enforcement.ts` reads `session.agent` from the `session.created` event. If it identifies `orchestrator` or `plankestrator`, it sets `identityLocked = true` and records `lockedAgentName`. The agent cannot be re-bound after this point.
+2. **RUNTIME IDENTITY block** — both primary agent prompts (`agents/orchestrator.md`, `agents/plankestrator.md`) start with an explicit `OPENCODE_AGENT_NAME = ...` block injected by opencode. The agent MUST check this block before any output; if it contradicts the agent file, the agent must refuse.
+3. **Identity drift = hard error** — once `identityLocked = true`, any JSON output where `agent` does not match `lockedAgentName` is logged as `error` (not `warn`) and the agent's `currentAgent` value is NOT updated. Downstream Task calls are still validated against the locked routing table.
+4. **Forbidden vocabulary check** — the plugin greps locked-agent message text for terminology that belongs to the other primary agent (e.g. orchestrator message containing "I am plankestrator" or "## PLAN"). Violations are logged as `error`.
+5. **Model**: both primary agents run on `bifrost-litellm/QWEN3.7-plus` (Qwen 3.7 Plus via the bifrost-litellm provider).
+
+### Session Naming Convention
+
+Give every new session a clear name. The plugin uses the title as a fallback for identity detection if `session.agent` is not available. Recommended patterns:
+
+- `orchestrator — fix login bug`
+- `orchestrator — add user settings page`
+- `plankestrator — plan auth refactor`
+- `plankestrator — research state-management libs`
+
+Avoid generic names like `New session` or `Untitled`. They prevent the plugin from locking identity early.
 
 ## Workflow Enforcement Plugin
 

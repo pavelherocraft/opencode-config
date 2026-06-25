@@ -343,6 +343,24 @@ DO NOT call dev-professor without this prefix. dev-professor MUST read dev_plan.
 **DEV COMPLEX / DEV SUPERCOMPLEX pipelines MUST follow these prompt requirements.** For each step in SUPERCOMPLEX, apply these requirements per step.
 ```
 
+### BUGFIX DEEP — Mandatory Prompt Requirements
+
+When the orchestrator calls agents in BUGFIX DEEP pipeline, it MUST include these instructions in the prompt. This is NOT optional. The pipeline WILL FAIL if plan-bug does not write to bug_plan.md and execute-bug does not read from it.
+
+**plan-bug**: ALWAYS include "Write the plan to bug_plan.md." in the prompt:
+```
+Investigate and plan fix for: [bug description]. Write the plan to bug_plan.md.
+```
+DO NOT call plan-bug without this suffix. DO NOT let plan-bug return plan as plain text — it MUST go to bug_plan.md file.
+
+**execute-bug**: ALWAYS include "Read bug_plan.md" in the prompt:
+```
+Read bug_plan.md and implement the bug fix.
+```
+DO NOT call execute-bug without this prefix. execute-bug MUST read bug_plan.md before implementing.
+
+**BUGFIX DEEP pipeline MUST follow these prompt requirements.**
+
 **Permissions:**
 | Tool | Permission | Notes |
 |------|------------|-------|
@@ -399,7 +417,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **rework** | subagent | zai-coding-plan/glm-5.2 | 0.2 | allow | - | - | deny | view-image |
 | **research-writer-simple** | subagent | alibaba-coding-plan/glm-5 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
 | **plan-reviewer-simple** | subagent | alibaba-coding-plan/glm-5 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **plan-bug** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | deny | - | deny | view-image |
+| **plan-bug** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | *.md | - | - | deny | view-image | Writes bug plan to bug_plan.md |
 | **devops** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | **allow** | view-image |
 | **docs-writer** | subagent | alibaba-coding-plan/glm-5 | 0.3 | allow | - | - | deny | view-image |
 | **dev-professor** | subagent | zai-coding-plan/glm-5.2 | 0.2 | allow | - | - | deny | view-image | Reviews plan from dev_plan.md before implementing |
@@ -415,10 +433,45 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **dev-reviewer** | subagent | kimi-for-coding/k2p7 | 0.1 | allow | - | - | deny | view-image |
 | **research-writer-complex** | subagent | zai-coding-plan/glm-5.2 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
 | **plan-writer-simple** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **execute-bug** | subagent | zai-coding-plan/glm-5.2 | 0.2 | allow | - | - | deny | view-image |
+| **execute-bug** | subagent | zai-coding-plan/glm-5.2 | 0.2 | allow | - | - | deny | view-image | Reads plan from bug_plan.md before implementing |
 | **plan-reviewer-complex** | subagent | kimi-for-coding/k2p7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **consistency-checker** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
 | **view-image** | subagent | kimi-for-coding/k2p6 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
+
+### ⚠️ Manual opencode.json Update Required for plan-bug
+
+`opencode.json` is the **authoritative source** for agent permissions — frontmatter in `.md` files is documentation only (see ARCHITECTURE.md → Permission Authority). The repository does **NOT** ship `opencode.json` — it lives at `~/.config/opencode/opencode.json` (user-managed).
+
+**Required change for `plan-bug`** (to enable `bug_plan.md` writing in BUGFIX DEEP):
+
+```json
+// BEFORE (legacy — plan-bug could not write):
+"plan-bug": {
+  "permission": {
+    "edit": "deny"
+  }
+}
+
+// AFTER (allow .md writing for bug_plan.md):
+"plan-bug": {
+  "permission": {
+    "edit": {
+      "*.md": "allow",
+      "*": "deny"
+    }
+  }
+}
+```
+
+**Why this matters:** Without this change, the BUGFIX DEEP pipeline will fail because `plan-bug` cannot write `bug_plan.md`, so `execute-bug` has nothing to read.
+
+**Steps:**
+1. Open `~/.config/opencode/opencode.json`
+2. Locate the `plan-bug` agent entry under `agents`
+3. Update `permission.edit` to `{ "*.md": "allow", "*": "deny" }`
+4. Save and restart opencode (or reload the session)
+
+This mirrors the existing `dev-planner` permission, which already uses `edit: { "*.md": "allow", "*": "deny" }` to write `dev_plan.md`.
 
 ### view-image — Special Configuration
 
@@ -649,7 +702,7 @@ plankestrator can only call these agents:
 | Pipeline | Flow |
 |----------|------|
 | **BUGFIX SIMPLE** | bugfix-triage → worker → utility |
-| **BUGFIX DEEP** | bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → utility |
+| **BUGFIX DEEP** | bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility |
 
 ### DEV Pipelines
 
@@ -802,7 +855,7 @@ JSON output должен включать поле `agent`:
 | Pipeline Key | Sequence |
 |---|---|
 | `BUGFIX_SIMPLE` | `bugfix-triage → worker → utility` |
-| `BUGFIX_DEEP` | `bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → utility` |
+| `BUGFIX_DEEP` | `bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility` |
 | `DEV_SIMPLE_NO_PLAN` | `worker → utility` |
 | `DEV_SIMPLE_WITH_PLAN` | `worker → consistency-checker → utility` |
 | `DEV_COMPLEX` | `dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → rework → consistency-checker → utility` |
@@ -1012,6 +1065,7 @@ All commands are `subtask: true` — they run as subagent tasks.
 | PLUGIN.md | Project root | Plugin documentation |
 | MCP_SETUP.md | Project root | This setup guide |
 | dev_plan.md | Project root | Implementation plan (written by dev-planner) |
+| bug_plan.md | Project root | Bug fix plan (written by plan-bug, read by execute-bug) |
 
 ### Agent Files List (33 files)
 
