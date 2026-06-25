@@ -367,7 +367,7 @@ DO NOT call execute-bug without this prefix. execute-bug MUST read bug_plan.md b
 | task | { "*": "deny", ... } | Whitelist ниже |
 
 **Task Whitelist (21 agents):**
-orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bugfix, rework, mcp-read, utility, devops, bugfix-triage, plan-bug, devops-agent, devops-reviewer, dev-planner, mcp-search, docs-writer, summarizer, execute-bug, consistency-checker, view-image
+orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bugfix, rework, mcp-read, utility, bugfix-triage, plan-bug, devops-agent, devops-reviewer, dev-planner, mcp-search, docs-writer, summarizer, execute-bug, consistency-checker, view-image
 
 #### plankestrator
 
