@@ -488,6 +488,71 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         target: targetForLog
       })
 
+      // ==========================================================
+      // HARD ENFORCEMENT: Block non-task tools for primary agents
+      // ==========================================================
+      // Primary agents (orchestrator, plankestrator) are pure routers.
+      // They MUST only call the Task tool to delegate. All other tools
+      // (bash, read, edit, write, grep, glob, etc.) are FORBIDDEN for
+      // direct use. If the LLM tries to call them, throw a hard error
+      // so OpenCode blocks the tool execution.
+      //
+      // Built-in OpenCode agents (explore, general) get a one-call
+      // grace period because they're sometimes used by primary agents
+      // for codebase context — but even those should be rare. Primary
+      // agents should classify and delegate, not investigate.
+      // ==========================================================
+      if (currentAgent && (currentAgent === "orchestrator" || currentAgent === "plankestrator")) {
+        const tool = input.tool
+
+        // The Task tool is the ONLY allowed tool for primary agents.
+        if (tool !== "task") {
+          // Special case: todowrite is allowed (for tracking pipeline progress).
+          // Special case: question is allowed (for asking the user clarifying questions).
+          const ALLOWED_NON_TASK_TOOLS = new Set(["todowrite", "question"])
+
+          if (!ALLOWED_NON_TASK_TOOLS.has(tool)) {
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "error",
+                message: `HARD BLOCK: ${currentAgent} attempted to use "${tool}" directly — primary agents MUST delegate via Task tool only`,
+                extra: {
+                  agent: currentAgent,
+                  tool,
+                  blocked: true,
+                  hint: `Call Task tool with subagent_type to delegate. Do NOT use ${tool} directly.`
+                }
+              }
+            })
+            throw new Error(`
+⛔ HARD TOOL RESTRICTION — WORKFLOW ENFORCEMENT
+
+Current Agent: ${currentAgent} (primary agent — pure router)
+Attempted Tool: ${tool}
+
+${currentAgent} is a pure routing agent. The ONLY allowed tool is Task (for delegating to specialist agents).
+
+❌ FORBIDDEN for direct use by ${currentAgent}:
+   - bash, read, edit, write, glob, grep
+   - serena_*, unity-mcp_*, zai_*
+   - Any tool other than Task, todowrite, or question
+
+✅ ALLOWED:
+   - Task (delegate to specialist agents)
+   - todowrite (track pipeline progress)
+   - question (ask user clarifying questions)
+
+If you need to READ a file → delegate to mcp-read or devops-readonly via Task.
+If you need to SEARCH the codebase → delegate to mcp-search via Task.
+If you need to IMPLEMENT code → delegate to worker / dev-professor / execute-bug via Task.
+
+This is enforced by the workflow-enforcement plugin.
+            `)
+          }
+        }
+      }
+
       // Only enforce routing on "task" tool calls (agent delegation)
       if (input.tool !== "task") return
 
