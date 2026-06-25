@@ -24,7 +24,8 @@ const ROUTING_TABLES = {
     "summarizer",
     "execute-bug",
     "consistency-checker",
-    "view-image"
+    "view-image",
+    "docs-planner"
   ],
   plankestrator: [
     "plankestrator-identity-probe",
@@ -939,6 +940,29 @@ function validateJSONOutput(json: any, agent: string): {valid: boolean, errors: 
   // Check identity match
   if (json.agent && json.agent !== agent) {
     errors.push(`IDENTITY MISMATCH: JSON claims agent=${json.agent}, but current agent is ${agent}`)
+  }
+
+  // Validate requires_docs_update for downstream implementation agents
+  // (orchestrator auto-DOCS hook depends on this flag)
+  const DOCS_UPDATE_AGENTS = ["execute-bug", "dev-professor", "worker", "docs-writer"]
+  if (DOCS_UPDATE_AGENTS.includes(agent)) {
+    if (json.requires_docs_update !== undefined && json.requires_docs_update !== null) {
+      if (typeof json.requires_docs_update !== "boolean") {
+        errors.push(`Invalid requires_docs_update: ${json.requires_docs_update} (expected: boolean|null)`)
+      }
+    }
+    if (json.docs_update_reason !== undefined && json.docs_update_reason !== null) {
+      const validReasons = [
+        "public_api_changed",
+        "plan_modified",
+        "docs_modified",
+        "code_comments_added",
+        null
+      ]
+      if (!validReasons.includes(json.docs_update_reason)) {
+        errors.push(`Invalid docs_update_reason: ${json.docs_update_reason}, expected: ${validReasons.filter(v => v !== null).join("|")}`)
+      }
+    }
   }
 
   return {

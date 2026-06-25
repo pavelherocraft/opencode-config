@@ -28,6 +28,7 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 | 18 | execute-bug | Bug fix implementation |
 | 19 | consistency-checker | Architecture consistency validation |
 | 20 | view-image | Image analysis |
+| 21 | docs-planner | Documentation planning (DOCS DEEP) |
 
 ### plankestrator Whitelist (9 agents)
 
@@ -66,7 +67,8 @@ Note: 30 unique subagents + 2 primary agents = 32 unique agents total.
 | dev-reviewer | kimi-for-coding/k2p7 |
 | rework | zai-coding-plan/glm-5.2 |
 | consistency-checker | alibaba-coding-plan/qwen3.7-plus |
-| docs-writer | alibaba-coding-plan/glm-5 |
+| docs-writer | bifrost-litellm/mimo-v2.5-pro |
+| docs-planner | alibaba-coding-plan/qwen3.7-plus |
 | utility | minimax-coding-plan/MiniMax-M2.7 |
 | mcp-github | minimax-coding-plan/MiniMax-M2.7 |
 | mcp-read | minimax-coding-plan/MiniMax-M2.7 |
@@ -84,6 +86,7 @@ Note: 30 unique subagents + 2 primary agents = 32 unique agents total.
 | execute-bug | `bash: allow` | Bug fix implementation — needs bash for running tests, executing commands |
 | rework | `bash: allow` | Rework agent — needs bash for running tests, git operations |
 | plan-bug | `edit: allow` (`.md` only) | Bug fix planning — writes plan to `bug_plan.md` for execute-bug to read |
+| docs-planner | `edit: allow` (`.md` only) | Documentation planning — writes plan to `docs_plan.md` for docs-writer to read |
 | devops-reviewer | `read: allow` in addition to `bash: allow` | DevOps review — needs bash for running commands, read for checking files |
 | devops-agent | `bash: allow` only | DevOps operations — needs bash for npm, docker, deployment commands |
 
@@ -254,8 +257,36 @@ devops-agent → devops-reviewer
 ### DOCS
 
 ```
-docs-writer → utility
+DOCS SIMPLE: docs-writer → utility
+DOCS DEEP:   docs-planner (writes docs_plan.md)
+           → docs-writer (reads docs_plan.md)
+           → dev-reviewer
+           → rework
+           → consistency-checker
+           → [rework loop, max 3]
+           → utility
 ```
+
+### Auto-DOCS Hook (BUGFIX / DEV pipelines)
+
+After the final `utility` step of BUGFIX/DEV pipelines, check the JSON output of the implementation agent (execute-bug, dev-professor, worker).
+
+**Trigger:** call `docs-writer → utility` if implementation agent's JSON output has `requires_docs_update: true`.
+
+Set `requires_docs_update: true` if ANY of these were modified:
+- `bug_plan.md` or `dev_plan.md` files
+- Any `*.md` file (README, ARCHITECTURE, docs/, CHANGELOG)
+- Public API (heuristic: public class/method/interface, signature changes)
+- Significant docstrings or code comments on public APIs
+
+**Pipelines WITH hook** (final utility → if hook → docs-writer → utility):
+- BUGFIX SIMPLE / DEEP
+- DEV SIMPLE / COMPLEX / SUPERCOMPLEX
+
+**Pipelines WITHOUT hook** (no docs trigger):
+- DEVOPS (deployments don't affect docs)
+- DOCS (recursive — would loop forever)
+- PLAN, RESEARCH (out of orchestrator's scope)
 
 ### PLAN
 

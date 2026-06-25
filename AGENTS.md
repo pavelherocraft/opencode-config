@@ -224,6 +224,10 @@ Handles planning and research tasks:
 | execute-bug | Bug fix implementation |
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
+| docs-planner | Documentation planning (DOCS DEEP) |
+| execute-bug | Bug fix implementation |
+| consistency-checker | Architecture consistency validation |
+| view-image | Image analysis |
 
 ### plankestrator Whitelist (9 agents)
 
@@ -325,9 +329,22 @@ DevOps operations include implementation and review.
 
 ### DOCS
 
-docs-writer -> utility
+```
+DOCS SIMPLE: docs-writer → utility
+DOCS DEEP:   docs-planner (writes docs_plan.md)
+           → docs-writer (reads docs_plan.md)
+           → dev-reviewer → rework → consistency-checker
+           → [rework loop, max 3] → utility
+```
 
-Documentation writing followed by validation.
+### Auto-DOCS Hook (BUGFIX / DEV pipelines)
+
+After the final `utility` step of BUGFIX/DEV pipelines, if the implementation agent (execute-bug / dev-professor / worker) returned `requires_docs_update: true` in its JSON output, call `docs-writer → utility`.
+
+`requires_docs_update: true` if ANY of: `bug_plan.md` / `dev_plan.md` modified, any `*.md` modified (README, ARCHITECTURE, docs/), public API changed, significant docstrings added.
+
+Pipelines WITH hook: BUGFIX SIMPLE, BUGFIX DEEP, DEV SIMPLE, DEV COMPLEX, DEV SUPERCOMPLEX.
+Pipelines WITHOUT hook: DEVOPS, DOCS (recursive), PLAN, RESEARCH.
 
 ### PLAN
 

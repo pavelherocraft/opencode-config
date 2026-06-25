@@ -29,3 +29,23 @@ Rules:
 - Use existing libraries — check imports first
 - Do NOT run syntax checks — utility agent handles that
 - Add type hints where the codebase already uses them
+
+Output Specification (required for orchestrator auto-DOCS hook):
+```json
+{
+  "type": "DEV_IMPL",
+  "agent": "worker",
+  "files_modified": ["src/utils/helper.cs"],
+  "summary": "Added helper function",
+  "requires_docs_update": true,
+  "docs_update_reason": "public_api_changed | plan_modified | docs_modified | code_comments_added"
+}
+```
+
+`requires_docs_update` MUST be `true` if ANY of:
+- Modified or created `bug_plan.md` or `dev_plan.md` files
+- Modified any `*.md` file (README, ARCHITECTURE, docs/)
+- Changed public API (heuristic: public class, public method, public interface, public signature changes)
+- Added significant docstrings or code comments to public APIs
+
+Otherwise set to `false`.

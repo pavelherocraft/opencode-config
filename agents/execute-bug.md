@@ -39,3 +39,23 @@ Rules:
 - Add comments for non-obvious fixes
 - Do NOT run tests yourself (utility agent handles that)
 - If the plan has issues, implement the best solution and note deviations in your output
+
+Output Specification (required for orchestrator auto-DOCS hook):
+```json
+{
+  "type": "BUGFIX_IMPL",
+  "agent": "execute-bug",
+  "files_modified": ["src/api/AuthService.cs"],
+  "summary": "Fixed authentication flow",
+  "requires_docs_update": true,
+  "docs_update_reason": "public_api_changed | plan_modified | docs_modified | code_comments_added"
+}
+```
+
+`requires_docs_update` MUST be `true` if ANY of:
+- Modified or created `bug_plan.md` or `dev_plan.md` files
+- Modified any `*.md` file (README, ARCHITECTURE, docs/)
+- Changed public API (heuristic: public class, public method, public interface, public signature changes)
+- Added significant docstrings or code comments to public APIs
+
+Otherwise set to `false`.

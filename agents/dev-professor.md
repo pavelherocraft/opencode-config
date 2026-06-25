@@ -42,3 +42,23 @@ Rules:
 - Do NOT run syntax checks — utility agent handles that
 - Add type hints where the codebase already uses them
 - If the plan has issues, implement the best solution and note deviations in your output
+
+Output Specification (required for orchestrator auto-DOCS hook):
+```json
+{
+  "type": "DEV_IMPL",
+  "agent": "dev-professor",
+  "files_modified": ["src/api/UserController.cs"],
+  "summary": "Implemented new user profile endpoint",
+  "requires_docs_update": true,
+  "docs_update_reason": "public_api_changed | plan_modified | docs_modified | code_comments_added"
+}
+```
+
+`requires_docs_update` MUST be `true` if ANY of:
+- Modified or created `dev_plan.md` or `bug_plan.md` files
+- Modified any `*.md` file (README, ARCHITECTURE, docs/)
+- Changed public API (heuristic: public class, public method, public interface, public signature changes)
+- Added significant docstrings or code comments to public APIs
+
+Otherwise set to `false`.

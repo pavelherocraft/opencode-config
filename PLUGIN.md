@@ -149,6 +149,7 @@ orchestrator can only call these agents:
 | execute-bug | Bug fix implementation |
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
+| docs-planner | Documentation planning (DOCS DEEP) |
 
 ### plankestrator Whitelist (9 agents)
 
