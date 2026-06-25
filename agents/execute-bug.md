@@ -5,7 +5,7 @@ model: zai-coding-plan/glm-5.2
 temperature: 0.2
 permission:
   edit: allow
-  bash: deny
+  bash: allow
 ---
 
 You are the Bugfix Execution agent.

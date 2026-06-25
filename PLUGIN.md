@@ -123,7 +123,7 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 
 ## 4. Routing Tables
 
-### orchestrator Whitelist (20 agents)
+### orchestrator Whitelist (21 agents)
 
 orchestrator can only call these agents:
 
@@ -149,6 +149,7 @@ orchestrator can only call these agents:
 | summarizer | Content summarization |
 | execute-bug | Bug fix implementation |
 | consistency-checker | Architecture consistency validation |
+| view-image | Image analysis |
 
 ### plankestrator Whitelist (9 agents)
 
@@ -190,7 +191,8 @@ const ROUTING_TABLES = {
     'docs-writer',
     'summarizer',
     'execute-bug',
-    'consistency-checker'
+    'consistency-checker',
+    'view-image'
   ],
   plankestrator: [
     'plankestrator-identity-probe',
@@ -223,7 +225,7 @@ Allowed Agents: orchestrator-identity-probe, dev-reviewer, dev-professor,
                 mcp-github, worker, bugfix, rework, mcp-read, utility, 
                 devops, bugfix-triage, plan-bug, devops-agent, devops-reviewer, 
                 dev-planner, mcp-search, docs-writer, summarizer, execute-bug,
-                consistency-checker
+                consistency-checker, view-image
 
 This violates the routing table configuration.
 Please follow the correct workflow for your agent type.
@@ -522,57 +524,92 @@ Identity drift occurs when an agent's identity changes unexpectedly during a ses
 - Session state corruption
 - Model confusion in output
 
-### Detection Mechanism
+### Identity Lock Mechanism (v3)
 
-The plugin tracks `currentAgent` state and can detect drift if a new JSON output declares a different agent:
+The plugin locks identity at session start. Once locked, drift is a **hard error**, not a soft warning:
 
 ```typescript
-// On message.updated event inside the "event" hook
-if (event.type === "message.updated") {
-  const jsonContent = extractJSONFromMessage(message)
-  if (jsonContent?.agent && currentAgent && jsonContent.agent !== currentAgent) {
-    // Identity drift detected!
-    const previousAgent = currentAgent
-    currentAgent = String(jsonContent.agent)
-    hasOutputtedJSON.set(currentAgent, false)
+// On session.created
+if (event.type === "session.created") {
+  const detected = detectAgentFromSessionData(sessionData)
+  if (detected === "orchestrator" || detected === "plankestrator") {
+    currentAgent = detected
+    identityLocked = true
+    lockedAgentName = detected
+  }
+}
 
-    await client.app.log({
-      body: {
-        service: "workflow-enforcement",
-        level: "warn",
-        message: "IDENTITY DRIFT DETECTED",
-        extra: {
-          previousAgent,
-          newAgent: currentAgent
-        }
-      }
-    })
+// On message.updated — drift handling differs based on lock state
+if (jsonContent?.agent && currentAgent && jsonContent.agent !== currentAgent) {
+  if (identityLocked) {
+    // HARD ERROR: do NOT update currentAgent; downstream Task calls are still
+    // validated against the LOCKED routing table. This is the v3 fix for
+    // orchestrator↔plankestrator confusion.
+    await client.app.log({ level: "error", message: "IDENTITY DRIFT REJECTED — agent attempted to claim a different identity than session lock" })
+  } else {
+    // Soft correction (legacy): only when lock is not yet established
+    await client.app.log({ level: "warn", message: "IDENTITY DRIFT DETECTED (unlocked — correcting)" })
+    currentAgent = String(jsonContent.agent)
   }
 }
 ```
 
-**Note**: The v1 plugin used a `session.updated` hook for drift detection, but `session.updated` is NOT a valid opencode plugin hook. The v2 plugin detects drift from JSON output in messages instead.
+**Note**: The v1 plugin used a `session.updated` hook for drift detection, but `session.updated` is NOT a valid opencode plugin hook. The v2/v3 plugin detects drift from JSON output in messages instead.
 
-### Drift Log Example
+### Forbidden Vocabulary Check (v3)
+
+The plugin greps locked-agent message text for terminology that belongs to the OTHER primary agent. This catches the orchestrator↔plankestrator confusion mode where the model produces text from the wrong agent's playbook:
+
+```typescript
+const FORBIDDEN_VOCAB: Record<string, string[]> = {
+  orchestrator: [
+    "I am plankestrator", "I'm plankestrator", "I am the Plankestrator",
+    "## PLAN", "# Implementation Plan", "research-writer-", "plan-writer-",
+    "research-reviewer", "plan-reviewer-"
+  ],
+  plankestrator: [
+    "I am orchestrator", "I'm orchestrator", "I am the Conductor",
+    "I am the Task classifier", "Task classifier and router",
+    "bugfix-triage", "execute-bug", "devops-agent", "consistency-checker"
+  ]
+}
+```
+
+Violations are logged as `error` but do NOT throw (legitimate cross-references like OUT OF SCOPE messages mention forbidden tokens by design).
+
+### Drift Log Examples
+
+#### Hard-rejected drift (identity locked):
 
 ```
-[2026-04-28T10:30:45.123Z] ⚠️ IDENTITY DRIFT DETECTED
+[2026-04-28T10:30:45.123Z] [ERROR] IDENTITY DRIFT REJECTED — agent attempted to claim a different identity than session lock
+  Locked Agent: orchestrator
+  Claimed Agent: plankestrator
+  Session ID: session-abc123
+```
+
+#### Soft correction (unlocked — legacy):
+
+```
+[2026-04-28T10:30:45.123Z] [WARN] IDENTITY DRIFT DETECTED (unlocked — correcting)
   Previous Agent: orchestrator
   New Agent: plankestrator
-  Session ID: session-abc123
-  Timestamp: 2026-04-28T10:30:45.123Z
-  Possible cause: User manually switched agents
+```
+
+#### Forbidden vocabulary violation:
+
+```
+[2026-04-28T10:30:45.123Z] [ERROR] FORBIDDEN VOCABULARY DETECTED — orchestrator message contains plankestrator terminology
+  Locked Agent: orchestrator
+  Other Agent: plankestrator
+  Violations: ["## PLAN", "plan-writer-complex"]
 ```
 
 ### Handling Drift
 
-The plugin does NOT block execution on drift detection. It:
+When identity is **locked**, drift is rejected: `currentAgent` is NOT updated, and downstream Task calls are validated against the locked routing table. The agent's message still passes through, but the violation is logged for audit.
 
-1. Logs a warning
-2. Updates `currentAgent` to new value
-3. Continues with new routing table
-
-This allows legitimate agent switches while still tracking them for debugging.
+When identity is **unlocked** (no `session.created` agent detected yet), drift triggers a soft correction and `currentAgent` is updated.
 
 ---
 
@@ -808,7 +845,8 @@ const ROUTING_TABLES = {
     'docs-writer',
     'summarizer',
     'execute-bug',
-    'consistency-checker'
+    'consistency-checker',
+    'view-image'
   ],
   plankestrator: [
     'plankestrator-identity-probe',

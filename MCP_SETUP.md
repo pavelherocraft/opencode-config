@@ -10,7 +10,7 @@
 2. [Prerequisites](#2-prerequisites)
 3. [Installation Steps](#3-installation-steps)
 4. [opencode.json — Full Configuration](#4-opencodejson--full-configuration)
-5. [Agent Definitions — All 33 Agents](#5-agent-definitions--all-33-agents)
+5. [Agent Definitions — All 32 Agents](#5-agent-definitions--all-32-agents)
 6. [Routing Tables](#6-routing-tables)
 7. [Pipelines](#7-pipelines)
 8. [ARCHITECTURE.md Integration](#8-architecturemd-integration)
@@ -40,8 +40,8 @@ OpenCode использует архитектуру с двумя primary-аг�
 | Category | Count |
 |----------|-------|
 | Primary agents | 2 |
-| Subagents | 31 |
-| **Total unique agents** | **33** |
+| Subagents | 30 |
+| **Total unique agents** | **32** |
 
 ### Models Distribution
 
@@ -279,7 +279,7 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 
 ---
 
-## 5. Agent Definitions — All 33 Agents
+## 5. Agent Definitions — All 32 Agents
 
 ### Primary Agents
 
@@ -401,7 +401,7 @@ orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bu
 | serena_* | allow | Все Serena инструменты |
 
 **Task Whitelist (9 agents):**
-plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-reviewer-simple, plan-reviewer-complex, research-writer-simple, research-writer-complex, research-reviewer, devops-readonly, view-image
+plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-reviewer-simple, plan-reviewer-complex, research-writer-simple, research-writer-complex, research-reviewer, devops-readonly
 
 ### Subagents — Full Table
 
@@ -433,7 +433,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **dev-reviewer** | subagent | kimi-for-coding/k2p7 | 0.1 | allow | - | - | deny | view-image |
 | **research-writer-complex** | subagent | zai-coding-plan/glm-5.2 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
 | **plan-writer-simple** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **execute-bug** | subagent | zai-coding-plan/glm-5.2 | 0.2 | allow | - | - | deny | view-image | Reads plan from bug_plan.md before implementing |
+| **execute-bug** | subagent | zai-coding-plan/glm-5.2 | 0.2 | allow | - | - | **allow** | view-image | Reads plan from bug_plan.md before implementing |
 | **plan-reviewer-complex** | subagent | kimi-for-coding/k2p7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **consistency-checker** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
 | **view-image** | subagent | kimi-for-coding/k2p6 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
@@ -472,6 +472,34 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 4. Save and restart opencode (or reload the session)
 
 This mirrors the existing `dev-planner` permission, which already uses `edit: { "*.md": "allow", "*": "deny" }` to write `dev_plan.md`.
+
+### ⚠️ Manual opencode.json Update Required for execute-bug
+
+**Required change for `execute-bug`** (to enable bash access for running tests and commands):
+
+```json
+// BEFORE:
+"execute-bug": {
+  "permission": {
+    "bash": "deny"
+  }
+}
+
+// AFTER:
+"execute-bug": {
+  "permission": {
+    "bash": "allow"
+  }
+}
+```
+
+**Why this matters:** execute-bug is the bug fix implementation agent in the BUGFIX DEEP pipeline. It needs `bash: allow` to run tests, execute commands, and verify fixes. ARCHITECTURE.md specifies `bash: allow` for execute-bug.
+
+**Steps:**
+1. Open `~/.config/opencode/opencode.json`
+2. Locate the `execute-bug` agent entry under `agents`
+3. Update `permission.bash` from `"deny"` to `"allow"`
+4. Save and restart opencode (or reload the session)
 
 ### view-image — Special Configuration
 
@@ -514,7 +542,7 @@ view-image анализирует изображения **напрямую че
 
 ### unity-mcp Permissions — All Agents
 
-Все 33 агента имеют `"unity-mcp.*": "allow"` — полный доступ ко всем инструментам Unity MCP.
+Все 32 агента имеют `"unity-mcp.*": "allow"` — полный доступ ко всем инструментам Unity MCP.
 
 ### Key Agent Permissions Details
 
@@ -668,7 +696,7 @@ This configuration:
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
 
-### plankestrator Whitelist (10 agents)
+### plankestrator Whitelist (9 agents)
 
 plankestrator can only call these agents:
 
@@ -683,7 +711,6 @@ plankestrator can only call these agents:
 | research-writer-complex | Complex research |
 | research-reviewer | Research review |
 | devops-readonly | DevOps read-only |
-| view-image | Image analysis |
 
 ### Routing Enforcement
 
@@ -891,7 +918,7 @@ const ROUTING_TABLES = {
   plankestrator: [
     "plankestrator-identity-probe", "plan-writer-simple", "plan-writer-complex",
     "plan-reviewer-simple", "plan-reviewer-complex", "research-writer-simple",
-    "research-writer-complex", "research-reviewer", "devops-readonly", "view-image"
+    "research-writer-complex", "research-reviewer", "devops-readonly"
   ]
 }
 ```
@@ -1044,7 +1071,7 @@ All commands are `subtask: true` — they run as subagent tasks.
 |------|----------|---------|
 | opencode.json | `~/.config/opencode/opencode.json` | Main configuration (providers, MCP, agents, commands) |
 | workflow-enforcement.ts | `~/.config/opencode/plugins/workflow-enforcement.ts` | Workflow enforcement plugin |
-| [agent].md | `~/.config/opencode/agents/[name].md` | Individual agent definitions (33 files) |
+| [agent].md | `~/.config/opencode/agents/[name].md` | Individual agent definitions (32 files) |
 
 ### Data Storage
 
@@ -1067,7 +1094,7 @@ All commands are `subtask: true` — they run as subagent tasks.
 | dev_plan.md | Project root | Implementation plan (written by dev-planner) |
 | bug_plan.md | Project root | Bug fix plan (written by plan-bug, read by execute-bug) |
 
-### Agent Files List (33 files)
+### Agent Files List (32 files)
 
 ```
 ~/.config/opencode/agents/
@@ -1229,7 +1256,7 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 
 - [ ] opencode.json скопирован в `~/.config/opencode/`
 - [ ] Plugin скопирован в `~/.config/opencode/plugins/`
-- [ ] Все 33 agent файла скопированы в `~/.config/opencode/agents/`
+- [ ] Все 32 agent файла скопированы в `~/.config/opencode/agents/`
 - [ ] API keys настроены корректно
 - [ ] MCP server URLs корректны
 - [ ] Routing tables в плагине совпадают с opencode.json
@@ -1279,10 +1306,10 @@ opencode --agent plankestrator
 | Component | Count | Location |
 |-----------|-------|----------|
 | Primary agents | 2 | `~/.config/opencode/agents/` |
-| Subagents | 31 | `~/.config/opencode/agents/` |
+| Subagents | 30 | `~/.config/opencode/agents/` |
 | MCP servers | 6 | Configured in opencode.json |
 | Plugin hooks | 3 | workflow-enforcement.ts |
-| Routing tables | 2 | orchestrator (21), plankestrator (10) |
+| Routing tables | 2 | orchestrator (21), plankestrator (9) |
 | Pipelines | 13 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 | Custom commands | 5 | opencode.json |
 | Models | 5 | alibaba, bailian, kimi, minimax |

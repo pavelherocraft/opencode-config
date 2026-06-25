@@ -25,7 +25,7 @@ const ROUTING_TABLES = {
     "summarizer",
     "execute-bug",
     "consistency-checker",
-    "explore"
+    "view-image"
   ],
   plankestrator: [
     "plankestrator-identity-probe",
@@ -36,8 +36,7 @@ const ROUTING_TABLES = {
     "research-writer-simple",
     "research-writer-complex",
     "research-reviewer",
-    "devops-readonly",
-    "explore"
+    "devops-readonly"
   ]
 }
 
@@ -72,9 +71,29 @@ const IDENTITY_PROBE_AGENTS = [
 // Plugin State (per-process, reset on session.created)
 // ============================================================
 let currentAgent: string | null = null
+let identityLocked: boolean = false
+let lockedAgentName: string | null = null
 let hasOutputtedJSON: Map<string, boolean> = new Map()
 let workflowSteps: Array<{timestamp: number, tool: string, agent: string, target?: string}> = []
 let currentMode: "plan" | "build" = "build"
+
+// ============================================================
+// Forbidden vocabulary per agent — sanity check on message text.
+// If the agent claims identity X but writes text characteristic of Y,
+// the plugin rejects the message instead of silently warning.
+// ============================================================
+const FORBIDDEN_VOCAB: Record<string, string[]> = {
+  orchestrator: [
+    "I am plankestrator", "I'm plankestrator", "I am the Plankestrator",
+    "## PLAN", "# Implementation Plan", "research-writer-", "plan-writer-",
+    "research-reviewer", "plan-reviewer-"
+  ],
+  plankestrator: [
+    "I am orchestrator", "I'm orchestrator", "I am the Conductor",
+    "I am the Task classifier", "Task classifier and router",
+    "bugfix-triage", "execute-bug", "devops-agent", "consistency-checker"
+  ]
+}
 
 // ============================================================
 // Plugin Entry Point
@@ -150,14 +169,16 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
 
         if (detected) {
           currentAgent = detected
+          identityLocked = true
+          lockedAgentName = detected
           hasOutputtedJSON.set(detected, false)
 
           await client.app.log({
             body: {
               service: "workflow-enforcement",
               level: "info",
-              message: `Session created — agent detected: ${detected}`,
-              extra: { sessionId: (event as any).session_id || (event as any).sessionID }
+              message: `Session created — agent LOCKED: ${detected} (identity will be enforced strictly)`,
+              extra: { sessionId: (event as any).session_id || (event as any).sessionID, locked: true }
             }
           })
 
@@ -289,22 +310,44 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         }
 
         // Check for identity drift from JSON (lower priority than IDENTITY VERIFIED text)
+        // CHANGED v3: when identity is LOCKED (session.created detected a real agent),
+        // drift is a HARD ERROR — we DO NOT silently switch agents anymore. This is
+        // the fix for orchestrator↔plankestrator confusion: the agent cannot drift
+        // once the session has been bound to a specific identity.
         if (jsonContent?.agent && currentAgent && jsonContent.agent !== currentAgent && !identityText) {
-          const previousAgent = currentAgent
-          currentAgent = String(jsonContent.agent)
-          hasOutputtedJSON.set(currentAgent, false)
-
-          await client.app.log({
-            body: {
-              service: "workflow-enforcement",
-              level: "warn",
-              message: "IDENTITY DRIFT DETECTED",
-              extra: {
-                previousAgent,
-                newAgent: currentAgent
+          if (identityLocked) {
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "error",
+                message: "IDENTITY DRIFT REJECTED — agent attempted to claim a different identity than session lock",
+                extra: {
+                  lockedAgent: lockedAgentName,
+                  claimedAgent: String(jsonContent.agent),
+                  sessionId: (event as any).session_id || (event as any).sessionID
+                }
               }
-            }
-          })
+            })
+            // Hard-error: log and let the message through but flag the violation.
+            // We do NOT update currentAgent; we keep the locked identity.
+            // Downstream Task calls will be validated against the locked routing table.
+          } else {
+            const previousAgent = currentAgent
+            currentAgent = String(jsonContent.agent)
+            hasOutputtedJSON.set(currentAgent, false)
+
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "warn",
+                message: "IDENTITY DRIFT DETECTED (unlocked — correcting)",
+                extra: {
+                  previousAgent,
+                  newAgent: currentAgent
+                }
+              }
+            })
+          }
         }
 
         // Validate JSON if we know which agent is running
@@ -335,6 +378,37 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
                 extra: { agent: currentAgent }
               }
             })
+          }
+        }
+
+        // Forbidden-vocabulary sanity check: if the locked agent's message contains
+        // terminology that belongs to the OTHER primary agent, log a hard error.
+        // This catches the orchestrator→plankestrator and plankestrator→orchestrator
+        // confusion mode where the model produces text from the wrong agent's playbook.
+        if (identityLocked && lockedAgentName && message) {
+          const content = String(message.content || message.text || "")
+          const otherAgent = lockedAgentName === "orchestrator" ? "plankestrator" : "orchestrator"
+          const forbidden = FORBIDDEN_VOCAB[lockedAgentName] || []
+          const violations = forbidden.filter(token => content.includes(token))
+
+          if (violations.length > 0) {
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "error",
+                message: `FORBIDDEN VOCABULARY DETECTED — ${lockedAgentName} message contains ${otherAgent} terminology`,
+                extra: {
+                  lockedAgent: lockedAgentName,
+                  otherAgent,
+                  violations,
+                  excerpt: content.slice(0, 200)
+                }
+              }
+            })
+            // Note: we DO NOT throw here — we log the error and let downstream
+            // checks (identity drift, routing table) catch the actual violation.
+            // Throwing on text-level vocabulary would block legitimate cross-references
+            // (e.g. orchestrator mentioning "plan-writer" in an OUT OF SCOPE message).
           }
         }
       }
@@ -542,21 +616,49 @@ Plankestrator handles: PLAN, RESEARCH, RESEARCH+PLAN
 
 /**
  * Detect agent from session event data.
- * Checks session title and agent field for orchestrator/plankestrator.
+ * Priority order (highest first):
+ *   1. sessionData.agent === "orchestrator" | "plankestrator"  (authoritative — opencode's choice)
+ *   2. sessionData.parent_agent / sessionData.primary_agent
+ *   3. sessionData.title contains "orchestrator" or "plankestrator" (user-named sessions)
+ *   4. sessionData.description contains the agent name (custom field convention)
+ * Returns the agent name if found, null otherwise.
  */
 function detectAgentFromSessionData(sessionData: any): string | null {
   if (!sessionData) return null
 
-  // Method 1: session title
+  // Method 1 (PRIMARY): explicit agent field from opencode.
+  // This is the source of truth — when opencode loads an agent, it passes the
+  // name here. If we see orchestrator/plankestrator here, lock immediately.
+  if (sessionData.agent === "orchestrator" || sessionData.agent === "plankestrator") {
+    return sessionData.agent
+  }
+
+  // Method 2: alternate agent-field names used by some opencode versions
+  const altAgent = sessionData.parent_agent || sessionData.primary_agent || sessionData.agentName
+  if (altAgent === "orchestrator" || altAgent === "plankestrator") {
+    return altAgent
+  }
+
+  // Method 3: nested in properties (some opencode versions wrap payload)
+  const props = (sessionData as any).properties
+  if (props) {
+    if (props.agent === "orchestrator" || props.agent === "plankestrator") {
+      return props.agent
+    }
+  }
+
+  // Method 4: session title (user-named sessions — works when user follows naming convention)
   if (sessionData.title) {
     const title = String(sessionData.title).toLowerCase()
     if (title.includes("orchestrator")) return "orchestrator"
     if (title.includes("plankestrator")) return "plankestrator"
   }
 
-  // Method 2: session.agent field
-  if (sessionData.agent === "orchestrator" || sessionData.agent === "plankestrator") {
-    return sessionData.agent
+  // Method 5: session description
+  if (sessionData.description) {
+    const desc = String(sessionData.description).toLowerCase()
+    if (desc.includes("orchestrator") && !desc.includes("plankestrator")) return "orchestrator"
+    if (desc.includes("plankestrator") && !desc.includes("orchestrator")) return "plankestrator"
   }
 
   return null

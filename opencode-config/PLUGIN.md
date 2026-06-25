@@ -152,7 +152,6 @@ orchestrator can only call these agents:
 | summarizer | Content summarization |
 | execute-bug | Bug fix implementation |
 | consistency-checker | Architecture consistency validation |
-| explore | Fast codebase exploration |
 | view-image | Image analysis |
 
 ### plankestrator Whitelist (9 agents)
@@ -207,8 +206,7 @@ const ROUTING_TABLES = {
     'research-writer-simple',
     'research-writer-complex',
     'research-reviewer',
-    'devops-readonly',
-    'view-image'
+    'devops-readonly'
   ]
 };
 ```
@@ -369,7 +367,7 @@ Allowed Agents: orchestrator-identity-probe, dev-reviewer, dev-professor,
                 mcp-github, worker, bugfix, rework, mcp-read, utility, 
                 devops, bugfix-triage, plan-bug, devops-agent, devops-reviewer, 
                 dev-planner, mcp-search, docs-writer, summarizer, execute-bug,
-                consistency-checker
+                consistency-checker, view-image
 
 This violates the routing table configuration.
 Please follow the correct workflow for your agent type.
@@ -415,7 +413,7 @@ Expected format:
 {
   "agent": "orchestrator",
   "type": "BUGFIX|DEVOPS|DEV|DOCS|null",
-  "complexity": "SIMPLE|COMPLEX|DEEP|null",
+  "complexity": "SIMPLE|COMPLEX|DEEP|SUPERCOMPLEX|null",
   "plan_exists": true|false|null,
   "plan_source": "description or null",
   "goal": "one sentence description",
@@ -436,7 +434,7 @@ Expected format:
 {
   "agent": "orchestrator",
   "type": "BUGFIX|DEVOPS|DEV|DOCS|null",
-  "complexity": "SIMPLE|COMPLEX|DEEP|null",
+  "complexity": "SIMPLE|COMPLEX|DEEP|SUPERCOMPLEX|null",
   "plan_exists": true|false|null,
   "plan_source": "description of plan source if exists, null if not",
   "goal": "one sentence description",
@@ -467,7 +465,7 @@ Expected format:
 |-------|--------------|
 | `agent` | `["orchestrator"]` |
 | `type` | `["BUGFIX", "DEVOPS", "DEV", "DOCS", null]` |
-| `complexity` | `["SIMPLE", "COMPLEX", "DEEP", null]` |
+| `complexity` | `["SIMPLE", "COMPLEX", "DEEP", "SUPERCOMPLEX", null]` |
 | `plan_exists` | `[true, false, null]` |
 | `plan_source` | `[string, null]` |
 | `goal` | `[string]` |
@@ -966,8 +964,7 @@ const ROUTING_TABLES = {
     'research-writer-simple',
     'research-writer-complex',
     'research-reviewer',
-    'devops-readonly',
-    'view-image'
+    'devops-readonly'
   ]
 };
 ```

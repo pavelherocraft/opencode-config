@@ -221,7 +221,6 @@ Handles planning and research tasks:
 | summarizer | Content summarization |
 | execute-bug | Bug fix implementation |
 | consistency-checker | Architecture consistency validation |
-| explore | Fast codebase exploration |
 | view-image | Image analysis |
 
 ### plankestrator Whitelist (9 agents)
@@ -352,10 +351,12 @@ IDENTITY VERIFIED: I am [agent_name]. I am NOT [other_agent_name].
 
 Agents must include an agent field in their JSON output:
 
+```json
 {
   agent: orchestrator | plankestrator,
   ...
 }
+```
 
 ## Identity Lock Mechanism (v3)
 
