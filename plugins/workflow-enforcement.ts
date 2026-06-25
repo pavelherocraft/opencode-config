@@ -14,7 +14,6 @@ const ROUTING_TABLES = {
     "rework",
     "mcp-read",
     "utility",
-    "devops",
     "bugfix-triage",
     "plan-bug",
     "devops-agent",

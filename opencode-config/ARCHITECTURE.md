@@ -28,7 +28,6 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 | 18 | execute-bug | Bug fix implementation |
 | 19 | consistency-checker | Architecture consistency validation |
 | 20 | view-image | Image analysis |
-| 21 | devops | Legacy DevOps tasks (alias) |
 
 ### plankestrator Whitelist (9 agents)
 

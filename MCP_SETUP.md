@@ -46,12 +46,14 @@ OpenCode использует архитектуру с двумя primary-аг�
 ### Models Distribution
 
 | Model | Provider | Agents Count | Agents |
-|-------|----------|--------------|--------|
-| `glm-5` | alibaba-coding-plan | 7 | orchestrator, plankestrator, orchestrator-identity-probe, plankestrator-identity-probe, docs-writer, research-writer-simple, plan-reviewer-simple |
-| `qwen3.7-plus` | alibaba-coding-plan | 9 | worker, bugfix, bugfix-triage, plan-bug, dev-planner, devops-reviewer, plan-writer-simple, consistency-checker, utility |
-| `glm-5.2` | zai-coding-plan | 5 | dev-professor, plan-writer-complex, research-writer-complex, execute-bug, rework |
-| `k2p7` | kimi-for-coding | 3 | dev-reviewer, plan-reviewer-complex, research-reviewer |
-| `MiniMax-M2.7` | minimax-coding-plan | 7 | mcp-github, mcp-read, mcp-search, summarizer, devops, devops-agent, devops-readonly |
+|-------|----------|--------------|-------|
+| `GLM-5.2` | bifrost-litellm | 6 | dev-professor, plan-writer-complex, research-writer-complex, execute-bug, rework, bugfix |
+| `QWEN3.7-plus` | bifrost-litellm | 9 | worker, bugfix-triage, plan-bug, dev-planner, devops-reviewer, plan-writer-simple, consistency-checker, utility, docs-writer |
+| `Kimi K2.7` | bifrost-litellm | 3 | dev-reviewer, plan-reviewer-complex, research-reviewer |
+| `Kimi K2.6` | bifrost-litellm | 1 | view-image |
+| `MiniMax-M3` | bifrost-litellm | 7 | mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, plan-bug |
+| `GLM-4.7` | bifrost-litellm | 2 | orchestrator, plankestrator |
+| `GLM-5.1` | bifrost-litellm | 1 | orchestrator-identity-probe, plankestrator-identity-probe |
 
 ### MCP Servers
 
@@ -89,9 +91,8 @@ OpenCode использует архитектуру с двумя primary-аг�
 
 | Provider | Key | Purpose |
 |----------|-----|---------|
-| Alibaba (bailian-token-plan) | `sk-sp-*` | Qwen, GLM models (glm-5, qwen3.7-plus) |
-| Z.AI (zai-coding-plan) | через API | GLM-5.2 модели |
-| Z.AI | `a8d38aaca0e04f678f11c7f8bd135a12.*` | zread, webSearchPrime, webReader, zai-mcp-server |
+| Bifrost LiteLLM | `LITELLM_API_KEY` (env var) | All agent models (GLM-5.2, QWEN3.7-plus, Kimi K2.7, MiniMax-M3) |
+| Z.AI | `YOUR_Z_AI_KEY` | zread, webSearchPrime, webReader, zai-mcp-server |
 
 ---
 
@@ -190,35 +191,23 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 
 ```json
 "provider": {
-  "bailian-token-plan": {
+  "bifrost-litellm": {
     "npm": "@ai-sdk/openai-compatible",
-    "name": "Alibaba Token Plan",
+    "name": "Bifrost LiteLLM",
     "options": {
-      "baseURL": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
-      "apiKey": "sk-sp-YOUR_API_KEY"
+      "baseURL": "https://hcbifrost.herocraft.com/litellm/v1",
+      "apiKey": "{env:LITELLM_API_KEY}"
     },
     "models": {
-      "qwen3.7-max": { "name": "Qwen3.7 Max", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-      "qwen3.7-plus": { "name": "Qwen3.7 Plus", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-      "qwen3.6-flash": { "name": "Qwen3.6 Flash", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-      "deepseek-v4-pro": { "name": "DeepSeek V4 Pro" },
-      "deepseek-v4-flash": { "name": "DeepSeek V4 Flash" },
-      "deepseek-v3.2": { "name": "DeepSeek V3.2" },
-      "kimi-k2.6": { "name": "Kimi K2.6", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-      "kimi-k2.5": { "name": "Kimi K2.5", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-      "glm-5": { "name": "GLM-5", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-      "MiniMax-M2.5": { "name": "MiniMax M2.5" }
-    }
-  },
-  "zai-coding-plan": {
-    "npm": "@ai-sdk/openai-compatible",
-    "name": "Z.AI Coding Plan",
-    "options": {
-      "baseURL": "https://api.z.ai/anthropic/v1",
-      "apiKey": "YOUR_Z_AI_KEY"
-    },
-    "models": {
-      "glm-5.2": { "name": "GLM-5.2", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } }
+      "GLM-4.7": { "name": "GLM-4.7", "limit": { "context": 204800, "output": 131072 } },
+      "GLM-5.1": { "name": "GLM-5.1", "limit": { "context": 204800, "output": 131072 } },
+      "GLM-5.2": { "name": "GLM-5.2", "limit": { "context": 1048576, "output": 131072 } },
+      "GLM-5.2 (res)": { "name": "GLM-5.2 (res)", "limit": { "context": 1048576, "output": 131072 } },
+      "Kimi K2.6": { "name": "Kimi K2.6", "limit": { "context": 262144, "output": 262144 }, "modalities": { "input": ["text", "image"] }, "attachment": true },
+      "Kimi K2.7": { "name": "Kimi K2.7", "limit": { "context": 262144, "output": 262144 }, "modalities": { "input": ["text", "image"] }, "attachment": true },
+      "MiniMax-M2.7": { "name": "MiniMax-M2.7", "limit": { "context": 204800, "output": 131072 } },
+      "MiniMax-M3": { "name": "MiniMax-M3", "limit": { "context": 512000, "output": 131072 }, "modalities": { "input": ["text", "image", "video"] }, "attachment": true },
+      "QWEN3.7-plus": { "name": "QWEN3.7-plus", "limit": { "context": 1000000, "output": 80000 }, "modalities": { "input": ["text", "image", "video"] }, "attachment": true }
     }
   }
 }
@@ -288,7 +277,7 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 | Field | Value |
 |-------|-------|
 | Mode | primary |
-| Model | alibaba-coding-plan/glm-5 |
+| Model | bifrost-litellm/GLM-4.7 |
 | Temperature | 0.1 |
 | Role | Task classifier and delegator (BUGFIX/DEVOPS/DEV/DOCS) |
 
@@ -384,7 +373,7 @@ orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bu
 | Field | Value |
 |-------|-------|
 | Mode | primary |
-| Model | alibaba-coding-plan/glm-5 |
+| Model | bifrost-litellm/GLM-4.7 |
 | Temperature | 0.1 |
 | Role | Planning and research state machine |
 
@@ -413,30 +402,29 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **mcp-read** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
 | **plan-writer-complex** | subagent | zai-coding-plan/glm-5.2 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **worker** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.2 | allow | - | - | **allow** | view-image |
-| **utility** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | deny | - | **allow** | view-image |
-| **rework** | subagent | zai-coding-plan/glm-5.2 | 0.2 | allow | - | - | deny | view-image |
-| **research-writer-simple** | subagent | alibaba-coding-plan/glm-5 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
-| **plan-reviewer-simple** | subagent | alibaba-coding-plan/glm-5 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **plan-bug** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | *.md | - | - | deny | view-image | Writes bug plan to bug_plan.md |
-| **devops** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | **allow** | view-image |
-| **docs-writer** | subagent | alibaba-coding-plan/glm-5 | 0.3 | allow | - | - | deny | view-image |
-| **dev-professor** | subagent | zai-coding-plan/glm-5.2 | 0.2 | allow | - | - | deny | view-image | Reviews plan from dev_plan.md before implementing |
-| **devops-readonly** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | allow | - | allow | deny | view-image |
-| **devops-agent** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | - | **allow** | view-image |
-| **devops-reviewer** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | deny | allow | deny | view-image |
-| **orchestrator-identity-probe** | subagent | alibaba-coding-plan/glm-5 | 0.1 | deny | deny | - | deny | view-image |
-| **plankestrator-identity-probe** | subagent | alibaba-coding-plan/glm-5 | 0.1 | deny | deny | - | deny | view-image |
-| **mcp-search** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
-| **summarizer** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
-| **bugfix-triage** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | deny | - | deny | view-image |
-| **research-reviewer** | subagent | kimi-for-coding/k2p7 | 0.1 | allow | - | allow | deny | view-image |
-| **dev-reviewer** | subagent | kimi-for-coding/k2p7 | 0.1 | allow | - | - | deny | view-image |
-| **research-writer-complex** | subagent | zai-coding-plan/glm-5.2 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
-| **plan-writer-simple** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **execute-bug** | subagent | zai-coding-plan/glm-5.2 | 0.2 | allow | - | - | **allow** | view-image | Reads plan from bug_plan.md before implementing |
-| **plan-reviewer-complex** | subagent | kimi-for-coding/k2p7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **consistency-checker** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
-| **view-image** | subagent | kimi-for-coding/k2p6 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
+| **utility** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | - | **allow** | view-image |
+| **rework** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | deny | view-image |
+| **research-writer-simple** | subagent | bifrost-litellm/GLM-4.7 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
+| **plan-reviewer-simple** | subagent | bifrost-litellm/GLM-4.7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
+| **plan-bug** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | *.md | - | - | deny | view-image | Writes bug plan to bug_plan.md |
+| **docs-writer** | subagent | bifrost-litellm/QWEN3.7-plus | 0.3 | allow | - | - | deny | view-image |
+| **dev-professor** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | deny | view-image | Reviews plan from dev_plan.md before implementing |
+| **devops-readonly** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | allow | - | allow | deny | view-image |
+| **devops-agent** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | - | **allow** | view-image |
+| **devops-reviewer** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | allow | deny | view-image |
+| **orchestrator-identity-probe** | subagent | bifrost-litellm/GLM-5.1 | 0.1 | deny | deny | - | deny | view-image |
+| **plankestrator-identity-probe** | subagent | bifrost-litellm/GLM-5.1 | 0.1 | deny | deny | - | deny | view-image |
+| **mcp-search** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | deny | view-image |
+| **summarizer** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | deny | view-image |
+| **bugfix-triage** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | - | deny | view-image |
+| **research-reviewer** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | view-image |
+| **dev-reviewer** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | - | deny | view-image |
+| **research-writer-complex** | subagent | bifrost-litellm/GLM-5.2 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
+| **plan-writer-simple** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
+| **execute-bug** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | **allow** | view-image | Reads plan from bug_plan.md before implementing |
+| **plan-reviewer-complex** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
+| **consistency-checker** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
+| **view-image** | subagent | bifrost-litellm/Kimi K2.6 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
 
 ### ⚠️ Manual opencode.json Update Required for plan-bug
 
@@ -683,7 +671,6 @@ This configuration:
 | rework | Rework on feedback |
 | mcp-read | File reading |
 | utility | Syntax checking, formatting |
-| devops | DevOps tasks |
 | bugfix-triage | Initial bug analysis |
 | plan-bug | Bug fix planning |
 | devops-agent | DevOps operations |
@@ -910,7 +897,7 @@ JSON output должен включать поле `agent`:
 const ROUTING_TABLES = {
   orchestrator: [
     "orchestrator-identity-probe", "dev-reviewer", "dev-professor", "mcp-github",
-    "worker", "bugfix", "rework", "mcp-read", "utility", "devops",
+    "worker", "bugfix", "rework", "mcp-read", "utility",
     "bugfix-triage", "plan-bug", "devops-agent", "devops-reviewer",
     "dev-planner", "mcp-search", "docs-writer", "summarizer",
     "execute-bug", "consistency-checker", "view-image"
@@ -1118,7 +1105,6 @@ All commands are `subtask: true` — they run as subagent tasks.
 ├── mcp-read.md
 ├── mcp-search.md
 ├── summarizer.md
-├── devops.md
 ├── devops-agent.md
 ├── devops-reviewer.md
 ├── devops-readonly.md
@@ -1328,7 +1314,7 @@ opencode --agent plankestrator
 
 ---
 
-**Document Version:** 11.0
-**Last Updated:** 2026-06-18
-**Changes:** Added "Permission Model: edit vs write" section explaining that `write` is a tool name (not a permission key), `edit` permission controls edit/write/patch/multiedit tools, using `write: "*.md"` creates a DEAD KEY, correct syntax for file type restrictions, and dev-planner permission fix case study
+**Document Version:** 12.0
+**Last Updated:** 2026-06-25
+**Changes:** Updated for bifrost-litellm provider (GLM-5.2, QWEN3.7-plus, Kimi K2.6/K2.7, MiniMax-M3), created agents/view-image.md, removed ghost devops agent from routing tables, fixed execute-bug bash permission to allow, corrected agent counts (21 orchestrator, 9 plankestrator, 32 total), synchronized all routing tables across ARCHITECTURE.md, AGENTS.md, PLUGIN.md, opencode-config/ copies, and plugin code
 **Author:** OpenCode Documentation Team

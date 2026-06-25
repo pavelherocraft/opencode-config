@@ -141,7 +141,6 @@ orchestrator can only call these agents:
 | rework | Rework on feedback |
 | mcp-read | File reading |
 | utility | Syntax checking, formatting |
-| devops | DevOps tasks |
 | bugfix-triage | Initial bug analysis |
 | plan-bug | Bug fix planning |
 | devops-agent | DevOps operations |
@@ -184,7 +183,6 @@ const ROUTING_TABLES = {
     'rework',
     'mcp-read',
     'utility',
-    'devops',
     'bugfix-triage',
     'plan-bug',
     'devops-agent',
@@ -942,7 +940,6 @@ const ROUTING_TABLES = {
     'rework',
     'mcp-read',
     'utility',
-    'devops',
     'bugfix-triage',
     'plan-bug',
     'devops-agent',

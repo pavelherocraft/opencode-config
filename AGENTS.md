@@ -210,7 +210,6 @@ Handles planning and research tasks:
 | rework | Rework on feedback |
 | mcp-read | File reading |
 | utility | Syntax checking, formatting |
-| devops | DevOps tasks |
 | bugfix-triage | Initial bug analysis |
 | plan-bug | Bug fix planning |
 | devops-agent | DevOps operations |
