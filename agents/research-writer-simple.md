@@ -1,7 +1,7 @@
 ﻿---
-description: Simple research writer. Gathers information from single sources using MCP tools. GLM-5.
+description: Simple research writer. Gathers information from single sources using MCP tools. Xiaomi MiMo-V2.5-Pro.
 mode: subagent
-model: alibaba-coding-plan/glm-5
+model: bifrost-litellm/mimo-v2.5-pro
 temperature: 0.1
 permission:
   edit: allow

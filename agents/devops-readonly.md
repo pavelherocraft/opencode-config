@@ -1,7 +1,7 @@
 ﻿---
-description: DevOps read-only agent. Execute read-only operations for planning agents. MiniMax M2.7.
+description: DevOps read-only agent. Execute read-only operations for planning agents. MiniMax-M3.
 mode: subagent
-model: minimax-coding-plan/MiniMax-M2.7
+model: bifrost-litellm/MiniMax-M3
 temperature: 0.1
 permission:
   edit: allow

@@ -47,13 +47,13 @@ OpenCode использует архитектуру с двумя primary-аг�
 
 | Model | Provider | Agents Count | Agents |
 |-------|----------|--------------|-------|
-| `GLM-5.2` | bifrost-litellm | 6 | dev-professor, plan-writer-complex, research-writer-complex, execute-bug, rework, bugfix |
-| `QWEN3.7-plus` | bifrost-litellm | 9 | worker, bugfix-triage, plan-bug, dev-planner, devops-reviewer, plan-writer-simple, consistency-checker, utility, docs-writer |
-| `Kimi K2.7` | bifrost-litellm | 3 | dev-reviewer, plan-reviewer-complex, research-reviewer |
+| `QWEN3.7-plus` | bifrost-litellm | 11 | orchestrator, plankestrator, bugfix, bugfix-triage, dev-planner, devops-reviewer, plan-writer-simple, consistency-checker, orchestrator-identity-probe, plankestrator-identity-probe, docs-planner |
+| `GLM-5.2` | bifrost-litellm | 5 | dev-professor, plan-writer-complex, research-writer-complex, execute-bug, rework |
+| `MiniMax-M3` | bifrost-litellm | 4 | plan-bug, devops-agent, devops-readonly, worker |
+| `Kimi K2.7` | bifrost-litellm | 4 | dev-reviewer, plan-reviewer-simple, plan-reviewer-complex, research-reviewer |
+| `MiniMax-M2.7` | bifrost-litellm | 5 | mcp-github, mcp-read, mcp-search, summarizer, utility |
+| `mimo-v2.5-pro` | bifrost-litellm | 2 | docs-writer, research-writer-simple |
 | `Kimi K2.6` | bifrost-litellm | 1 | view-image |
-| `MiniMax-M3` | bifrost-litellm | 7 | mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, plan-bug |
-| `GLM-4.7` | bifrost-litellm | 2 | orchestrator, plankestrator |
-| `GLM-5.1` | bifrost-litellm | 1 | orchestrator-identity-probe, plankestrator-identity-probe |
 
 ### MCP Servers
 
@@ -278,7 +278,7 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 | Field | Value |
 |-------|-------|
 | Mode | primary |
-| Model | bifrost-litellm/GLM-4.7 |
+| Model | bifrost-litellm/QWEN3.7-plus |
 | Temperature | 0.1 |
 | Role | Task classifier and delegator (BUGFIX/DEVOPS/DEV/DOCS) |
 
@@ -367,14 +367,14 @@ DO NOT call execute-bug without this prefix. execute-bug MUST read bug_plan.md b
 | task | { "*": "deny", ... } | Whitelist ниже |
 
 **Task Whitelist (21 agents):**
-orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bugfix, rework, mcp-read, utility, bugfix-triage, plan-bug, devops-agent, devops-reviewer, dev-planner, mcp-search, docs-writer, summarizer, execute-bug, consistency-checker, view-image
+orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bugfix, rework, mcp-read, utility, bugfix-triage, plan-bug, devops-agent, devops-reviewer, dev-planner, mcp-search, docs-writer, summarizer, execute-bug, consistency-checker, view-image, docs-planner
 
 #### plankestrator
 
 | Field | Value |
 |-------|-------|
 | Mode | primary |
-| Model | bifrost-litellm/GLM-4.7 |
+| Model | bifrost-litellm/QWEN3.7-plus |
 | Temperature | 0.1 |
 | Role | Planning and research state machine |
 
@@ -397,26 +397,27 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 
 | Agent | Mode | Model | Temperature | edit | write | read | bash | task whitelist extras |
 |-------|------|-------|-------------|------|-------|------|------|----------------------|
-| **mcp-github** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
-| **dev-planner** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.1 | deny | *.md | - | deny | view-image |
-| **bugfix** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.2 | allow | - | - | deny | view-image |
-| **mcp-read** | subagent | minimax-coding-plan/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
-| **plan-writer-complex** | subagent | zai-coding-plan/glm-5.2 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **worker** | subagent | alibaba-coding-plan/qwen3.7-plus | 0.2 | allow | - | - | **allow** | view-image |
-| **utility** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | - | **allow** | view-image |
+| **mcp-github** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
+| **dev-planner** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | *.md | - | deny | view-image |
+| **bugfix** | subagent | bifrost-litellm/QWEN3.7-plus | 0.2 | allow | - | - | deny | view-image |
+| **mcp-read** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
+| **plan-writer-complex** | subagent | bifrost-litellm/GLM-5.2 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
+| **worker** | subagent | bifrost-litellm/MiniMax-M3 | 0.2 | allow | - | - | **allow** | view-image |
+| **utility** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | - | **allow** | view-image |
 | **rework** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | deny | view-image |
-| **research-writer-simple** | subagent | bifrost-litellm/GLM-4.7 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
-| **plan-reviewer-simple** | subagent | bifrost-litellm/GLM-4.7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
+| **research-writer-simple** | subagent | bifrost-litellm/mimo-v2.5-pro | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
+| **plan-reviewer-simple** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **plan-bug** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | *.md | - | - | deny | view-image | Writes bug plan to bug_plan.md |
-| **docs-writer** | subagent | bifrost-litellm/QWEN3.7-plus | 0.3 | allow | - | - | deny | view-image |
+| **docs-writer** | subagent | bifrost-litellm/mimo-v2.5-pro | 0.3 | allow | - | - | deny | view-image |
+| **docs-planner** | subagent | bifrost-litellm/QWEN3.7-plus | 0.2 | *.md | - | allow | deny | view-image | Writes docs plan to docs_plan.md |
 | **dev-professor** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | deny | view-image | Reviews plan from dev_plan.md before implementing |
 | **devops-readonly** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | allow | - | allow | deny | view-image |
 | **devops-agent** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | - | **allow** | view-image |
 | **devops-reviewer** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | allow | deny | view-image |
-| **orchestrator-identity-probe** | subagent | bifrost-litellm/GLM-5.1 | 0.1 | deny | deny | - | deny | view-image |
-| **plankestrator-identity-probe** | subagent | bifrost-litellm/GLM-5.1 | 0.1 | deny | deny | - | deny | view-image |
-| **mcp-search** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | deny | view-image |
-| **summarizer** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | deny | view-image |
+| **orchestrator-identity-probe** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | - | deny | view-image |
+| **plankestrator-identity-probe** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | - | deny | view-image |
+| **mcp-search** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
+| **summarizer** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
 | **bugfix-triage** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | - | deny | view-image |
 | **research-reviewer** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | view-image |
 | **dev-reviewer** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | - | deny | view-image |
@@ -682,6 +683,7 @@ This configuration:
 | execute-bug | Bug fix implementation |
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
+| docs-planner | Documentation planning (DOCS DEEP) |
 
 ### plankestrator Whitelist (9 agents)
 
@@ -900,7 +902,7 @@ const ROUTING_TABLES = {
     "worker", "bugfix", "rework", "mcp-read", "utility",
     "bugfix-triage", "plan-bug", "devops-agent", "devops-reviewer",
     "dev-planner", "mcp-search", "docs-writer", "summarizer",
-    "execute-bug", "consistency-checker", "view-image"
+    "execute-bug", "consistency-checker", "view-image", "docs-planner"
   ],
   plankestrator: [
     "plankestrator-identity-probe", "plan-writer-simple", "plan-writer-complex",

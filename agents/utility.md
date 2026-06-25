@@ -1,7 +1,7 @@
 ---
-description: Utility agent. Syntax checks, linting, file operations, external tools. MiniMax 2.7.
+description: Utility agent. Syntax checks, linting, file operations, external tools. MiniMax-M2.7.
 mode: subagent
-model: minimax-coding-plan/MiniMax-M2.7
+model: bifrost-litellm/MiniMax-M2.7
 temperature: 0.1
 permission:
   edit: deny

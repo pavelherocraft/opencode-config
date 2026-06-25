@@ -57,25 +57,25 @@ Note: 30 unique subagents + 2 primary agents = 32 unique agents total.
 
 | Agent | Model |
 |-------|-------|
-| worker | alibaba-coding-plan/qwen3.7-plus |
-| bugfix-triage | alibaba-coding-plan/qwen3.7-plus |
-| bugfix | alibaba-coding-plan/qwen3.7-plus |
-| plan-bug | alibaba-coding-plan/qwen3.7-plus |
-| execute-bug | zai-coding-plan/glm-5.2 |
-| dev-planner | alibaba-coding-plan/qwen3.7-plus |
-| dev-professor | zai-coding-plan/glm-5.2 |
-| dev-reviewer | kimi-for-coding/k2p7 |
-| rework | zai-coding-plan/glm-5.2 |
-| consistency-checker | alibaba-coding-plan/qwen3.7-plus |
+| worker | bifrost-litellm/MiniMax-M3 |
+| bugfix-triage | bifrost-litellm/QWEN3.7-plus |
+| bugfix | bifrost-litellm/QWEN3.7-plus |
+| plan-bug | bifrost-litellm/MiniMax-M3 |
+| execute-bug | bifrost-litellm/GLM-5.2 |
+| dev-planner | bifrost-litellm/QWEN3.7-plus |
+| dev-professor | bifrost-litellm/GLM-5.2 |
+| dev-reviewer | bifrost-litellm/Kimi K2.7 |
+| rework | bifrost-litellm/GLM-5.2 |
+| consistency-checker | bifrost-litellm/QWEN3.7-plus |
 | docs-writer | bifrost-litellm/mimo-v2.5-pro |
-| docs-planner | alibaba-coding-plan/qwen3.7-plus |
-| utility | minimax-coding-plan/MiniMax-M2.7 |
-| mcp-github | minimax-coding-plan/MiniMax-M2.7 |
-| mcp-read | minimax-coding-plan/MiniMax-M2.7 |
-| mcp-search | minimax-coding-plan/MiniMax-M2.7 |
-| summarizer | minimax-coding-plan/MiniMax-M2.7 |
-| devops-agent | alibaba-coding-plan/qwen3.7-plus |
-| devops-reviewer | alibaba-coding-plan/qwen3.7-plus |
+| docs-planner | bifrost-litellm/QWEN3.7-plus |
+| utility | bifrost-litellm/MiniMax-M2.7 |
+| mcp-github | bifrost-litellm/MiniMax-M2.7 |
+| mcp-read | bifrost-litellm/MiniMax-M2.7 |
+| mcp-search | bifrost-litellm/MiniMax-M2.7 |
+| summarizer | bifrost-litellm/MiniMax-M2.7 |
+| devops-agent | bifrost-litellm/MiniMax-M3 |
+| devops-reviewer | bifrost-litellm/QWEN3.7-plus |
 
 ### Permission Notes
 
@@ -157,6 +157,33 @@ permission:
 **Note:** `write` is NOT a permission key — it is a tool name. To allow/deny the `write` tool, use the `edit` permission key. `write: "*.md"` as a permission key is a DEAD KEY — it is silently ignored by opencode.
 
 **Note:** plankestrator has `edit: deny` — it MUST delegate to subagents, never write directly.
+
+### Primary Agent Tool Lockdown (v3)
+
+Both `orchestrator` and `plankestrator` are locked down in `opencode.json` to prevent them from doing work themselves. This is the **authoritative source** — frontmatter and plugin runtime checks are belt-and-suspenders, but opencode.json is what actually controls tool injection.
+
+| Tool | orchestrator | plankestrator | Reason |
+|------|:---:|:---:|--------|
+| `task` | ✅ allow | ✅ allow | Delegation to specialists (primary purpose) |
+| `read` | ✅ allow | ✅ allow | Inspect ARCHITECTURE.md / AGENTS.md / existing plans |
+| `glob` | ✅ allow | ✅ allow | Assess scope (1 file vs many) |
+| `grep` | ✅ allow | ✅ allow | Find references to inform classification |
+| `edit` | ❌ deny | ❌ deny | Worker / bugfix / plan-writer-* handles this |
+| `write` | ❌ deny | ❌ deny | Worker / docs-writer handles this |
+| `patch` | ❌ deny | ❌ deny | Same as edit |
+| `bash` | ❌ deny | ❌ deny | devops-agent / worker / execute-bug handles this |
+| `webfetch` | ❌ deny | ❌ deny | mcp-read / mcp-search handles this |
+| `question` | ❌ deny | ❌ deny | Primary agents don't ask the user |
+| `todowrite` | ❌ deny | ❌ deny | Primary agents don't manage todos |
+
+**Defense in depth — this lock is enforced by 4 layers:**
+
+1. **`opencode.json` permission block** (authoritative) — the runtime refuses to inject denied tools into the agent's toolset
+2. **`tools:` field in agent.md frontmatter** — secondary belt-and-suspenders
+3. **Plugin runtime gate** (`workflow-enforcement.ts` → `PRIMARY_AGENT_ALLOWED_TOOLS`) — throws `⛔ PRIMARY AGENT FORBIDDEN ACTION TOOL` exception if anything bypasses the config
+4. **Identity-lock v3** — if the agent outputs wrong identity in JSON, the locked routing table is still enforced
+
+**Why this exists:** orchestrator and plankestrator kept "doing things themselves" because the old config had `edit: "ask"`, `todowrite: "allow"`, `question: "allow"` for orchestrator, and `edit: { "*.md": "allow" }` for plankestrator — the model had action tools available and used them. v3 lockdown removes those tools from the model's toolset entirely.
 
 **Restrictions enforced in agent prompts:**
 - File type: ONLY `.md` (Markdown) files

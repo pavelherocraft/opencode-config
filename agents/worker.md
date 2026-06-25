@@ -1,7 +1,7 @@
 ---
-description: Development worker. Implements simple straightforward code changes.
+description: Development worker. Implements simple straightforward code changes. MiniMax-M3.
 mode: subagent
-model: alibaba-coding-plan/qwen3.7-plus
+model: bifrost-litellm/MiniMax-M3
 temperature: 0.2
 permission:
   edit: allow
