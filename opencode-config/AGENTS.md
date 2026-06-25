@@ -4,28 +4,31 @@
 
 ### Search
 
-Always use the webSearchPrime MCP tool for web search. Do NOT use webfetch for searching.
+Always use the `zai_web_search` MCP tool for web search. Do NOT use webfetch for searching.
 
-- Use webSearchPrime for all web searches, finding information, documentation, and resources
-- When the user asks you to find, search, or look up something — use webSearchPrime first
+- Tool name: `zai_web_search_web_search_prime`
+- Use `zai_web_search` for all web searches, finding information, documentation, and resources
+- When the user asks you to find, search, or look up something — use `zai_web_search` first
 - Search queries work best in English; translate Russian queries to English before searching
 
 ### Read URLs
 
-Always use the webReader MCP tool for reading webpage content. Do NOT use webfetch.
+Always use the `zai_web_reader` MCP tool for reading webpage content. Do NOT use webfetch.
 
-- Use webReader when you need to read or analyze content from a specific URL
-- webReader returns structured content including title, main body, metadata, and links
-- webfetch should NOT be used — prefer webReader for all URL reading tasks
+- Tool name: `zai_web_reader_webReader`
+- Use `zai_web_reader` when you need to read or analyze content from a specific URL
+- Returns structured content including title, main body, metadata, and links
+- webfetch should NOT be used — prefer `zai_web_reader` for all URL reading tasks
 
 ### GitHub Repositories and Open Source Documentation
 
-Always use the zread MCP tools for working with GitHub repositories. Do NOT use webfetch or manual browsing.
+Always use the `zai_zread` MCP tools for working with GitHub repositories. Do NOT use webfetch or manual browsing.
 
-- Use search_doc to search documentation, issues, PRs, and code in any GitHub repository
-- Use get_repo_structure to get the directory structure and file list of a repository
-- Use read_file to read the complete content of a specific file in a repository
-- When you ask about a library, framework, or open source project — use zread tools first
+- Tool names: `zai_zread_search_doc`, `zai_zread_read_file`, `zai_zread_get_repo_structure`
+- Use `zai_zread_search_doc` to search documentation, issues, PRs, and code in any GitHub repository
+- Use `zai_zread_get_repo_structure` to get the directory structure and file list of a repository
+- Use `zai_zread_read_file` to read the complete content of a specific file in a repository
+- When you ask about a library, framework, or open source project — use `zai_zread` tools first
 
 ## Image Analysis Rules
 
@@ -39,9 +42,9 @@ Task tool:
 - prompt: "Analyze this image: [describe what you need]"
 ```
 
-**view-image uses kimi-for-coding/k2p6 with direct vision capabilities.**
+**view-image uses `bifrost-litellm/Kimi K2.6` with direct vision capabilities.**
 
-**DO NOT use zai-mcp-server tools directly — delegate to view-image agent.**
+**DO NOT use any MCP server for image analysis — delegate to view-image agent.**
 
 **Rules:**
 - User provides image path/URL → Call view-image
@@ -49,7 +52,7 @@ Task tool:
 - Need to extract text from image → Call view-image
 - Need to understand diagram → Call view-image
 - Need to analyze UI mockup → Call view-image
-- Use zai-mcp-server only as FALLBACK when view-image unavailable
+- No MCP fallback — disable image tasks or restore view-image if unavailable
 
 ### Serena MCP Rules
 

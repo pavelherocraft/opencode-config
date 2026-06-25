@@ -29,9 +29,9 @@ Your role:
 
 | Research Need | Tool | Agent |
 |---------------|------|-------|
-| Web search for information | webSearchPrime | mcp-search |
-| Read a specific URL | webReader | mcp-read |
-| Search GitHub repos/docs | zread tools | mcp-github |
+| Web search for information | zai_web_search | mcp-search |
+| Read a specific URL | zai_web_reader | mcp-read |
+| Search GitHub repos/docs | zai_zread tools | mcp-github |
 | Read local project files | read/glob/grep | devops-readonly |
 
 ## EXECUTION RULES

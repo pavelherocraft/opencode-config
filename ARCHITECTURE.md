@@ -339,19 +339,25 @@ else:
 
 ## 4. MCP Servers
 
+All MCP servers are configured in `opencode.json` under the `mcp` section. Three Z.AI servers are proxied through Bifrost LiteLLM.
+
 | Server Name | MCP Tool Prefix | Purpose |
 |-------------|-----------------|---------|
-| zread | `zread_` | GitHub repository reading: `search_doc`, `get_repo_structure`, `read_file` |
-| webSearchPrime | `webSearchPrime_` | Web search: `web_search_prime` |
-| webReader | `webReader_` | URL content reading: `webReader` |
+| zai_zread | `zai_zread_` | GitHub repository reading: `zai_zread_search_doc`, `zai_zread_get_repo_structure`, `zai_zread_read_file` |
+| zai_web_search | `zai_web_search_` | Web search: `zai_web_search_web_search_prime` |
+| zai_web_reader | `zai_web_reader_` | URL content reading: `zai_web_reader_webReader` |
 | serena | `serena_` | Code symbol operations: `find_symbol`, `rename_symbol`, etc. |
-| unity | `Unity.` | Unity Editor operations: `ManageGameObject`, `ManageScene`, etc. |
+| unity-mcp | `unity-mcp.*` | Unity Editor operations: `manage_gameobject`, `manage_scene`, etc. |
 
 ### Usage Rules
 
-- Use `webSearchPrime` for all web searches — do NOT use `webfetch`
-- Use `webReader` for reading URL content — do NOT use `webfetch`
-- Use `zread` tools for GitHub repositories — do NOT use `webfetch` or manual browsing
+- Use `zai_web_search` for all web searches — do NOT use `webfetch`
+- Use `zai_web_reader` for reading URL content — do NOT use `webfetch`
+- Use `zai_zread` tools for GitHub repositories — do NOT use `webfetch` or manual browsing
+
+### MCP Proxy Architecture
+
+All three Z.AI MCP servers (`zai_zread`, `zai_web_search`, `zai_web_reader`) are routed through Bifrost LiteLLM at `https://hcbifrost.herocraft.com/litellm/`. Authentication uses a single `LITELLM_API_KEY` environment variable shared with the LLM provider.
 
 ### Serena MCP Rules
 
