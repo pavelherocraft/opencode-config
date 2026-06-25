@@ -59,12 +59,13 @@ OpenCode использует архитектуру с двумя primary-аг�
 
 | Server | Type | Purpose |
 |--------|------|---------|
-| zread | Remote | GitHub repository operations |
-| webSearchPrime | Remote | Web search |
-| webReader | Remote | URL content reading |
+| zai_zread | Remote (Bifrost) | GitHub repository operations |
+| zai_web_search | Remote (Bifrost) | Web search |
+| zai_web_reader | Remote (Bifrost) | URL content reading |
 | serena | Local | Code symbol operations |
-| unity-mcp | Remote | Unity Editor operations |
-| zai-mcp-server | Local | Image analysis (fallback) |
+| unity-mcp | Remote (localhost) | Unity Editor operations |
+
+**Note:** All Z.AI MCP servers (`zai_zread`, `zai_web_search`, `zai_web_reader`) are proxied through Bifrost LiteLLM at `https://hcbifrost.herocraft.com/litellm/`. Authentication uses a single `LITELLM_API_KEY` environment variable.
 
 ---
 
@@ -91,8 +92,9 @@ OpenCode использует архитектуру с двумя primary-аг�
 
 | Provider | Key | Purpose |
 |----------|-----|---------|
-| Bifrost LiteLLM | `LITELLM_API_KEY` (env var) | All agent models (GLM-5.2, QWEN3.7-plus, Kimi K2.7, MiniMax-M3) |
-| Z.AI | `YOUR_Z_AI_KEY` | zread, webSearchPrime, webReader, zai-mcp-server |
+| Bifrost LiteLLM | `LITELLM_API_KEY` (env var) | All agent models AND all Z.AI MCP servers (zai_zread, zai_web_search, zai_web_reader) |
+
+**Note:** A single `LITELLM_API_KEY` is required. Bifrost proxies both LLM inference and Z.AI MCP servers (GitHub search, web search, URL reading).
 
 ---
 
@@ -131,14 +133,7 @@ Move-Item serena.exe "$env:USERPROFILE\.local\bin\serena.exe"
 serena --version
 ```
 
-### Step 3: Install zai-mcp-server
-
-```powershell
-# Устанавливается автоматически через npx при первом запуске
-npx -y @z_ai/mcp-server
-```
-
-### Step 4: Configure Unity MCP (Optional — только для Unity проектов)
+### Step 3: Configure Unity MCP (Optional — только для Unity проектов)
 
 1. Установить Unity 2021.3 LTS или новее
 2. Установить unity-mcp package через Unity Package Manager:
@@ -148,7 +143,7 @@ npx -y @z_ai/mcp-server
 4. Запустить MCP сервер: `Window > MCP for Unity > Start Server`
 5. Сервер работает на `http://localhost:8080/mcp`
 
-### Step 5: Create Directory Structure
+### Step 4: Create Directory Structure
 
 ```powershell
 # Windows (PowerShell)
@@ -156,7 +151,7 @@ New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.config\opencode\plu
 New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.config\opencode\agents"
 ```
 
-### Step 6: Copy Configuration Files
+### Step 5: Copy Configuration Files
 
 ```powershell
 # Скопировать opencode.json
@@ -169,11 +164,17 @@ Copy-Item "plugins\workflow-enforcement.ts" "$env:USERPROFILE\.config\opencode\p
 Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 ```
 
-### Step 7: Configure API Keys
+### Step 6: Configure API Keys
 
-Откройте `$env:USERPROFILE\.config\opencode\opencode.json` и замените:
-- `sk-sp-YOUR_API_KEY` → ваш Alibaba Token Plan API key
-- `YOUR_Z_AI_KEY` → ваш Z.AI API key (для zread, webSearchPrime, webReader, zai-mcp-server)
+Установите единственную переменную окружения:
+
+```powershell
+[Environment]::SetEnvironmentVariable("LITELLM_API_KEY", "your-bifrost-api-key", "User")
+```
+
+Этот ключ используется для:
+- **Всех LLM моделей** (orchestrator, plankestrator, все 30 subagents)
+- **Всех Z.AI MCP серверов** (zai_zread, zai_web_search, zai_web_reader) — проксируются через Bifrost
 
 ### Step 8: Copy Project Files
 
@@ -217,42 +218,42 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 
 ```json
 "mcp": {
-  "zread": {
-    "url": "https://api.z.ai/api/mcp/zread/mcp",
-    "headers": { "Authorization": "Bearer YOUR_Z_AI_KEY" },
-    "type": "remote"
+  "zai_web_reader": {
+    "type": "remote",
+    "url": "https://hcbifrost.herocraft.com/litellm/zai_web_reader/mcp",
+    "headers": { "Authorization": "Bearer {env:LITELLM_API_KEY}" },
+    "enabled": true
   },
-  "webSearchPrime": {
-    "url": "https://api.z.ai/api/mcp/web_search_prime/mcp",
-    "headers": { "Authorization": "Bearer YOUR_Z_AI_KEY" },
-    "type": "remote"
+  "zai_web_search": {
+    "type": "remote",
+    "url": "https://hcbifrost.herocraft.com/litellm/zai_web_search/mcp",
+    "headers": { "Authorization": "Bearer {env:LITELLM_API_KEY}" },
+    "enabled": true
   },
-  "webReader": {
-    "url": "https://api.z.ai/api/mcp/web_reader/mcp",
-    "headers": { "Authorization": "Bearer YOUR_Z_AI_KEY" },
-    "type": "remote"
+  "zai_zread": {
+    "type": "remote",
+    "url": "https://hcbifrost.herocraft.com/litellm/zai_zread/mcp",
+    "headers": { "Authorization": "Bearer {env:LITELLM_API_KEY}" },
+    "enabled": true
   },
   "serena": {
     "type": "local",
-    "command": ["%USERPROFILE%\\.local\\bin\\serena.exe", "start-mcp-server", "--transport", "stdio", "--context=ide", "--project-from-cwd"],
+    "command": ["C:\\Users\\<USERNAME>\\.local\\bin\\serena.exe", "start-mcp-server", "--transport", "stdio", "--context=ide", "--project-from-cwd"],
     "enabled": true
   },
   "unity-mcp": {
     "type": "remote",
     "url": "http://localhost:8080/mcp",
     "enabled": true
-  },
-  "zai-mcp-server": {
-    "type": "local",
-    "command": ["npx", "-y", "@z_ai/mcp-server"],
-    "environment": {
-      "Z_AI_API_KEY": "YOUR_Z_AI_KEY",
-      "Z_AI_MODE": "ZAI"
-    },
-    "enabled": true
   }
 }
 ```
+
+**Notes:**
+- All three Z.AI MCP servers (`zai_zread`, `zai_web_search`, `zai_web_reader`) are proxied through Bifrost LiteLLM at `hcbifrost.herocraft.com/litellm/`
+- Authentication: single `LITELLM_API_KEY` env var used for all three
+- Replace `<USERNAME>` in the serena path with your Windows username
+- Image analysis is handled by the dedicated `view-image` agent (no separate MCP server needed)
 
 ### Plugin Configuration
 
@@ -296,10 +297,10 @@ For code operations, ALWAYS try Serena MCP tools FIRST:
 Use built-in tools (grep, read, edit) as FALLBACK when Serena fails or for non-symbol tasks.
 
 ## Image Analysis Priority
-For image analysis tasks, ALWAYS use view-image agent FIRST (NOT zai-mcp-server):
+For image analysis tasks, ALWAYS use view-image agent FIRST:
 - Call Task tool with view-image subagent
-- view-image has direct vision capabilities via kimi-for-coding/k2p6
-- Use zai-mcp-server only as FALLBACK when view-image is unavailable
+- view-image has direct vision capabilities via bifrost-litellm/Kimi K2.6
+- No MCP fallback — disable image tasks if view-image is unavailable
 
 ## Pipeline Logic
 | Task Type | plan_exists | Pipeline |
@@ -505,14 +506,13 @@ You are an image analysis agent. Analyze images and describe what you see. You h
 | read | allow |
 | glob | allow |
 | grep | allow |
-| zread.* | **deny** |
-| webSearchPrime.* | **deny** |
-| webReader.* | **deny** |
+| zai_zread.* | **deny** |
+| zai_web_search.* | **deny** |
+| zai_web_reader.* | **deny** |
 | serena.* | **deny** |
 | unity-mcp.* | **deny** |
-| zai-mcp-server.* | **deny** |
 
-view-image анализирует изображения **напрямую через модель** (kimi-for-coding/k2p6 с vision capabilities). Все MCP серверы запрещены.
+view-image анализирует изображения **напрямую через модель** (`bifrost-litellm/Kimi K2.6` с vision capabilities). Все MCP серверы запрещены.
 
 ### Serena Permissions — All Agents (кроме view-image)
 
@@ -792,15 +792,15 @@ plankestrator can only call these agents:
 
 #### MCP Tools Rules
 
-- **Search**: Always use webSearchPrime MCP for web search
-- **Read URLs**: Always use webReader MCP for reading webpage content
-- **GitHub**: Always use zread MCP tools for GitHub repositories
+- **Search**: Always use `zai_web_search` MCP for web search (tool: `zai_web_search_web_search_prime`)
+- **Read URLs**: Always use `zai_web_reader` MCP for reading webpage content (tool: `zai_web_reader_webReader`)
+- **GitHub**: Always use `zai_zread` MCP tools for GitHub repositories (`zai_zread_search_doc`, `zai_zread_read_file`, `zai_zread_get_repo_structure`)
 
 #### Image Analysis Rules
 
 - **PRIMARY**: view-image agent via Task tool
-- **FALLBACK**: zai-mcp-server (only when view-image unavailable)
-- view-image uses `kimi-for-coding/k2p6` with direct vision capabilities
+- view-image uses `bifrost-litellm/Kimi K2.6` with direct vision capabilities
+- No fallback MCP — disable image tasks or restore view-image if unavailable
 
 #### Serena MCP Rules
 
@@ -931,46 +931,46 @@ const REQUIRED_JSON_FIELDS = {
 
 ## 11. MCP Servers
 
-### zread
+### zai_zread
 
 | Field | Value |
 |-------|-------|
-| Type | Remote |
-| URL | `https://api.z.ai/api/mcp/zread/mcp` |
-| Auth | Bearer token (Z.AI API key) |
+| Type | Remote (proxied via Bifrost) |
+| URL | `https://hcbifrost.herocraft.com/litellm/zai_zread/mcp` |
+| Auth | Bearer token (LITELLM_API_KEY env var) |
 
 **Tools:**
 | Tool | Purpose |
 |------|---------|
-| `zread_search_doc` | Search documentation, issues, PRs, code in GitHub repos |
-| `zread_read_file` | Read complete file content from GitHub repo |
-| `zread_get_repo_structure` | Get directory structure of GitHub repo |
+| `zai_zread_search_doc` | Search documentation, issues, PRs, code in GitHub repos |
+| `zai_zread_read_file` | Read complete file content from GitHub repo |
+| `zai_zread_get_repo_structure` | Get directory structure of GitHub repo |
 
-### webSearchPrime
+### zai_web_search
 
 | Field | Value |
 |-------|-------|
-| Type | Remote |
-| URL | `https://api.z.ai/api/mcp/web_search_prime/mcp` |
-| Auth | Bearer token (Z.AI API key) |
+| Type | Remote (proxied via Bifrost) |
+| URL | `https://hcbifrost.herocraft.com/litellm/zai_web_search/mcp` |
+| Auth | Bearer token (LITELLM_API_KEY env var) |
 
 **Tools:**
 | Tool | Purpose |
 |------|---------|
-| `webSearchPrime_web_search_prime` | Web search with time/domain filters |
+| `zai_web_search_web_search_prime` | Web search with time/domain filters |
 
-### webReader
+### zai_web_reader
 
 | Field | Value |
 |-------|-------|
-| Type | Remote |
-| URL | `https://api.z.ai/api/mcp/web_reader/mcp` |
-| Auth | Bearer token (Z.AI API key) |
+| Type | Remote (proxied via Bifrost) |
+| URL | `https://hcbifrost.herocraft.com/litellm/zai_web_reader/mcp` |
+| Auth | Bearer token (LITELLM_API_KEY env var) |
 
 **Tools:**
 | Tool | Purpose |
 |------|---------|
-| `webReader_webReader` | Fetch URL content, convert to markdown |
+| `zai_web_reader_webReader` | Fetch URL content, convert to markdown |
 
 ### serena
 
@@ -1022,15 +1022,11 @@ const REQUIRED_JSON_FIELDS = {
 - `unity_docs` — Unity documentation lookup
 - `unity_reflect` — Unity API reflection
 
-### zai-mcp-server
+### Image Analysis
 
-| Field | Value |
-|-------|-------|
-| Type | Local |
-| Command | `npx -y @z_ai/mcp-server` |
-| Environment | `Z_AI_API_KEY`, `Z_AI_MODE=ZAI` |
+Image analysis is handled by the dedicated `view-image` agent (model `bifrost-litellm/Kimi K2.6`), which uses direct vision capabilities — no MCP server needed.
 
-**Purpose:** Image analysis (fallback when view-image unavailable)
+If `view-image` is unavailable, no fallback MCP is configured. Disable image analysis tasks or restore the `view-image` agent.
 
 ---
 
@@ -1235,7 +1231,7 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 - [ ] Node.js 18+ installed
 - [ ] OpenCode CLI installed
 - [ ] Serena installed и в PATH
-- [ ] zai-mcp-server доступен через npx
+- [ ] `LITELLM_API_KEY` environment variable set
 - [ ] Directory structure created
 
 ### Configuration
@@ -1243,15 +1239,16 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 - [ ] opencode.json скопирован в `~/.config/opencode/`
 - [ ] Plugin скопирован в `~/.config/opencode/plugins/`
 - [ ] Все 32 agent файла скопированы в `~/.config/opencode/agents/`
-- [ ] API keys настроены корректно
-- [ ] MCP server URLs корректны
+- [ ] `LITELLM_API_KEY` env var настроен
+- [ ] Bifrost MCP URLs доступны (`hcbifrost.herocraft.com/litellm/`)
 - [ ] Routing tables в плагине совпадают с opencode.json
 
 ### Post-Deployment
 
 - [ ] OpenCode запускается без ошибок
 - [ ] Plugin initialization log появляется
-- [ ] MCP tools доступны (zread_*, webSearchPrime_*, webReader_*, serena_*, unity-mcp_*)
+- [ ] MCP tools доступны (`zai_zread_*`, `zai_web_search_*`, `zai_web_reader_*`, `serena_*`, `unity-mcp_*`)
+- [ ] Bifrost MCP прокси доступен (`https://hcbifrost.herocraft.com/litellm/`)
 - [ ] orchestrator session работает
 - [ ] plankestrator session работает
 - [ ] Routing violations блокируются корректно
@@ -1293,12 +1290,12 @@ opencode --agent plankestrator
 |-----------|-------|----------|
 | Primary agents | 2 | `~/.config/opencode/agents/` |
 | Subagents | 30 | `~/.config/opencode/agents/` |
-| MCP servers | 6 | Configured in opencode.json |
+| MCP servers | 5 | zai_zread, zai_web_search, zai_web_reader, serena, unity-mcp |
 | Plugin hooks | 3 | workflow-enforcement.ts |
 | Routing tables | 2 | orchestrator (21), plankestrator (9) |
 | Pipelines | 13 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 | Custom commands | 5 | opencode.json |
-| Models | 5 | alibaba, bailian, kimi, minimax |
+| Models | 6 | bifrost-litellm (GLM-5.2, QWEN3.7-plus, Kimi K2.6/K2.7, MiniMax-M3, GLM-4.7) |
 
 ### Quick Reference
 
@@ -1314,7 +1311,7 @@ opencode --agent plankestrator
 
 ---
 
-**Document Version:** 12.0
+**Document Version:** 13.0
 **Last Updated:** 2026-06-25
-**Changes:** Updated for bifrost-litellm provider (GLM-5.2, QWEN3.7-plus, Kimi K2.6/K2.7, MiniMax-M3), created agents/view-image.md, removed ghost devops agent from routing tables, fixed execute-bug bash permission to allow, corrected agent counts (21 orchestrator, 9 plankestrator, 32 total), synchronized all routing tables across ARCHITECTURE.md, AGENTS.md, PLUGIN.md, opencode-config/ copies, and plugin code
+**Changes:** Migrated MCP servers to Bifrost proxy. All Z.AI MCPs (`zai_zread`, `zai_web_search`, `zai_web_reader`) now route through `https://hcbifrost.herocraft.com/litellm/` using single `LITELLM_API_KEY` env var. Removed legacy `zai-mcp-server` (image analysis now handled by view-image agent). Updated all tool name references throughout the document. Previous v12: bifrost-litellm provider, view-image.md, removed ghost devops agent, fixed execute-bug bash, corrected agent counts.
 **Author:** OpenCode Documentation Team
