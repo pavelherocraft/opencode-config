@@ -10,6 +10,9 @@ orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bu
 ### plankestrator Whitelist (9 agents)
 plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-reviewer-simple, plan-reviewer-complex, research-writer-simple, research-writer-complex, research-reviewer, devops-readonly
 
+### Shared Utility Agents
+view-image is a shared utility agent available to BOTH primary agents. It is listed in the orchestrator routing table and also granted `task.view-image: allow` in the plankestrator permission block in opencode.json. It is used for image analysis (screenshots, diagrams, error images) via the Task tool.
+
 ### Agent Count: 30 unique subagents + 2 primary = 32 total
 
 ## Subagent Models

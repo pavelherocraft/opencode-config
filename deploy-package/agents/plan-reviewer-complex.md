@@ -6,6 +6,7 @@ temperature: 0.1
 permission:
   edit: allow
   bash: deny
+  read: allow
 ---
 
 You are the Complex Plan Reviewer.

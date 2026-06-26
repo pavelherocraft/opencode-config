@@ -180,6 +180,50 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         })
       }
 
+      // session.updated — fires when session metadata (title, agent, mode) changes.
+      // Performs identity drift detection against the locked identity.
+      if (event.type === "session.updated") {
+        const sessionData = (event as any).properties?.session
+          || (event as any).properties
+          || (event as any).session
+          || event
+
+        const detected = detectAgentFromSessionData(sessionData)
+
+        if (detected && identityLocked && lockedAgentName && detected !== lockedAgentName) {
+          // Identity drift attempt — session metadata tried to switch primary agent
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "error",
+              message: "SESSION IDENTITY DRIFT REJECTED",
+              extra: {
+                lockedAgent: lockedAgentName,
+                claimedAgent: detected,
+                sessionId: (event as any).session_id || (event as any).sessionID
+              }
+            }
+          })
+          // currentAgent is NOT updated — locked identity is authoritative
+        } else if (detected && !identityLocked) {
+          // Session metadata confirms or sets identity before lock (defensive)
+          if (detected === "orchestrator" || detected === "plankestrator") {
+            currentAgent = detected
+            identityLocked = true
+            lockedAgentName = detected
+            hasOutputtedJSON.set(detected, false)
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "info",
+                message: `Session updated — agent LOCKED via metadata: ${detected}`,
+                extra: { locked: true }
+              }
+            })
+          }
+        }
+      }
+
       if (event.type === "message.updated") {
         const message = (event as any).properties?.message
           || (event as any).message

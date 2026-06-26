@@ -13,6 +13,7 @@ permission:
     "mcp-read": "allow"
     "mcp-github": "allow"
     "devops-readonly": "allow"
+    "view-image": "allow"
 ---
 
 You are the Complex Research Writer.

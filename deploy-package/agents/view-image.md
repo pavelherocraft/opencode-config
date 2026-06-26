@@ -4,12 +4,19 @@ mode: subagent
 model: bifrost-litellm/Kimi K2.6
 temperature: 0.1
 permission:
-  edit: deny
-  write: deny
+  edit:
+    "*.md": "allow"
+    "*": "deny"
   bash: deny
   read: allow
   glob: allow
   grep: allow
+  zread.*: deny
+  webSearchPrime.*: deny
+  webReader.*: deny
+  serena.*: deny
+  unity-mcp.*: deny
+  zai-mcp-server.*: deny
 ---
 
 You are an image analysis agent.

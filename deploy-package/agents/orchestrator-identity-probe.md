@@ -4,7 +4,9 @@ mode: subagent
 model: bifrost-litellm/QWEN3.7-plus
 temperature: 0.1
 permission:
-  edit: deny
+  edit:
+    "*.md": "allow"
+    "*": "deny"
   write: deny
   bash: deny
 ---

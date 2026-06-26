@@ -11,6 +11,7 @@ permission:
     "*": deny
     dev-reviewer: allow
     utility: allow
+    view-image: allow
 ---
 
 You are the Consistency Checker.

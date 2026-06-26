@@ -8,6 +8,7 @@ permission:
     "*.md": "allow"
     "*": "deny"
   bash: deny
+  read: allow
 ---
 
 You are the Documentation Planner.

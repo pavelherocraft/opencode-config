@@ -6,6 +6,7 @@ temperature: 0.1
 permission:
   edit: deny
   write: deny
+  read: allow
   bash: deny
 ---
 

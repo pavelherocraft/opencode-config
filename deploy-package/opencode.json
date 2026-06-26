@@ -88,7 +88,7 @@
       "model": "bifrost-litellm/QWEN3.7-plus",
       "temperature": 0.2,
       "permission": {
-        "edit": "allow", "bash": "allow",
+        "edit": "allow", "bash": "deny",
         "unity-mcp.*": "allow",
         "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow",
         "serena_get_symbols_overview": "allow", "serena_rename_symbol": "allow",
@@ -158,7 +158,7 @@
       "model": "bifrost-litellm/GLM-5.2",
       "temperature": 0.2,
       "permission": {
-        "edit": "allow", "bash": "deny",
+        "edit": "allow", "bash": "allow",
         "unity-mcp.*": "allow",
         "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow",
         "serena_get_symbols_overview": "allow", "serena_rename_symbol": "allow",
@@ -212,7 +212,7 @@
     },
     "dev-professor": {
       "mode": "subagent", "model": "bifrost-litellm/GLM-5.2", "temperature": 0.2,
-      "permission": { "edit": "allow", "bash": "deny", "unity-mcp.*": "allow",
+      "permission": { "edit": "allow", "bash": "allow", "unity-mcp.*": "allow",
         "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
         "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
@@ -239,7 +239,7 @@
     },
     "devops-reviewer": {
       "mode": "subagent", "model": "bifrost-litellm/QWEN3.7-plus", "temperature": 0.1,
-      "permission": { "edit": "deny", "write": "deny", "read": "allow", "bash": "deny", "unity-mcp.*": "allow",
+      "permission": { "edit": "deny", "write": "deny", "read": "allow", "bash": "allow", "unity-mcp.*": "allow",
         "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
         "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",

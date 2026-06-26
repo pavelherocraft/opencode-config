@@ -4,7 +4,9 @@ mode: subagent
 model: bifrost-litellm/MiniMax-M3
 temperature: 0.1
 permission:
-  edit: deny
+  edit:
+    "*.md": "allow"
+    "*": "deny"
   write: deny
   bash: deny
 ---
