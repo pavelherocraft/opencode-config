@@ -1,7 +1,7 @@
 ---
 description: Development planner. Creates detailed implementation plans for complex tasks with code snippets. Writes plan to file for downstream agents.
 mode: subagent
-model: alibaba-coding-plan/qwen3.7-plus
+model: bifrost-litellm/QWEN3.7-plus
 temperature: 0.1
 permission:
   edit:

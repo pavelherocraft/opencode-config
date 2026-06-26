@@ -1,7 +1,7 @@
 ---
 description: Bug fix agent. Analyzes errors and fixes bugs with minimal changes. Qwen 3.7 Plus.
 mode: subagent
-model: alibaba-coding-plan/qwen3.7-plus
+model: bifrost-litellm/QWEN3.7-plus
 temperature: 0.2
 permission:
   edit: allow

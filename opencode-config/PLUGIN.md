@@ -149,6 +149,7 @@ orchestrator can only call these agents:
 | execute-bug | Bug fix implementation |
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
+| docs-planner | Documentation planning (DOCS DEEP) |
 
 ### plankestrator Whitelist (9 agents)
 
@@ -190,7 +191,8 @@ const ROUTING_TABLES = {
     'summarizer',
     'execute-bug',
     'consistency-checker',
-    'view-image'
+    'view-image',
+    'docs-planner'
   ],
   plankestrator: [
     'plankestrator-identity-probe',
@@ -843,7 +845,8 @@ const ROUTING_TABLES = {
     'summarizer',
     'execute-bug',
     'consistency-checker',
-    'view-image'
+    'view-image',
+    'docs-planner'
   ],
   plankestrator: [
     'plankestrator-identity-probe',

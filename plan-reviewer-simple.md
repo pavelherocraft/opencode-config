@@ -1,7 +1,7 @@
 ﻿---
 description: Simple plan reviewer. Reviews straightforward plans for completeness and correctness. GLM-5.
 mode: subagent
-model: alibaba-coding-plan/glm-5
+model: bifrost-litellm/GLM-5.1
 temperature: 0.1
 permission:
   edit: allow

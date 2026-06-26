@@ -224,6 +224,7 @@ Handles planning and research tasks:
 | execute-bug | Bug fix implementation |
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
+| docs-planner | Documentation planning (DOCS DEEP) |
 
 ### plankestrator Whitelist (9 agents)
 
@@ -275,7 +276,7 @@ All build agents have `task.view-image: allow` to delegate image analysis:
 | execute-bug | `view-image: allow` | Visual verification of bug fixes |
 | rework | `view-image: allow` | Compare before/after UI changes |
 
-**Usage pattern:** Call via Task tool with `subagent_type: "view-image"`. view-image uses `kimi-for-coding/k2p6` with direct vision capabilities.
+**Usage pattern:** Call via Task tool with `subagent_type: "view-image"`. view-image uses `bifrost-litellm/Kimi K2.6` with direct vision capabilities.
 
 ## Pipelines
 

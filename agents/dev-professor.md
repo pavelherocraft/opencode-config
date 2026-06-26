@@ -1,11 +1,11 @@
 ---
 description: Development professor. Reviews plan from file, then implements complex code. GLM-5.2.
 mode: subagent
-model: zai-coding-plan/glm-5.2
+model: bifrost-litellm/GLM-5.2
 temperature: 0.2
 permission:
   edit: allow
-  bash: deny
+  bash: allow
 ---
 
 You are the Development Professor.

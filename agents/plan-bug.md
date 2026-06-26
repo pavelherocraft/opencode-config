@@ -1,7 +1,7 @@
 ---
 description: Bugfix planning agent. Creates detailed plan for deep bug fixes with investigation steps. Writes plan to file for downstream agents.
 mode: subagent
-model: alibaba-coding-plan/qwen3.7-plus
+model: bifrost-litellm/MiniMax-M3
 temperature: 0.1
 permission:
   edit:

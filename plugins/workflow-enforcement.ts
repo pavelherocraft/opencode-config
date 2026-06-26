@@ -119,6 +119,23 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
       // session.created — detect initial agent identity
       // ----------------------------------------------------------
       if (event.type === "session.created") {
+        // CRITICAL FIX: Reset module-level identity-lock state on every new
+        // session BEFORE attempting detection. Plugin state persists across
+        // sessions within the same opencode process. Without this reset, a
+        // build-agent session (or any non-primary agent) would inherit
+        // identityLocked=true and lockedAgentName="orchestrator" from a
+        // previous session, causing edit/write/bash to be incorrectly blocked.
+        //
+        // The header comment claims "reset on session.created", but the prior
+        // implementation only reset when detectAgentFromSessionData() returned
+        // a primary agent. For non-primary agents (build, explore, general,
+        // custom specialists) detection returns null and the stale lock
+        // leaked across sessions. This block makes the reset unconditional.
+        currentAgent = null
+        identityLocked = false
+        lockedAgentName = null
+        hasOutputtedJSON = new Map()
+
         // Try to detect agent from event data
         const sessionData = (event as any).properties?.session
           || (event as any).properties
@@ -437,40 +454,98 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         return
       }
 
+      // HARD GATE: primary agents (orchestrator / plankestrator) are restricted at
+      // the frontmatter level. The model CAN use inspection tools (task, read, glob,
+      // grep) to make good routing decisions. The model CANNOT use action tools
+      // (bash, edit, write, webfetch, todowrite, question) — those are worker/
+      // specialist tools. If something bypasses the frontmatter (opencode.json
+      // override, MCP tool added later, future tool), this runtime gate catches it.
+      const PRIMARY_AGENT_ALLOWED_TOOLS = new Set(["task", "read", "glob", "grep"])
+      if (
+        identityLocked &&
+        (lockedAgentName === "orchestrator" || lockedAgentName === "plankestrator") &&
+        !PRIMARY_AGENT_ALLOWED_TOOLS.has(input.tool)
+      ) {
+        await client.app.log({
+          body: {
+            service: "workflow-enforcement",
+            level: "error",
+            message: `PRIMARY AGENT ACTION TOOL VIOLATION — ${lockedAgentName} tried to call "${input.tool}"`,
+            extra: {
+              lockedAgent: lockedAgentName,
+              attemptedTool: input.tool,
+              allowedTools: Array.from(PRIMARY_AGENT_ALLOWED_TOOLS),
+              rule: "primary agents MAY inspect (task/read/glob/grep) but MUST NOT act (bash/edit/write/etc.)"
+            }
+          }
+        })
+        throw new Error(`
+⛔ PRIMARY AGENT FORBIDDEN ACTION TOOL
+
+You are running as: ${lockedAgentName}
+You tried to call: ${input.tool}
+
+${lockedAgentName} is a PRIMARY AGENT. Action tools are FORBIDDEN — only inspection is allowed.
+
+Allowed (read-only / delegation):
+   - task     (delegate to a specialist subagent)
+   - read     (inspect a file to inform routing)
+   - glob     (list files to assess scope)
+   - grep     (find references to inform classification)
+
+Forbidden (action tools — these belong to specialist agents):
+   - bash, edit, write, webfetch, todowrite, question, and any MCP action tool
+
+Why: inspection helps you choose the right pipeline. Action tools (running commands,
+     editing files, writing code) are for specialist agents like worker, bugfix,
+     execute-bug, devops-agent, docs-writer, plan-writer-*, research-writer-*.
+
+Fix: do NOT call ${input.tool} directly. Instead, call Task with the appropriate
+     subagent_type from your routing table:
+${(ROUTING_TABLES[lockedAgentName as keyof typeof ROUTING_TABLES] || []).map(a => `       - ${a}`).join("\n")}
+        `)
+      }
+
       // Check: is this the first task tool call? (race condition mitigation)
       // IMPORTANT: Check BEFORE pushing to workflowSteps — moved here so it's
       // available for both the reverse routing warning and the enforcement check.
-      const isFirstTaskCall = input.tool === "task" 
+      const isFirstTaskCall = input.tool === "task"
         && workflowSteps.filter(s => s.tool === "task").length === 0
 
-      // FIX: Reverse routing lookup — if we don't know the current
-      // agent yet but a task call is being made, look up which
-      // primary agent is allowed to call this subagent.
+      // REMOVED: state mutation from reverse routing lookup.
+      //
+      // The previous implementation set currentAgent based on which subagent
+      // was called, assuming any task call to a whitelisted subagent must
+      // come from the matching primary agent. That assumption is wrong:
+      // build/plan/custom agents can ALSO call task with the same subagent
+      // names (e.g. "worker", "plan-writer-simple"). Setting currentAgent
+      // via reverse routing incorrectly locked build agents as orchestrator/
+      // plankestrator, causing subsequent edit/write/bash to be blocked by
+      // the HARD BLOCK enforcement below.
+      //
+      // Race conditions (where session.created has not detected yet but
+      // the orchestrator/plankestrator is about to call task) are handled by:
+      //   - isFirstTaskCall grace period above (first task call bypasses JSON)
+      //   - session.created state reset (no stale lock from previous session)
+      //   - The `if (!currentAgent) return` early-out at the routing check,
+      //     which means unknown agents proceed without enforcement
+      //
+      // Kept as a hint-only diagnostic. NO state mutation:
       if (!currentAgent && input.tool === "task") {
         const targetAgent = (output as any)?.args?.subagent_type || (input as any)?.args?.subagent_type
         if (targetAgent) {
           const detected = detectAgentFromSubagent(targetAgent)
           if (detected) {
-            currentAgent = detected
-            // FIX: Set to TRUE — agent already outputted JSON at beginning of response
-            // before calling Task tool. This allows pipeline calls to proceed without
-            // requiring JSON before each Task call in the pipeline.
-            hasOutputtedJSON.set(detected, true)
-
             await client.app.log({
               body: {
                 service: "workflow-enforcement",
                 level: "info",
-                message: `Agent detected via reverse routing lookup: ${detected} (called ${targetAgent})`
-              }
-            })
-
-            // Warn that JSON output will be required for subsequent task calls
-            await client.app.log({
-              body: {
-                service: "workflow-enforcement",
-                level: "warn",
-                message: `JSON output will be REQUIRED for all subsequent Task tool calls by ${detected}. First call is allowed without JSON (grace period).`
+                message: `Reverse routing hint (not enforced): ${detected} would be inferred from subagent ${targetAgent}`,
+                extra: {
+                  targetAgent,
+                  hint: detected,
+                  note: "currentAgent not mutated — unknown agent proceeds without enforcement"
+                }
               }
             })
           }
@@ -691,12 +766,31 @@ Plankestrator handles: PLAN, RESEARCH, RESEARCH+PLAN
 function detectAgentFromSessionData(sessionData: any): string | null {
   if (!sessionData) return null
 
-  // Method 1 (PRIMARY): explicit agent field from opencode.
-  // This is the source of truth — when opencode loads an agent, it passes the
-  // name here. If we see orchestrator/plankestrator here, lock immediately.
-  if (sessionData.agent === "orchestrator" || sessionData.agent === "plankestrator") {
-    return sessionData.agent
+  // Method 1 (PRIMARY, AUTHORITATIVE): explicit agent field from opencode.
+  // If opencode has set an explicit agent name, that is the source of truth.
+  //
+  // CRITICAL: if the explicit agent is set but is NOT orchestrator/plankestrator
+  // (e.g. "build", "plan", "explore", "general", or any custom agent), we MUST
+  // return null IMMEDIATELY. Falling through to title/description heuristics
+  // would risk locking a build agent as orchestrator if its session title
+  // contains the substring "orchestrator" or "plankestrator" — which is a
+  // common naming convention (e.g. "orchestrator — fix login bug").
+  //
+  // The rule: an explicit non-primary agent declaration overrides any
+  // title/description text heuristic. The plugin's enforcement applies
+  // ONLY to orchestrator and plankestrator; it must not silently relabel
+  // other agents.
+  if (typeof sessionData.agent === "string") {
+    if (sessionData.agent === "orchestrator" || sessionData.agent === "plankestrator") {
+      return sessionData.agent
+    }
+    return null
   }
+
+  // Methods 2-5 (FALLBACKS): only run when no explicit agent field is set
+  // (typeof check above failed). These exist for older opencode versions or
+  // unusual payload shapes where the agent name is conveyed via title or
+  // description rather than a dedicated field.
 
   // Method 2: alternate agent-field names used by some opencode versions
   const altAgent = sessionData.parent_agent || sessionData.primary_agent || sessionData.agentName
@@ -712,14 +806,15 @@ function detectAgentFromSessionData(sessionData: any): string | null {
     }
   }
 
-  // Method 4: session title (user-named sessions — works when user follows naming convention)
+  // Method 4: session title (user-named sessions — only reachable when
+  // no explicit agent field is set, see Method 1's early return above)
   if (sessionData.title) {
     const title = String(sessionData.title).toLowerCase()
     if (title.includes("orchestrator")) return "orchestrator"
     if (title.includes("plankestrator")) return "plankestrator"
   }
 
-  // Method 5: session description
+  // Method 5: session description (same fallback-only constraint as Method 4)
   if (sessionData.description) {
     const desc = String(sessionData.description).toLowerCase()
     if (desc.includes("orchestrator") && !desc.includes("plankestrator")) return "orchestrator"

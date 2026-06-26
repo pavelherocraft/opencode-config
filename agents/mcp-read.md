@@ -1,7 +1,7 @@
 ---
 description: Read webpage content using zai_web_reader MCP (proxied via Bifrost). Use for documentation, articles, and any URL content.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/MiniMax-M2.7
 temperature: 0.1
 permission:
   edit: deny

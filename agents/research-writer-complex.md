@@ -1,7 +1,7 @@
 ﻿---
 description: Complex research writer. Conducts multi-source research and analysis using MCP tools. GLM-5.2.
 mode: subagent
-model: zai-coding-plan/glm-5.2
+model: bifrost-litellm/GLM-5.2
 temperature: 0.1
 permission:
   edit: allow

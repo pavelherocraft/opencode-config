@@ -191,7 +191,8 @@ const ROUTING_TABLES = {
     'summarizer',
     'execute-bug',
     'consistency-checker',
-    'view-image'
+    'view-image',
+    'docs-planner'
   ],
   plankestrator: [
     'plankestrator-identity-probe',
@@ -844,7 +845,8 @@ const ROUTING_TABLES = {
     'summarizer',
     'execute-bug',
     'consistency-checker',
-    'view-image'
+    'view-image',
+    'docs-planner'
   ],
   plankestrator: [
     'plankestrator-identity-probe',

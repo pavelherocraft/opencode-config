@@ -1,7 +1,7 @@
 ﻿---
 description: Complex plan writer. Creates detailed implementation plans for complex tasks with architecture decisions. GLM-5.2.
 mode: subagent
-model: zai-coding-plan/glm-5.2
+model: bifrost-litellm/GLM-5.2
 temperature: 0.1
 permission:
   edit: allow

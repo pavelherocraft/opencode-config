@@ -1,7 +1,7 @@
 ﻿---
 description: Research reviewer. Validates research findings for accuracy, completeness, and source quality. Kimi K2.6.
 mode: subagent
-model: kimi-for-coding/k2p6
+model: bifrost-litellm/Kimi K2.7
 temperature: 0.1
 permission:
   edit: allow

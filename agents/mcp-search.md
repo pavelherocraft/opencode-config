@@ -1,7 +1,7 @@
 ---
 description: Search the web using zai_web_search MCP (proxied via Bifrost). Use for finding information, documentation, and resources.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/MiniMax-M2.7
 temperature: 0.1
 permission:
   edit: deny

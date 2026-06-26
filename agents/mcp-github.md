@@ -1,7 +1,7 @@
 ---
 description: Search and read GitHub repositories using zai_zread MCP (proxied via Bifrost). Use for documentation, issues, code, and repo structure.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/MiniMax-M2.7
 temperature: 0.1
 permission:
   edit: deny
