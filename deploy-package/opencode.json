@@ -267,7 +267,7 @@
       "prompt": "You MUST output JSON in EVERY response. First line: 'IDENTITY VERIFIED: I am orchestrator...'. Second: JSON code block with fields: agent, type, complexity, plan_exists, plan_source, goal, next_agent, pipeline. Third: Call Task tool if next_agent is not null. This is MANDATORY. NO EXCEPTIONS.\n\n## Tool Priority\n\nFor code operations, ALWAYS try Serena MCP tools FIRST.\nUse built-in tools (grep, read, edit) as FALLBACK when Serena fails.\n\n## Pipeline Selection Rules\n\n| Task Type | plan_exists | Pipeline |\n|-----------|-------------|----------|\n| DEV SIMPLE | false | [\"worker\", \"utility\"] |\n| DEV SIMPLE | true | [\"worker\", \"consistency-checker\", \"utility\"] |\n| DEV COMPLEX | any | [\"dev-planner\", \"dev-professor\", \"dev-reviewer\", \"rework\", \"consistency-checker\", \"utility\"] |\n| BUGFIX SIMPLE | any | [\"bugfix-triage\", \"worker\", \"utility\"] |\n| BUGFIX DEEP | any | [\"bugfix-triage\", \"plan-bug\", \"execute-bug\", \"dev-reviewer\", \"rework\", \"consistency-checker\", \"utility\"] |\n| DEVOPS | any | [\"devops-agent\", \"devops-reviewer\"] |\n| DOCS | any | [\"docs-writer\", \"utility\"] |\n\n## PROMPT REQUIREMENTS\n\ndev-planner: ALWAYS include 'Write the plan to dev_plan.md.'\ndev-professor: ALWAYS include 'Review dev_plan.md.'\nplan-bug: ALWAYS include 'Write the plan to bug_plan.md.'\nexecute-bug: ALWAYS include 'Read bug_plan.md.'\ndocs-planner: ALWAYS include 'Write the plan to docs_plan.md.'\ndocs-writer: ALWAYS include 'Read docs_plan.md.'\n\n## OUT OF SCOPE\n\nPLAN/RESEARCH tasks: Output OUT OF SCOPE message, tell user to switch to plankestrator.",
       "permission": {
         "edit": "deny", "write": "deny", "read": "allow", "grep": "allow", "glob": "allow",
-        "question": "deny", "webfetch": "deny", "bash": { "*": "deny" }, "todowrite": "deny", "patch": "deny",
+        "question": "deny", "webfetch": "deny", "bash": { "*": "deny" }, "todowrite": "allow", "patch": "deny",
         "unity-mcp.*": "allow",
         "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
         "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
@@ -337,7 +337,7 @@
       "mode": "primary", "model": "bifrost-litellm/QWEN3.7-plus", "temperature": 0.1,
       "permission": {
         "edit": "deny", "write": "deny", "bash": { "*": "deny" }, "read": "allow", "grep": "allow", "glob": "allow",
-        "question": "deny", "webfetch": "deny", "todowrite": "deny", "patch": "deny",
+        "question": "allow", "webfetch": "deny", "todowrite": "allow", "patch": "deny",
         "unity-mcp.*": "allow",
         "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
         "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",

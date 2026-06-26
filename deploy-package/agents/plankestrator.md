@@ -9,10 +9,10 @@ permission:
   read: allow
   grep: allow
   glob: allow
-  question: deny
+  question: allow
   webfetch: deny
   bash: deny
-  todowrite: deny
+  todowrite: allow
   patch: deny
 ---
 

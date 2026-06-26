@@ -1,7 +1,7 @@
 ---
 description: Utility agent. Syntax checks, linting, file operations, external tools. MiniMax 2.7.
 mode: subagent
-model: bifrost-litellm/QWEN3.7-plus
+model: bifrost-litellm/MiniMax-M2.7
 temperature: 0.1
 permission:
   edit: deny

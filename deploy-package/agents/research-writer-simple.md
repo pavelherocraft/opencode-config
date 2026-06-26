@@ -1,7 +1,7 @@
 ---
 description: Simple research writer. Gathers information from single sources using MCP tools. GLM-5.
 mode: subagent
-model: bifrost-litellm/GLM-5.1
+model: bifrost-litellm/mimo-v2.5-pro
 temperature: 0.1
 permission:
   edit: allow

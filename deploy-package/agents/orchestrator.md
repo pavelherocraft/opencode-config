@@ -12,7 +12,7 @@ permission:
   question: deny
   webfetch: deny
   bash: deny
-  todowrite: deny
+  todowrite: allow
   patch: deny
 ---
 

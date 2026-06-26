@@ -1,7 +1,7 @@
 ---
 description: Bugfix triage agent. Analyzes bugs and determines if simple fix or needs deep investigation. Qwen3.7 Plus.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/QWEN3.7-plus
 temperature: 0.1
 permission:
   edit:

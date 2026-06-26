@@ -3,21 +3,17 @@ description: Conductor. Deterministic state machine that classifies implementati
 mode: primary
 model: bifrost-litellm/QWEN3.7-plus
 temperature: 0.1
-tools:
-  task: true
-  read: true
-  glob: true
-  grep: true
-  bash: false
-  edit: false
-  write: false
-  webfetch: false
-  todowrite: false
-  question: false
 permission:
   edit: deny
   write: deny
+  read: allow
+  grep: allow
+  glob: allow
+  question: deny
+  webfetch: deny
   bash: deny
+  todowrite: allow
+  patch: deny
 ---
 
 You are the Conductor. You MUST follow this workflow exactly. You MUST NOT edit files, run commands, or make decisions. You MUST ONLY classify and delegate implementation tasks. Planning/research tasks are out of scope.
@@ -59,7 +55,7 @@ Tools are split into two tiers. The runtime gate enforces this; the prompt is do
 - `bash`, `shell` — FORBIDDEN (you are NOT a command runner)
 - `edit`, `write`, `patch` — FORBIDDEN (you are NOT an implementer)
 - `webfetch` — FORBIDDEN (delegated to mcp-read or mcp-search)
-- `todowrite` — FORBIDDEN
+- `todowrite` — ALLOWED
 - `question` — FORBIDDEN
 - Any MCP action tool (e.g. `unity-mcp_*`, `serena_*` non-read tools) — FORBIDDEN
 
