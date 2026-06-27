@@ -2,77 +2,914 @@
 
 ## 1. Overview
 
-Enforces routing table compliance, prevents identity drift, validates JSON output format.
+The Workflow Enforcement Plugin is a critical component of the OpenCode dual-primary-agent architecture. It enforces routing table compliance, prevents identity drift, and validates JSON output format.
 
 ### Purpose
-- Routing Table Enforcement
-- Identity Drift Detection
-- JSON Output Validation
-- Workflow Step Logging
+
+- **Routing Table Enforcement**: Ensures agents can only call other agents within their whitelisted set
+- **Identity Drift Detection**: Alerts when an agent's identity changes unexpectedly mid-session
+- **JSON Output Validation**: Validates that agent outputs contain required fields with correct values
+- **Workflow Step Logging**: Logs all workflow steps for debugging and auditing
+
+### Why It Exists
+
+The dual-primary-agent architecture (orchestrator + plankestrator) requires strict separation of concerns:
+
+- **orchestrator** handles execution tasks: BUGFIX, DEVOPS, DEV, DOCS
+- **plankestrator** handles planning tasks: PLAN, RESEARCH, RESEARCH+PLAN
+
+Without enforcement, agents could:
+- Call agents outside their workflow (breaking the pipeline)
+- Drift between identities (claiming to be the wrong agent)
+- Output invalid JSON (breaking downstream processing)
+
+---
 
 ## 2. Plugin Structure
 
-Location: `~/.config/opencode/plugins/workflow-enforcement.ts`
+### Location
+
+```
+~/.config/opencode/plugins/workflow-enforcement.ts
+```
+
+### Export
 
 ```typescript
 export const WorkflowEnforcement: Plugin
 ```
 
+### Configuration
+
+The plugin is configured in `~/.config/opencode/opencode.json`:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": ["./plugins/workflow-enforcement.ts"],
+  "mcp": { ... },
+  "agents": { ... }
+}
+```
+
+### Dependencies
+
+```json
+{
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.0.0"
+  }
+}
+```
+
+---
+
 ## 3. Lifecycle Hooks
 
-| Hook | When | What |
-|------|------|------|
-| `event` | System events | Handles session.created, session.idle, message.updated |
-| `tool.execute.before` | Before tool call | Routing table enforcement |
-| `tool.execute.after` | After tool completes | Logs completion |
+The plugin implements 3 top-level hooks (plus internal event handling):
+
+| Hook | When | What It Does |
+|------|------|--------------|
+| `event` | System events fire | Handles `session.created`, `session.idle`, `message.updated` — agent detection, identity tracking, JSON validation |
+| `tool.execute.before` | Before any tool call | Routing table enforcement + reverse routing lookup for agent detection |
+| `tool.execute.after` | After tool completes | Logs tool completion |
+
+**Important**: `session.created`, `session.idle`, `message.updated` are NOT top-level hooks — they are **event types** handled inside the `event` hook. The old plugin used them as top-level hooks, which caused them to be silently ignored.
+
+### Hook Details
+
+#### `event` (replaces old `session.created`, `session.updated`, `session.idle`, `message.updated`)
+
+**Trigger**: Any system event fires (session lifecycle, message updates, etc.).
+
+**Purpose**: Agent detection, identity tracking, JSON validation, and workflow logging.
+
+**Behavior**: Checks `event.type` to handle:
+1. `session.created` — Detect initial agent identity from session data; reset workflow tracking
+2. `session.idle` — Log workflow summary when agent finishes
+3. `message.updated` — Parse JSON from messages to detect agent (if not yet known) and validate output
+
+**Agent Detection Priority**:
+1. Session data (title, agent field) on `session.created`
+2. JSON output in messages on `message.updated`
+3. Reverse routing lookup in `tool.execute.before` (fallback)
+
+#### `tool.execute.before`
+
+**Trigger**: Before any tool is executed.
+
+**Purpose**: Enforce routing table compliance + fallback agent detection.
+
+**Behavior**:
+1. **Reverse routing lookup**: If `currentAgent` is unknown and a `task` call is made, look up which primary agent can call this subagent
+2. Check if tool is `task` (agent delegation)
+3. Extract target agent name from tool parameters
+4. Look up current agent's whitelist
+5. If target not in whitelist → throw error, block execution
+6. If target in whitelist → allow execution, log valid routing
+
+#### `tool.execute.after`
+
+**Trigger**: After any tool completes execution.
+
+**Purpose**: Log workflow step completion.
+
+**Behavior**:
+1. Log tool name and result status
+2. Track workflow progress
+3. Enable debugging of pipeline execution
+
+---
 
 ## 4. Routing Tables
 
-### orchestrator (21 agents)
-orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bugfix, rework, mcp-read, utility, bugfix-triage, plan-bug, devops-agent, devops-reviewer, dev-planner, mcp-search, docs-writer, summarizer, execute-bug, consistency-checker, view-image, docs-planner
+### orchestrator Whitelist (21 agents)
 
-### plankestrator (9 agents)
-plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-reviewer-simple, plan-reviewer-complex, research-writer-simple, research-writer-complex, research-reviewer, devops-readonly
+orchestrator can only call these agents:
+
+| Agent Name | Role |
+|------------|------|
+| orchestrator-identity-probe | Identity verification |
+| dev-reviewer | Code review |
+| dev-professor | Development guidance |
+| mcp-github | GitHub operations |
+| worker | Simple development tasks |
+| bugfix | Bug fixing |
+| rework | Rework on feedback |
+| mcp-read | File reading |
+| utility | Syntax checking, formatting |
+| bugfix-triage | Initial bug analysis |
+| plan-bug | Bug fix planning |
+| devops-agent | DevOps operations |
+| devops-reviewer | DevOps review |
+| dev-planner | Development planning |
+| mcp-search | Web search |
+| docs-writer | Documentation writing |
+| summarizer | Content summarization |
+| execute-bug | Bug fix implementation |
+| consistency-checker | Architecture consistency validation |
+| view-image | Image analysis |
+| docs-planner | Documentation planning (DOCS DEEP) |
+
+### plankestrator Whitelist (9 agents)
+
+plankestrator can only call these agents:
+
+| Agent Name | Role |
+|------------|------|
+| plankestrator-identity-probe | Identity verification |
+| plan-writer-simple | Simple planning |
+| plan-writer-complex | Complex planning |
+| plan-reviewer-simple | Simple plan review |
+| plan-reviewer-complex | Complex plan review |
+| research-writer-simple | Simple research |
+| research-writer-complex | Complex research |
+| research-reviewer | Research review |
+| devops-readonly | DevOps read-only |
+
+### Routing Table Implementation
+
+```typescript
+const ROUTING_TABLES = {
+  orchestrator: [
+    'orchestrator-identity-probe',
+    'dev-reviewer',
+    'dev-professor',
+    'mcp-github',
+    'worker',
+    'bugfix',
+    'rework',
+    'mcp-read',
+    'utility',
+    'bugfix-triage',
+    'plan-bug',
+    'devops-agent',
+    'devops-reviewer',
+    'dev-planner',
+    'mcp-search',
+    'docs-writer',
+    'summarizer',
+    'execute-bug',
+    'consistency-checker',
+    'view-image',
+    'docs-planner'
+  ],
+  plankestrator: [
+    'plankestrator-identity-probe',
+    'plan-writer-simple',
+    'plan-writer-complex',
+    'plan-reviewer-simple',
+    'plan-reviewer-complex',
+    'research-writer-simple',
+    'research-writer-complex',
+    'research-reviewer',
+    'devops-readonly'
+  ]
+};
+```
+
+### Tool Allowance Rules for Primary Agents
+
+Primary agents (`orchestrator`, `plankestrator`) are pure routers. The plugin enforces a **single tool gate** at `tool.execute.before` (lines ~457–507 of `workflow-enforcement.ts`):
+
+| Tool | Allowed for Primary Agents? |
+|------|-----------------------------|
+| `task` | ✅ Yes (primary purpose — delegate to specialists) |
+| `read` | ✅ Yes (inspection convenience for quick lookups) |
+| `glob` | ✅ Yes (inspection convenience for quick lookups) |
+| `grep` | ✅ Yes (inspection convenience for quick lookups) |
+| `todowrite` | ✅ Yes (track pipeline progress) |
+| `question` | ✅ Yes (ask user clarifying questions) |
+| `bash`, `edit`, `write`, `patch`, `webfetch` | ❌ No — hard block with error |
+| Any MCP action tool (`unity-mcp_*`, `serena_*`, `zai_*` write-side) | ❌ No — hard block with error |
+
+**Why read/glob/grep are allowed:**
+- Primary agents need minimal context to make good routing decisions (e.g. peek at `AGENTS.md` or `ARCHITECTURE.md` to inform classification).
+- Heavy investigation is still delegated: `mcp-read` for file reading, `mcp-search` for codebase search, `devops-readonly` for read-only ops queries.
+
+**Historical note:** Earlier plugin revisions had a second contradictory gate (the so-called "Gate B") that blocked `read` / `glob` / `grep` despite this gate allowing them. That gate was removed because it caused the model to fall back to producing plan/research content in its own message body when read was blocked. See `plugins/workflow-enforcement.ts` comments around line 567 for the rationale.
+
+---
 
 ## 5. Error Messages
 
-- `WORKFLOW VIOLATION` — routing table breach
-- `IDENTITY DRIFT DETECTED` — agent identity changed
-- `INVALID JSON OUTPUT` — missing/invalid fields
-- `JSON OUTPUT REQUIRED` — Task tool called before JSON output
-- `PRIMARY AGENT FORBIDDEN ACTION TOOL` — primary agent tried action tool
+### Routing Violation
+
+When an agent attempts to call an agent not in its whitelist:
+
+```
+🚫 WORKFLOW VIOLATION - ROUTING TABLE ENFORCEMENT
+
+Current Agent: orchestrator
+Attempted Call: plan-writer-simple
+Allowed Agents: orchestrator-identity-probe, dev-reviewer, dev-professor, 
+                mcp-github, worker, bugfix, rework, mcp-read, utility, 
+                bugfix-triage, plan-bug, devops-agent, devops-reviewer,
+                dev-planner, mcp-search, docs-writer, summarizer, execute-bug,
+                consistency-checker, view-image
+
+This violates the routing table configuration.
+Please follow the correct workflow for your agent type.
+
+Orchestrator handles: BUGFIX, DEVOPS, DEV, DOCS
+Plankestrator handles: PLAN, RESEARCH, RESEARCH+PLAN
+```
+
+### Identity Drift Detection
+
+When agent identity changes mid-session:
+
+```
+⚠️ IDENTITY DRIFT DETECTED
+
+Previous Agent: orchestrator
+New Agent: plankestrator
+Session ID: session-abc123
+
+This may indicate:
+- User manually switched agents
+- Agent incorrectly identified itself
+- Session state corruption
+
+Current agent updated to: plankestrator
+```
+
+### Invalid JSON Output
+
+When JSON output is missing required fields or has invalid values:
+
+```
+❌ INVALID JSON OUTPUT
+
+Agent: orchestrator
+Missing Fields: plan_exists, plan_source
+Errors:
+  - Missing required field: plan_exists
+  - Missing required field: plan_source
+  - Invalid value for type: PLAN (expected: BUGFIX|DEVOPS|DEV|DOCS|null)
+
+Expected format:
+{
+  "agent": "orchestrator",
+  "type": "BUGFIX|DEVOPS|DEV|DOCS|null",
+  "complexity": "SIMPLE|COMPLEX|DEEP|SUPERCOMPLEX|null",
+  "plan_exists": true|false|null,
+  "plan_source": "description or null",
+  "goal": "one sentence description",
+  "next_agent": "agent-name or null",
+  "pipeline": ["agent1", "agent2"] or []
+}
+```
+
+---
 
 ## 6. JSON Validation
 
-### orchestrator Required Fields
-agent, type, complexity, plan_exists, plan_source, goal, next_agent, pipeline
+### Required Fields per Agent
 
-### plankestrator Required Fields
-agent, state, type, complexity, goal, next_agent, pipeline
+#### orchestrator
 
-## 7. Agent Detection (Priority Order)
-1. IDENTITY VERIFIED text (highest)
-2. JSON output in messages
-3. Reverse routing lookup (fallback)
+```json
+{
+  "agent": "orchestrator",
+  "type": "BUGFIX|DEVOPS|DEV|DOCS|null",
+  "complexity": "SIMPLE|COMPLEX|DEEP|SUPERCOMPLEX|null",
+  "plan_exists": true|false|null,
+  "plan_source": "description of plan source if exists, null if not",
+  "goal": "one sentence description",
+  "next_agent": "exact agent name from routing table or null",
+  "pipeline": ["agent1", "agent2", "utility"] or []
+}
+```
 
-## 8. Identity Lock (v3)
-- Locked at session.start from session.agent field
-- Drift = hard error (not soft warning)
-- Forbidden vocabulary check between primary agents
+#### plankestrator
+
+```json
+{
+  "agent": "plankestrator",
+  "state": "CLASSIFY|EXECUTE|REVIEW|COMPLETE",
+  "type": "PLAN|RESEARCH|RESEARCH+PLAN|null",
+  "complexity": "SIMPLE|COMPLEX|null",
+  "goal": "one sentence description",
+  "next_agent": "agent-name or null",
+  "pipeline": ["step1", "step2"] or []
+}
+```
+
+### Valid Values
+
+#### orchestrator
+
+| Field | Valid Values |
+|-------|--------------|
+| `agent` | `["orchestrator"]` |
+| `type` | `["BUGFIX", "DEVOPS", "DEV", "DOCS", null]` |
+| `complexity` | `["SIMPLE", "COMPLEX", "DEEP", "SUPERCOMPLEX", null]` |
+| `plan_exists` | `[true, false, null]` |
+| `plan_source` | `[string, null]` |
+| `goal` | `[string]` |
+| `next_agent` | `[agent name from whitelist, null]` |
+| `pipeline` | `[array of agent names, []]` |
+
+#### plankestrator
+
+| Field | Valid Values |
+|-------|--------------|
+| `agent` | `["plankestrator"]` |
+| `state` | `["CLASSIFY", "EXECUTE", "REVIEW", "COMPLETE"]` |
+| `type` | `["PLAN", "RESEARCH", "RESEARCH+PLAN", null]` |
+| `complexity` | `["SIMPLE", "COMPLEX", null]` |
+| `goal` | `[string]` |
+| `next_agent` | `[agent name from whitelist, null]` |
+| `pipeline` | `[array of agent names, []]` |
+
+### Validation Logic
+
+```typescript
+function validateJSONOutput(json: any, agent: string): ValidationResult {
+  const errors: string[] = [];
+  const missingFields: string[] = [];
+
+  // Required fields
+  const requiredFields = REQUIRED_JSON_FIELDS[agent] || [];
+  for (const field of requiredFields) {
+    if (!(field in json)) {
+      missingFields.push(field);
+    }
+  }
+
+  // Valid enum values
+  const validValues = VALID_VALUES[agent] || {};
+  for (const [field, values] of Object.entries(validValues)) {
+    if (json[field] !== undefined && !values.includes(json[field])) {
+      errors.push(`Invalid value for ${field}: ${json[field]}, expected: ${values.join("|")}`);
+    }
+  }
+
+  // next_agent must be in whitelist or null
+  if (json.next_agent !== null && json.next_agent !== undefined) {
+    const allowedAgents = ROUTING_TABLES[agent] || [];
+    if (!allowedAgents.includes(json.next_agent)) {
+      errors.push(`Invalid next_agent: ${json.next_agent} (not in whitelist)`);
+    }
+  }
+
+  // pipeline must be array or null
+  if (json.pipeline !== undefined && json.pipeline !== null && !Array.isArray(json.pipeline)) {
+    errors.push(`Invalid pipeline: ${json.pipeline} (expected: array)`);
+  }
+
+  // goal must be string
+  if (json.goal !== undefined && json.goal !== null && typeof json.goal !== "string") {
+    errors.push(`Invalid goal: ${json.goal} (expected: string)`);
+  }
+
+  // plan_exists must be boolean or null (orchestrator only)
+  if (agent === "orchestrator" && json.plan_exists !== undefined && json.plan_exists !== null) {
+    if (typeof json.plan_exists !== "boolean") {
+      errors.push(`Invalid plan_exists: ${json.plan_exists} (expected: boolean|null)`);
+    }
+  }
+
+  // plan_source must be string or null (orchestrator only)
+  if (agent === "orchestrator" && json.plan_source !== undefined && json.plan_source !== null) {
+    if (typeof json.plan_source !== "string") {
+      errors.push(`Invalid plan_source: ${json.plan_source} (expected: string|null)`);
+    }
+  }
+
+  // Identity match
+  if (json.agent && json.agent !== agent) {
+    errors.push(`IDENTITY MISMATCH: JSON claims agent=${json.agent}, but current agent is ${agent}`);
+  }
+
+  return { valid: errors.length === 0 && missingFields.length === 0, errors, missingFields };
+}
+```
+
+---
+
+## 7. Agent Detection
+
+The plugin detects which agent is running using multiple methods, triggered at different points in the lifecycle:
+
+### Detection Methods (Priority Order)
+
+1. **Session Event Data** (on `session.created` event)
+   - Checks session title for "orchestrator" or "plankestrator"
+   - Checks session.agent field
+   - Handled by `detectAgentFromSessionData()`
+
+2. **JSON in Message Output** (on `message.updated` event)
+   - Parses assistant messages for `"agent": "..."` field
+   - Only runs if agent wasn't detected from session data
+   - Handled inside the `event` hook
+
+3. **Reverse Routing Lookup** (in `tool.execute.before` hook)
+   - When a `task` call is made, looks up which primary agent can call this subagent
+   - Last-resort fallback if neither session data nor JSON detected the agent
+   - Handled by `detectAgentFromSubagent()`
+
+### Detection Implementation
+
+```typescript
+// Method 1: From session event data (fires on session.created)
+function detectAgentFromSessionData(sessionData: any): string | null {
+  if (sessionData.title) {
+    const title = String(sessionData.title).toLowerCase()
+    if (title.includes("orchestrator")) return "orchestrator"
+    if (title.includes("plankestrator")) return "plankestrator"
+  }
+  if (sessionData.agent === "orchestrator" || sessionData.agent === "plankestrator") {
+    return sessionData.agent
+  }
+  return null
+}
+
+// Method 3: Reverse routing lookup (fires in tool.execute.before)
+function detectAgentFromSubagent(subagentName: string): string | null {
+  for (const [primaryAgent, whitelist] of Object.entries(ROUTING_TABLES)) {
+    if (whitelist.includes(subagentName)) {
+      return primaryAgent
+    }
+  }
+  return null
+}
+```
+
+### Detection Flow
+
+```
+Session Created Event
+        │
+        ▼
+┌─────────────────────┐
+│ Check Session Data  │
+│ (title, agent field)│
+└─────────┬───────────┘
+          │
+    ┌─────┴─────┐
+    │ Found?    │
+    └─────┬─────┘
+     Yes  │  No
+    ┌─────┴─────┐
+    │           ▼
+    │   Wait for message.updated event
+    │           │
+    │           ▼
+    │   ┌─────────────────────┐
+    │   │ Parse message for   │
+    │   │ "agent" JSON field  │
+    │   └─────────┬───────────┘
+    │             │
+    │       ┌─────┴─────┐
+    │       │ Found?    │
+    │       └─────┬─────┘
+    │        Yes  │  No
+    │       ┌─────┴─────┐
+    │       │           ▼
+    │       │   Wait for task tool call
+    │       │           │
+    │       │           ▼
+    │       │   ┌─────────────────────┐
+    │       │   │ Reverse Routing     │
+    │       │   │ Lookup              │
+    │       │   └─────────┬───────────┘
+    │       │             │
+    │       │       ┌─────┴─────┐
+    │       │       │ Found?    │
+    │       │       └─────┬─────┘
+    │       │        Yes  │  No
+    │       │       ┌─────┴─────┐
+    │       │       │           ▼
+    │       │       │   ┌─────────────┐
+    │       │       │   │ Return null │
+    │       │       │   └─────────────┘
+    ▼       ▼       ▼
+┌─────────────────────────┐
+│ Update currentAgent     │
+│ Log detection result    │
+└─────────────────────────┘
+```
+
+---
+
+## 8. Identity Drift Detection
+
+### What Is Identity Drift?
+
+Identity drift occurs when an agent's identity changes unexpectedly during a session. This can happen due to:
+
+- User manually switching agents
+- Agent incorrectly identifying itself
+- Session state corruption
+- Model confusion in output
+
+### Identity Lock Mechanism (v3)
+
+The plugin locks identity at session start. Once locked, drift is a **hard error**, not a soft warning:
+
+```typescript
+// On session.created
+if (event.type === "session.created") {
+  const detected = detectAgentFromSessionData(sessionData)
+  if (detected === "orchestrator" || detected === "plankestrator") {
+    currentAgent = detected
+    identityLocked = true
+    lockedAgentName = detected
+  }
+}
+
+// On message.updated — drift handling differs based on lock state
+if (jsonContent?.agent && currentAgent && jsonContent.agent !== currentAgent) {
+  if (identityLocked) {
+    // HARD ERROR: do NOT update currentAgent; downstream Task calls are still
+    // validated against the LOCKED routing table. This is the v3 fix for
+    // orchestrator↔plankestrator confusion.
+    await client.app.log({ level: "error", message: "IDENTITY DRIFT REJECTED — agent attempted to claim a different identity than session lock" })
+  } else {
+    // Soft correction (legacy): only when lock is not yet established
+    await client.app.log({ level: "warn", message: "IDENTITY DRIFT DETECTED (unlocked — correcting)" })
+    currentAgent = String(jsonContent.agent)
+  }
+}
+```
+
+**Note**: The v1 plugin used a `session.updated` hook for drift detection, but `session.updated` is NOT a valid opencode plugin hook. The v2/v3 plugin detects drift from JSON output in messages instead.
+
+### Forbidden Vocabulary Check (v3)
+
+The plugin greps locked-agent message text for terminology that belongs to the OTHER primary agent. This catches the orchestrator↔plankestrator confusion mode where the model produces text from the wrong agent's playbook:
+
+```typescript
+const FORBIDDEN_VOCAB: Record<string, string[]> = {
+  orchestrator: [
+    "I am plankestrator", "I'm plankestrator", "I am the Plankestrator",
+    "## PLAN", "# Implementation Plan", "research-writer-", "plan-writer-",
+    "research-reviewer", "plan-reviewer-"
+  ],
+  plankestrator: [
+    "I am orchestrator", "I'm orchestrator", "I am the Conductor",
+    "I am the Task classifier", "Task classifier and router",
+    "bugfix-triage", "execute-bug", "devops-agent", "consistency-checker"
+  ]
+}
+```
+
+Violations are logged as `error` but do NOT throw (legitimate cross-references like OUT OF SCOPE messages mention forbidden tokens by design).
+
+### Drift Log Examples
+
+#### Hard-rejected drift (identity locked):
+
+```
+[2026-04-28T10:30:45.123Z] [ERROR] IDENTITY DRIFT REJECTED — agent attempted to claim a different identity than session lock
+  Locked Agent: orchestrator
+  Claimed Agent: plankestrator
+  Session ID: session-abc123
+```
+
+#### Soft correction (unlocked — legacy):
+
+```
+[2026-04-28T10:30:45.123Z] [WARN] IDENTITY DRIFT DETECTED (unlocked — correcting)
+  Previous Agent: orchestrator
+  New Agent: plankestrator
+```
+
+#### Forbidden vocabulary violation:
+
+```
+[2026-04-28T10:30:45.123Z] [ERROR] FORBIDDEN VOCABULARY DETECTED — orchestrator message contains plankestrator terminology
+  Locked Agent: orchestrator
+  Other Agent: plankestrator
+  Violations: ["## PLAN", "plan-writer-complex"]
+```
+
+### Handling Drift
+
+When identity is **locked**, drift is rejected: `currentAgent` is NOT updated, and downstream Task calls are validated against the locked routing table. The agent's message still passes through, but the violation is logged for audit.
+
+When identity is **unlocked** (no `session.created` agent detected yet), drift triggers a soft correction and `currentAgent` is updated.
+
+---
 
 ## 9. Debugging
 
-Log patterns:
-- `Workflow enforcement plugin initialized`
-- `Valid routing: X → Y`
-- `WORKFLOW VIOLATION`
-- `IDENTITY DRIFT`
-- `INVALID JSON`
+### How to Check If Plugin Is Working
 
-## 10. File Locations
+#### 1. Check Initialization Log
+
+Look for this log message on session start:
+
+```
+[INFO] Workflow enforcement plugin initialized
+[INFO] Current agent detected: orchestrator
+```
+
+#### 2. Check Valid Routing Logs
+
+When an agent makes a valid call:
+
+```
+[DEBUG] Valid routing: orchestrator → worker
+[DEBUG] Routing table check passed
+```
+
+#### 3. Check Violation Logs
+
+When routing is blocked:
+
+```
+[ERROR] 🚫 WORKFLOW VIOLATION - ROUTING TABLE ENFORCEMENT
+[ERROR] Current Agent: orchestrator
+[ERROR] Attempted Call: plan-writer-simple
+[ERROR] Allowed Agents: [...]
+```
+
+#### 4. Check Identity Drift Logs
+
+When identity changes:
+
+```
+[WARN] ⚠️ IDENTITY DRIFT DETECTED
+[WARN] Previous Agent: orchestrator
+[WARN] New Agent: plankestrator
+```
+
+#### 5. Check JSON Validation Logs
+
+When JSON is invalid:
+
+```
+[ERROR] ❌ INVALID JSON OUTPUT
+[ERROR] Agent: orchestrator
+[ERROR] Missing Fields: plan_exists, plan_source
+```
+
+### Log Location
+
+```
+~/.local/share/opencode/log/*.log
+```
+
+### Log Format
+
+```
+[YYYY-MM-DDTHH:mm:ss.SSSZ] [LEVEL] Message
+[LEVEL] = [DEBUG] | [INFO] | [WARN] | [ERROR]
+```
+
+### Debugging Commands
+
+```bash
+# View recent logs
+tail -100 ~/.local/share/opencode/log/opencode.log
+
+# Search for violations
+grep "WORKFLOW VIOLATION" ~/.local/share/opencode/log/*.log
+
+# Search for drift
+grep "IDENTITY DRIFT" ~/.local/share/opencode/log/*.log
+
+# Search for JSON errors
+grep "INVALID JSON" ~/.local/share/opencode/log/*.log
+
+# View all plugin activity
+grep "Workflow enforcement" ~/.local/share/opencode/log/*.log
+```
+
+### Plugin API Logging
+
+The plugin uses `client.app.log()` for logging:
+
+```typescript
+// In plugin code
+await client.app.log({
+  body: {
+    service: "workflow-enforcement",
+    level: "info",
+    message: "Workflow enforcement plugin initialized"
+  }
+});
+await client.app.log({
+  body: {
+    service: "workflow-enforcement",
+    level: "info",
+    message: `Valid routing: ${currentAgent} → ${targetAgent}`
+  }
+});
+await client.app.log({
+  body: {
+    service: "workflow-enforcement",
+    level: "warn",
+    message: `WORKFLOW VIOLATION: ${currentAgent} cannot call ${targetAgent}`
+  }
+});
+```
+
+---
+
+## 10. Known Issues
+
+### 1. Agent Detection May Still Fail
+
+**Issue**: If session title doesn't contain "orchestrator" or "plankestrator", session.agent is not set, and the agent doesn't output JSON before making a task call, the reverse routing lookup may fail if the subagent name is ambiguous (exists in both routing tables).
+
+**Symptoms**:
+- `currentAgent` remains `null`
+- Routing checks are skipped with a warning
+- JSON validation may not run
+
+**Workaround**: The plugin has three detection methods (session data → JSON output → reverse routing) so detection will succeed in most cases.
+
+### 2. OpenCode Permissions May Block Before Plugin Hook
+
+**Issue**: OpenCode's built-in permission system may block a Task call before the `tool.execute.before` hook runs.
+
+**Symptoms**:
+- No "WORKFLOW VIOLATION" log
+- Call blocked with permission error
+- Plugin never sees the call
+
+**Workaround**: Check OpenCode's permission logs separately.
+
+### 3. Plugin Logs via client.app.log()
+
+**Issue**: Plugin logs go to session logs, not a dedicated plugin log file.
+
+**Symptoms**:
+- Logs mixed with other session activity
+- Harder to filter plugin-specific logs
+
+**Workaround**: Use grep with specific patterns:
+```bash
+grep -E "(WORKFLOW VIOLATION|IDENTITY DRIFT|INVALID JSON|Workflow enforcement)" ~/.local/share/opencode/log/*.log
+```
+
+### 4. JSON Parsing May Fail on Malformed Output
+
+**Issue**: If agent outputs malformed JSON, validation may fail silently.
+
+**Symptoms**:
+- No validation error logged
+- Missing fields not detected
+
+**Workaround**: Ensure agents output valid JSON format.
+
+### 5. Race Conditions on Rapid Agent Switches
+
+**Issue**: If user rapidly switches agents, drift detection may log multiple warnings.
+
+**Symptoms**:
+- Multiple "IDENTITY DRIFT DETECTED" logs
+- Confusing audit trail
+
+**Workaround**: This is expected behavior for manual switches; review session timeline.
+
+---
+
+## 11. Configuration Reference
+
+### Full Plugin Configuration
+
+```typescript
+// ~/.config/opencode/plugins/workflow-enforcement.ts
+
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
+  return {
+    // Single "event" hook handles all event types
+    event: async ({ event }) => {
+      if (event.type === "session.created") {
+        // Detect initial agent from session data
+      }
+      if (event.type === "session.idle") {
+        // Log workflow summary
+      }
+      if (event.type === "message.updated") {
+        // Validate JSON output + detect agent
+      }
+    },
+    "tool.execute.before": async (input, output) => {
+      // Routing table enforcement + reverse routing lookup
+    },
+    "tool.execute.after": async (input, output) => {
+      // Log completion
+    }
+  }
+}
+```
+
+### Routing Table Configuration
+
+```typescript
+const ROUTING_TABLES = {
+  orchestrator: [
+    'orchestrator-identity-probe',
+    'dev-reviewer',
+    'dev-professor',
+    'mcp-github',
+    'worker',
+    'bugfix',
+    'rework',
+    'mcp-read',
+    'utility',
+    'bugfix-triage',
+    'plan-bug',
+    'devops-agent',
+    'devops-reviewer',
+    'dev-planner',
+    'mcp-search',
+    'docs-writer',
+    'summarizer',
+    'execute-bug',
+    'consistency-checker',
+    'view-image',
+    'docs-planner'
+  ],
+  plankestrator: [
+    'plankestrator-identity-probe',
+    'plan-writer-simple',
+    'plan-writer-complex',
+    'plan-reviewer-simple',
+    'plan-reviewer-complex',
+    'research-writer-simple',
+    'research-writer-complex',
+    'research-reviewer',
+    'devops-readonly'
+  ]
+};
+```
+
+---
+
+## 12. Summary
+
+| Feature | Description |
+|---------|-------------|
+| **Routing Enforcement** | Blocks Task calls to agents outside whitelist |
+| **Identity Detection** | Detects current agent from session title, field, or JSON |
+| **Drift Detection** | Alerts when agent identity changes mid-session |
+| **JSON Validation** | Validates required fields and values in agent output |
+| **Logging** | Comprehensive logging for debugging and auditing |
+
+### Quick Reference
+
+| Check | Log Pattern |
+|-------|-------------|
+| Plugin initialized | `Workflow enforcement plugin initialized` |
+| Valid routing | `Valid routing: X → Y` |
+| Routing violation | `WORKFLOW VIOLATION` |
+| Identity drift | `IDENTITY DRIFT DETECTED` |
+| Invalid JSON | `INVALID JSON OUTPUT` |
+
+### File Locations
 
 | File | Location |
 |------|----------|
 | Plugin | `~/.config/opencode/plugins/workflow-enforcement.ts` |
 | Config | `~/.config/opencode/opencode.json` |
 | Logs | `~/.local/share/opencode/log/*.log` |
+| Agents | `~/.config/opencode/agents/*.md` |

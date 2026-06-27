@@ -198,6 +198,14 @@ Handles planning and research tasks:
 - RESEARCH - Research workflows
 - RESEARCH+PLAN - Combined research and planning
 
+**plankestrator is a router, not a writer.** It MUST classify each request (PLAN / RESEARCH / RESEARCH+PLAN / OUT OF SCOPE), determine complexity (SIMPLE / COMPLEX), resolve the matching pipeline from its routing table, and then call the **first** agent via the `task` tool. After each agent in the pipeline returns, plankestrator advances the state machine (CLASSIFY → EXECUTE → REVIEW → COMPLETE) and calls the **next** agent. It NEVER writes the plan or research content itself — that is `plan-writer-*` / `research-writer-*` work, delegated through the pipeline.
+
+**Tool allowance for primary agents** (enforced by `plugins/workflow-enforcement.ts`):
+
+| Allowed | Forbidden |
+|---------|-----------|
+| `task` (delegate), `read`, `glob`, `grep` (inspection), `todowrite`, `question` | `bash`, `edit`, `write`, `patch`, `webfetch`, MCP action tools |
+
 ## Routing Tables
 
 ### orchestrator Whitelist (21 agents)

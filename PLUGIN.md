@@ -208,6 +208,27 @@ const ROUTING_TABLES = {
 };
 ```
 
+### Tool Allowance Rules for Primary Agents
+
+Primary agents (`orchestrator`, `plankestrator`) are pure routers. The plugin enforces a **single tool gate** at `tool.execute.before` (lines ~457–507 of `workflow-enforcement.ts`):
+
+| Tool | Allowed for Primary Agents? |
+|------|-----------------------------|
+| `task` | ✅ Yes (primary purpose — delegate to specialists) |
+| `read` | ✅ Yes (inspection convenience for quick lookups) |
+| `glob` | ✅ Yes (inspection convenience for quick lookups) |
+| `grep` | ✅ Yes (inspection convenience for quick lookups) |
+| `todowrite` | ✅ Yes (track pipeline progress) |
+| `question` | ✅ Yes (ask user clarifying questions) |
+| `bash`, `edit`, `write`, `patch`, `webfetch` | ❌ No — hard block with error |
+| Any MCP action tool (`unity-mcp_*`, `serena_*`, `zai_*` write-side) | ❌ No — hard block with error |
+
+**Why read/glob/grep are allowed:**
+- Primary agents need minimal context to make good routing decisions (e.g. peek at `AGENTS.md` or `ARCHITECTURE.md` to inform classification).
+- Heavy investigation is still delegated: `mcp-read` for file reading, `mcp-search` for codebase search, `devops-readonly` for read-only ops queries.
+
+**Historical note:** Earlier plugin revisions had a second contradictory gate (the so-called "Gate B") that blocked `read` / `glob` / `grep` despite this gate allowing them. That gate was removed because it caused the model to fall back to producing plan/research content in its own message body when read was blocked. See `plugins/workflow-enforcement.ts` comments around line 567 for the rationale.
+
 ---
 
 ## 5. Error Messages
