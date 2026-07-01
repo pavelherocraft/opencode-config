@@ -1,6 +1,9 @@
 {
   "$schema": "https://opencode.ai/config.json",
-    "provider": {
+  "compaction": {
+    "prune": true
+  },
+  "provider": {
     "bifrost-litellm": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "Bifrost LiteLLM",
@@ -9,17 +12,228 @@
         "apiKey": "{env:LITELLM_API_KEY}"
       },
       "models": {
-        "GLM-4.7": { "name": "GLM-4.7", "limit": { "context": 204800, "output": 131072 } },
-        "GLM-5.1": { "name": "GLM-5.1", "limit": { "context": 204800, "output": 131072 } },
-        "GLM-5.2": { "name": "GLM-5.2", "limit": { "context": 1048576, "output": 131072 } },
-        "GLM-5.2 (res)": { "name": "GLM-5.2 (res)", "limit": { "context": 1048576, "output": 131072 } },
-        "Kimi K2.6": { "name": "Kimi K2.6", "limit": { "context": 262144, "output": 262144 }, "modalities": { "input": ["text", "image"] }, "attachment": true },
-        "Kimi K2.7": { "name": "Kimi K2.7", "limit": { "context": 262144, "output": 262144 }, "modalities": { "input": ["text", "image"] }, "attachment": true },
-        "MiniMax-M2.7": { "name": "MiniMax-M2.7", "limit": { "context": 204800, "output": 131072 } },
-        "MiniMax-M3": { "name": "MiniMax-M3", "limit": { "context": 512000, "output": 131072 }, "modalities": { "input": ["text", "image", "video"] }, "attachment": true },
-        "QWEN3.7-plus": { "name": "QWEN3.7-plus", "limit": { "context": 1000000, "output": 80000 }, "modalities": { "input": ["text", "image", "video"] }, "attachment": true },
-        "mimo-v2.5": { "name": "mimo-v2.5", "limit": { "context": 1000000, "output": 131072 }, "modalities": { "input": ["text", "image", "video", "audio"] }, "attachment": true },
-        "mimo-v2.5-pro": { "name": "mimo-v2.5-pro", "limit": { "context": 1000000, "output": 131072 } }
+        "GLM-4.7": {
+          "name": "GLM-4.7",
+          "limit": {
+            "context": 204800,
+            "output": 131072
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          }
+        },
+        "GLM-5.1": {
+          "name": "GLM-5.1",
+          "limit": {
+            "context": 204800,
+            "output": 131072
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          }
+        },
+        "GLM-5.1 (res)": {
+          "name": "GLM-5.1 (res)",
+          "limit": {
+            "context": 204800,
+            "output": 131072
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          }
+        },
+        "GLM-5.2": {
+          "name": "GLM-5.2",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          }
+        },
+        "Kimi K2.6": {
+          "name": "Kimi K2.6",
+          "limit": {
+            "context": 262144,
+            "output": 262144
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          "attachment": true
+        },
+        "Kimi K2.7": {
+          "name": "Kimi K2.7",
+          "limit": {
+            "context": 262144,
+            "output": 262144
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          "attachment": true
+        },
+        "MiniMax-M2.7": {
+          "name": "MiniMax-M2.7",
+          "limit": {
+            "context": 204800,
+            "output": 131072
+          }
+        },
+        "MiniMax-M3": {
+          "name": "MiniMax-M3",
+          "limit": {
+            "context": 1000000,
+            "output": 131072
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ]
+          },
+          "attachment": true
+        },
+        "QWEN3.7-plus": {
+          "name": "QWEN3.7-plus",
+          "limit": {
+            "context": 1000000,
+            "output": 80000
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ]
+          },
+          "attachment": true
+        },
+        "gemini/gemini-3-pro-image": {
+          "name": "gemini/gemini-3-pro-image",
+          "limit": {
+            "context": 65536,
+            "output": 32768
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          "attachment": true
+        },
+        "gemini/gemini-3.1-flash-image": {
+          "name": "gemini/gemini-3.1-flash-image",
+          "limit": {
+            "context": 65536,
+            "output": 32768
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          "attachment": true
+        },
+        "gpt-image-1.5": {
+          "name": "gpt-image-1.5",
+          "limit": {
+            "context": 0,
+            "output": 0
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          "attachment": true
+        },
+        "gpt-image-2": {
+          "name": "gpt-image-2",
+          "limit": {
+            "context": 0,
+            "output": 0
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          "attachment": true
+        },
+        "mimo-v2.5": {
+          "name": "mimo-v2.5",
+          "limit": {
+            "context": 1000000,
+            "output": 131072
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video",
+              "audio"
+            ]
+          },
+          "attachment": true
+        },
+        "mimo-v2.5-pro": {
+          "name": "mimo-v2.5-pro",
+          "limit": {
+            "context": 1000000,
+            "output": 131072
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          }
+        }
       }
     },
     "bailian-token-plan": {
@@ -27,32 +241,150 @@
       "name": "Alibaba Token Plan",
       "options": {
         "baseURL": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1",
-        "apiKey": "YOUR_API_KEY_HERE"
+        "apiKey": "sk-sp-D.DDHP.hFmw.MEUCIQDEIpdkpdSyFEILbswHoisvWTatR0IisYsFwzBwvnXnwQIgHCqxwDTOTB2l+opTT/ieLBEGMtim5107I6W6N6v1jW0="
       },
       "models": {
-        "qwen3.7-plus": { "name": "Qwen3.7 Plus", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-        "qwen3.7-max": { "name": "Qwen3.7 Max", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-        "qwen3.6-plus": { "name": "Qwen3.6 Plus", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-        "qwen3.6-flash": { "name": "Qwen3.6 Flash", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-        "deepseek-v4-pro": { "name": "DeepSeek V4 Pro" },
-        "deepseek-v4-flash": { "name": "DeepSeek V4 Flash" },
-        "deepseek-v3.2": { "name": "DeepSeek V3.2" },
-        "kimi-k2.6": { "name": "Kimi K2.6", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-        "kimi-k2.5": { "name": "Kimi K2.5", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-        "glm-5.1": { "name": "GLM-5.1", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-        "glm-5.2": { "name": "GLM-5.2", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-        "glm-5": { "name": "GLM-5", "options": { "thinking": { "type": "enabled", "budgetTokens": 8192 } } },
-        "MiniMax-M2.5": { "name": "MiniMax M2.5" }
+        "qwen3.7-plus": {
+          "name": "Qwen3.7 Plus",
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 8192
+            }
+          }
+        },
+        "qwen3.7-max": {
+          "name": "Qwen3.7 Max",
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 8192
+            }
+          }
+        },
+        "qwen3.6-plus": {
+          "name": "Qwen3.6 Plus",
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 8192
+            }
+          }
+        },
+        "qwen3.6-flash": {
+          "name": "Qwen3.6 Flash",
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 8192
+            }
+          }
+        },
+        "deepseek-v4-pro": {
+          "name": "DeepSeek V4 Pro"
+        },
+        "deepseek-v4-flash": {
+          "name": "DeepSeek V4 Flash"
+        },
+        "deepseek-v3.2": {
+          "name": "DeepSeek V3.2"
+        },
+        "kimi-k2.6": {
+          "name": "Kimi K2.6",
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 8192
+            }
+          }
+        },
+        "kimi-k2.5": {
+          "name": "Kimi K2.5",
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 8192
+            }
+          }
+        },
+        "glm-5.1": {
+          "name": "GLM-5.1",
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 8192
+            }
+          }
+        },
+        "glm-5.2": {
+          "name": "GLM-5.2",
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 8192
+            }
+          }
+        },
+        "glm-5": {
+          "name": "GLM-5",
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "budgetTokens": 8192
+            }
+          }
+        },
+        "MiniMax-M2.5": {
+          "name": "MiniMax M2.5"
+        }
       }
     }
   },
-  "plugin": ["./plugins/workflow-enforcement.ts"],
+  "plugin": [
+    "./plugins/workflow-enforcement.ts"
+  ],
   "mcp": {
-    "zai_web_reader": { "type": "remote", "url": "https://hcbifrost.herocraft.com/litellm/zai_web_reader/mcp", "enabled": true, "headers": { "Authorization": "Bearer {env:LITELLM_API_KEY}" } },
-    "zai_web_search": { "type": "remote", "url": "https://hcbifrost.herocraft.com/litellm/zai_web_search/mcp", "enabled": true, "headers": { "Authorization": "Bearer {env:LITELLM_API_KEY}" } },
-    "zai_zread": { "type": "remote", "url": "https://hcbifrost.herocraft.com/litellm/zai_zread/mcp", "enabled": true, "headers": { "Authorization": "Bearer {env:LITELLM_API_KEY}" } },
-    "serena": { "type": "local", "command": ["C:\\\\Users\\\\<USERNAME>\\\\.local\\\\bin\\\\serena.exe", "start-mcp-server", "--transport", "stdio", "--context=ide", "--project-from-cwd"], "enabled": true },
-    "unity-mcp": { "type": "remote", "url": "http://localhost:8080/mcp", "enabled": true }
+    "zai_web_reader": {
+      "type": "remote",
+      "url": "https://hcbifrost.herocraft.com/litellm/zai_web_reader/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:LITELLM_API_KEY}"
+      }
+    },
+    "zai_web_search": {
+      "type": "remote",
+      "url": "https://hcbifrost.herocraft.com/litellm/zai_web_search/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:LITELLM_API_KEY}"
+      }
+    },
+    "zai_zread": {
+      "type": "remote",
+      "url": "https://hcbifrost.herocraft.com/litellm/zai_zread/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:LITELLM_API_KEY}"
+      }
+    },
+    "serena": {
+      "type": "local",
+      "command": [
+        "C:\\Users\\Admin\\.local\\bin\\serena.exe",
+        "start-mcp-server",
+        "--transport",
+        "stdio",
+        "--context=ide",
+        "--project-from-cwd"
+      ],
+      "enabled": true
+    },
+    "unity-mcp": {
+      "type": "remote",
+      "url": "http://localhost:8080/mcp",
+      "enabled": true
+    }
   },
   "agent": {
     "mcp-github": {
@@ -60,348 +392,867 @@
       "model": "bifrost-litellm/MiniMax-M2.7",
       "temperature": 0.1,
       "permission": {
-        "edit": "deny", "write": "deny", "read": "allow", "bash": "deny",
+        "edit": "deny",
+        "write": "deny",
+        "read": "allow",
+        "bash": "deny",
         "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow",
-        "serena_get_symbols_overview": "allow", "serena_rename_symbol": "allow",
-        "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "dev-planner": {
       "mode": "subagent",
       "model": "bifrost-litellm/QWEN3.7-plus",
       "temperature": 0.1,
       "permission": {
-        "edit": { "*": "ask", "*.md": "allow" }, "bash": "deny",
+        "edit": {
+          "*": "ask",
+          "*.md": "allow"
+        },
+        "bash": "deny",
         "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow",
-        "serena_get_symbols_overview": "allow", "serena_rename_symbol": "allow",
-        "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "bugfix": {
       "mode": "subagent",
       "model": "bifrost-litellm/QWEN3.7-plus",
       "temperature": 0.2,
       "permission": {
-        "edit": "allow", "bash": "deny",
+        "edit": "allow",
+        "bash": "deny",
         "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow",
-        "serena_get_symbols_overview": "allow", "serena_rename_symbol": "allow",
-        "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "mcp-read": {
       "mode": "subagent",
       "model": "bifrost-litellm/MiniMax-M2.7",
       "temperature": 0.1,
       "permission": {
-        "edit": "deny", "write": "deny", "read": "allow", "bash": "deny",
+        "edit": "deny",
+        "write": "deny",
+        "read": "allow",
+        "bash": "deny",
         "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow",
-        "serena_get_symbols_overview": "allow", "serena_rename_symbol": "allow",
-        "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "plan-writer-complex": {
       "mode": "subagent",
       "model": "bifrost-litellm/GLM-5.2",
       "temperature": 0.1,
       "permission": {
-        "edit": "allow", "bash": "deny", "read": "allow",
+        "edit": "allow",
+        "bash": "deny",
+        "read": "allow",
         "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow",
-        "serena_get_symbols_overview": "allow", "serena_rename_symbol": "allow",
-        "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "devops-readonly": "allow", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "devops-readonly": "allow",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "worker": {
       "mode": "subagent",
       "model": "bifrost-litellm/MiniMax-M3",
       "temperature": 0.2,
       "permission": {
-        "edit": "allow", "bash": "allow",
+        "edit": "allow",
+        "bash": "allow",
         "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow",
-        "serena_get_symbols_overview": "allow", "serena_rename_symbol": "allow",
-        "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "utility": {
       "mode": "subagent",
       "model": "bifrost-litellm/MiniMax-M2.7",
       "temperature": 0.1,
       "permission": {
-        "edit": "deny", "write": "deny", "bash": "allow",
+        "edit": "deny",
+        "write": "deny",
+        "bash": "allow",
         "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow",
-        "serena_get_symbols_overview": "allow", "serena_rename_symbol": "allow",
-        "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "rework": {
       "mode": "subagent",
       "model": "bifrost-litellm/GLM-5.2",
       "temperature": 0.2,
       "permission": {
-        "edit": "allow", "bash": "allow",
+        "edit": "allow",
+        "bash": "allow",
         "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow",
-        "serena_get_symbols_overview": "allow", "serena_rename_symbol": "allow",
-        "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "research-writer-simple": {
-      "mode": "subagent", "model": "bifrost-litellm/mimo-v2.5-pro", "temperature": 0.1,
-      "permission": { "edit": "allow", "bash": "deny", "read": "allow", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+      "mode": "subagent",
+      "model": "bifrost-litellm/mimo-v2.5-pro",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "allow",
+        "bash": "deny",
+        "read": "allow",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "mcp-search": "allow", "mcp-read": "allow", "mcp-github": "allow", "devops-readonly": "allow", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "mcp-search": "allow",
+          "mcp-read": "allow",
+          "mcp-github": "allow",
+          "devops-readonly": "allow",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "plan-reviewer-simple": {
-      "mode": "subagent", "model": "bifrost-litellm/Kimi K2.7", "temperature": 0.1,
-      "permission": { "edit": "allow", "bash": "deny", "read": "allow", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+      "mode": "subagent",
+      "model": "bifrost-litellm/Kimi K2.7",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "allow",
+        "bash": "deny",
+        "read": "allow",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "devops-readonly": "allow", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "devops-readonly": "allow",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "plan-bug": {
-      "mode": "subagent", "model": "bifrost-litellm/MiniMax-M3", "temperature": 0.1,
-      "permission": { "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" }, "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+      "mode": "subagent",
+      "model": "bifrost-litellm/MiniMax-M3",
+      "temperature": 0.1,
+      "permission": {
+        "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" },
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "docs-writer": {
-      "mode": "subagent", "model": "bifrost-litellm/mimo-v2.5-pro", "temperature": 0.3,
-      "permission": { "edit": "allow", "bash": "deny", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+      "mode": "subagent",
+      "model": "bifrost-litellm/mimo-v2.5-pro",
+      "temperature": 0.3,
+      "permission": {
+        "edit": "allow",
+        "bash": "deny",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "docs-planner": {
-      "mode": "subagent", "model": "bifrost-litellm/QWEN3.7-plus", "temperature": 0.2,
-      "permission": { "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" }, "read": "allow", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+      "mode": "subagent",
+      "model": "bifrost-litellm/QWEN3.7-plus",
+      "temperature": 0.2,
+      "permission": {
+        "edit": { "*.md": "allow", "*": "deny" },
+        "bash": { "*": "deny" },
+        "read": "allow",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "dev-professor": {
-      "mode": "subagent", "model": "bifrost-litellm/GLM-5.2", "temperature": 0.2,
-      "permission": { "edit": "allow", "bash": "allow", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+      "mode": "subagent",
+      "model": "bifrost-litellm/GLM-5.2",
+      "temperature": 0.2,
+      "permission": {
+        "edit": "allow",
+        "bash": "allow",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "devops-readonly": {
-      "mode": "subagent", "model": "bifrost-litellm/MiniMax-M3", "temperature": 0.1,
-      "permission": { "edit": "allow", "read": "allow", "bash": "deny", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+      "mode": "subagent",
+      "model": "bifrost-litellm/MiniMax-M3",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "allow",
+        "read": "allow",
+        "bash": "deny",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "devops-agent": {
-      "mode": "subagent", "model": "bifrost-litellm/MiniMax-M3", "temperature": 0.1,
-      "permission": { "edit": "deny", "write": "deny", "bash": "allow", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+      "mode": "subagent",
+      "model": "bifrost-litellm/MiniMax-M3",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "allow",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "devops-reviewer": {
-      "mode": "subagent", "model": "bifrost-litellm/QWEN3.7-plus", "temperature": 0.1,
-      "permission": { "edit": "deny", "write": "deny", "read": "allow", "bash": "allow", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+      "mode": "subagent",
+      "model": "bifrost-litellm/QWEN3.7-plus",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "read": "allow",
+        "bash": "allow",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "orchestrator-identity-probe": {
-      "mode": "subagent", "model": "bifrost-litellm/QWEN3.7-plus", "temperature": 0.1,
-      "permission": { "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" }, "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
-        "serena_insert_after_symbol": "allow", "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+      "mode": "subagent",
+      "model": "bifrost-litellm/QWEN3.7-plus",
+      "temperature": 0.1,
+      "permission": {
+        "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" },
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
+        "serena_insert_after_symbol": "allow",
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "plankestrator-identity-probe": {
-      "mode": "subagent", "model": "bifrost-litellm/QWEN3.7-plus", "temperature": 0.1,
-      "permission": { "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" }, "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
-        "serena_insert_after_symbol": "allow", "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+      "mode": "subagent",
+      "model": "bifrost-litellm/QWEN3.7-plus",
+      "temperature": 0.1,
+      "permission": {
+        "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" },
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
+        "serena_insert_after_symbol": "allow",
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "orchestrator": {
-      "mode": "primary", "model": "bifrost-litellm/QWEN3.7-plus", "temperature": 0.1,
-      "prompt": "You MUST output JSON in EVERY response. First line: 'IDENTITY VERIFIED: I am orchestrator...'. Second: JSON code block with fields: agent, type, complexity, plan_exists, plan_source, goal, next_agent, pipeline. Third: Call Task tool if next_agent is not null. This is MANDATORY. NO EXCEPTIONS.\n\n## Tool Priority\n\nFor code operations, ALWAYS try Serena MCP tools FIRST.\nUse built-in tools (grep, read, edit) as FALLBACK when Serena fails.\n\n## Pipeline Selection Rules\n\n| Task Type | plan_exists | Pipeline |\n|-----------|-------------|----------|\n| DEV SIMPLE | false | [\"worker\", \"utility\"] |\n| DEV SIMPLE | true | [\"worker\", \"consistency-checker\", \"utility\"] |\n| DEV COMPLEX | any | [\"dev-planner\", \"dev-professor\", \"dev-reviewer\", \"rework\", \"consistency-checker\", \"utility\"] |\n| BUGFIX SIMPLE | any | [\"bugfix-triage\", \"worker\", \"utility\"] |\n| BUGFIX DEEP | any | [\"bugfix-triage\", \"plan-bug\", \"execute-bug\", \"dev-reviewer\", \"rework\", \"consistency-checker\", \"utility\"] |\n| DEVOPS | any | [\"devops-agent\", \"devops-reviewer\"] |\n| DOCS | any | [\"docs-writer\", \"utility\"] |\n\n## PROMPT REQUIREMENTS\n\ndev-planner: ALWAYS include 'Write the plan to dev_plan.md.'\ndev-professor: ALWAYS include 'Review dev_plan.md.'\nplan-bug: ALWAYS include 'Write the plan to bug_plan.md.'\nexecute-bug: ALWAYS include 'Read bug_plan.md.'\ndocs-planner: ALWAYS include 'Write the plan to docs_plan.md.'\ndocs-writer: ALWAYS include 'Read docs_plan.md.'\n\n## OUT OF SCOPE\n\nPLAN/RESEARCH tasks: Output OUT OF SCOPE message, tell user to switch to plankestrator.",
+      "mode": "primary",
+      "model": "bifrost-litellm/QWEN3.7-plus",
+      "temperature": 0.1,
+      "prompt": "You MUST output JSON in EVERY response. First line: 'IDENTITY VERIFIED: I am orchestrator...'. Second: JSON code block with fields: agent, type, complexity, plan_exists, plan_source, goal, next_agent, pipeline. Third: Call Task tool if next_agent is not null. This is MANDATORY. NO EXCEPTIONS.\n\n## Tool Priority\n\nFor code operations, ALWAYS try Serena MCP tools FIRST:\n- serena_find_symbol (not grep)\n- serena_find_referencing_symbols (not grep)\n- serena_get_symbols_overview (not grep)\n- serena_rename_symbol (not edit with regex)\n- serena_replace_symbol_body (not edit)\n\nUse built-in tools (grep, read, edit) as FALLBACK when Serena fails or for non-symbol tasks.\n\n## Image Analysis Priority\n\nFor image analysis tasks, ALWAYS use view-image agent FIRST (NOT zai-mcp-server):\n- Call Task tool with view-image subagent\n- view-image has direct vision capabilities via bifrost-litellm/Kimi K2.6\n- Use zai-mcp-server only as FALLBACK when view-image is unavailable\n\n## Pipeline Selection Rules — CRITICAL\n\nYou MUST select the correct pipeline based on task type AND plan_exists flag:\n\n| Task Type | plan_exists | Pipeline |\n|-----------|-------------|----------|\n| DEV SIMPLE | false | [\"worker\", \"utility\"] |\n| DEV SIMPLE | true | [\"worker\", \"consistency-checker\", \"utility\"] |\n| DEV COMPLEX | any | [\"dev-planner\", \"dev-professor\", \"dev-reviewer\", \"rework\", \"consistency-checker\", \"utility\"] |\n| BUGFIX SIMPLE | any | [\"bugfix-triage\", \"worker\", \"utility\"] |\n| BUGFIX DEEP | any | [\"bugfix-triage\", \"plan-bug\", \"execute-bug\", \"dev-reviewer\", \"rework\", \"consistency-checker\", \"utility\"] |\n| DEVOPS | any | [\"devops-agent\", \"devops-reviewer\"] |\n| DOCS | any | [\"docs-writer\", \"utility\"] |\n\n**MANDATORY RULE:** When plan_exists=true and type=DEV and complexity=SIMPLE, the pipeline MUST be [\"worker\", \"consistency-checker\", \"utility\"]. NEVER omit consistency-checker when a plan exists. This is the most common mistake — do NOT use [\"worker\", \"utility\"] when plan_exists=true.",
       "permission": {
-        "edit": "deny", "write": "deny", "read": "allow", "grep": "allow", "glob": "allow",
-        "question": "deny", "webfetch": "deny", "bash": { "*": "deny" }, "todowrite": "allow", "patch": "deny",
+        "edit": "deny",
+        "write": "deny",
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "question": "deny",
+        "webfetch": "deny",
+        "bash": { "*": "deny" },
+        "todowrite": "allow",
+        "patch": "deny",
         "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
         "task": {
           "*": "deny",
-          "orchestrator-identity-probe": "allow", "plankestrator-identity-probe": "deny",
-          "dev-reviewer": "allow", "dev-professor": "allow", "mcp-github": "allow",
-          "worker": "allow", "bugfix": "allow", "rework": "allow", "mcp-read": "allow",
-          "utility": "allow", "bugfix-triage": "allow", "plan-bug": "allow",
-          "devops-agent": "allow", "devops-reviewer": "allow", "dev-planner": "allow",
-          "mcp-search": "allow", "docs-writer": "allow", "summarizer": "allow",
-          "execute-bug": "allow", "consistency-checker": "allow", "view-image": "allow", "docs-planner": "allow"
+          "orchestrator-identity-probe": "allow",
+          "plankestrator-identity-probe": "deny",
+          "dev-reviewer": "allow",
+          "dev-professor": "allow",
+          "mcp-github": "allow",
+          "worker": "allow",
+          "bugfix": "allow",
+          "rework": "allow",
+          "mcp-read": "allow",
+          "utility": "allow",
+          "bugfix-triage": "allow",
+          "plan-bug": "allow",
+          "devops-agent": "allow",
+          "devops-reviewer": "allow",
+          "dev-planner": "allow",
+          "mcp-search": "allow",
+          "docs-writer": "allow",
+          "summarizer": "allow",
+          "execute-bug": "allow",
+          "consistency-checker": "allow",
+          "view-image": "allow",
+          "docs-planner": "allow",
+          "generate-image": "allow",
+          "generate-image-gpt": "allow"
         }
-      }, "options": {}
+      },
+      "options": {}
     },
     "mcp-search": {
-      "mode": "subagent", "model": "bifrost-litellm/MiniMax-M2.7", "temperature": 0.1,
-      "permission": { "edit": "deny", "write": "deny", "read": "allow", "bash": "deny", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
-        "serena_insert_after_symbol": "allow", "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
-    },
-    "summarizer": {
-      "mode": "subagent", "model": "bifrost-litellm/MiniMax-M2.7", "temperature": 0.1,
-      "permission": { "edit": "deny", "write": "deny", "read": "allow", "bash": "deny", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
-        "serena_insert_after_symbol": "allow", "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
-    },
-    "bugfix-triage": {
-      "mode": "subagent", "model": "bifrost-litellm/QWEN3.7-plus", "temperature": 0.1,
-      "permission": { "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" }, "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
-        "serena_insert_after_symbol": "allow", "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
-    },
-    "research-reviewer": {
-      "mode": "subagent", "model": "bifrost-litellm/Kimi K2.7", "temperature": 0.1,
-      "permission": { "edit": "allow", "bash": "deny", "read": "allow", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
-        "serena_insert_after_symbol": "allow", "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
-    },
-    "dev-reviewer": {
-      "mode": "subagent", "model": "bifrost-litellm/Kimi K2.7", "temperature": 0.1,
-      "permission": { "edit": "allow", "bash": "deny", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
-        "serena_insert_after_symbol": "allow", "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
-    },
-    "research-writer-complex": {
-      "mode": "subagent", "model": "bifrost-litellm/GLM-5.2", "temperature": 0.1,
-      "permission": { "edit": "allow", "bash": "deny", "read": "allow", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
-        "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "mcp-search": "allow", "mcp-read": "allow", "mcp-github": "allow", "devops-readonly": "allow", "view-image": "allow" }
-      }, "options": {}
-    },
-    "plankestrator": {
-      "mode": "primary", "model": "bifrost-litellm/QWEN3.7-plus", "temperature": 0.1,
+      "mode": "subagent",
+      "model": "bifrost-litellm/MiniMax-M2.7",
+      "temperature": 0.1,
       "permission": {
-        "edit": "deny", "write": "deny", "bash": { "*": "deny" }, "read": "allow", "grep": "allow", "glob": "allow",
-        "question": "allow", "webfetch": "deny", "todowrite": "allow", "patch": "deny",
+        "edit": "deny",
+        "write": "deny",
+        "read": "allow",
+        "bash": "deny",
         "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
         "task": {
           "*": "deny",
-          "plankestrator-identity-probe": "allow", "orchestrator-identity-probe": "deny",
-          "plan-writer-simple": "allow", "plan-writer-complex": "allow",
-          "plan-reviewer-simple": "allow", "plan-reviewer-complex": "allow",
-          "research-writer-simple": "allow", "research-writer-complex": "allow",
-          "research-reviewer": "allow", "devops-readonly": "allow", "view-image": "allow"
+          "view-image": "allow"
         }
-      }, "options": {}
+      },
+      "options": {}
+    },
+    "summarizer": {
+      "mode": "subagent",
+      "model": "bifrost-litellm/MiniMax-M2.7",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "read": "allow",
+        "bash": "deny",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
+        "serena_insert_after_symbol": "allow",
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
+    },
+    "bugfix-triage": {
+      "mode": "subagent",
+      "model": "bifrost-litellm/QWEN3.7-plus",
+      "temperature": 0.1,
+      "permission": {
+        "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" },
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
+        "serena_insert_after_symbol": "allow",
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
+    },
+    "research-reviewer": {
+      "mode": "subagent",
+      "model": "bifrost-litellm/Kimi K2.7",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "allow",
+        "bash": "deny",
+        "read": "allow",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
+        "serena_insert_after_symbol": "allow",
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
+    },
+    "dev-reviewer": {
+      "mode": "subagent",
+      "model": "bifrost-litellm/Kimi K2.7",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "allow",
+        "bash": "deny",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
+        "serena_insert_after_symbol": "allow",
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
+    },
+    "research-writer-complex": {
+      "mode": "subagent",
+      "model": "bifrost-litellm/GLM-5.2",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "allow",
+        "bash": "deny",
+        "read": "allow",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
+        "serena_insert_after_symbol": "allow",
+        "task": {
+          "*": "deny",
+          "mcp-search": "allow",
+          "mcp-read": "allow",
+          "mcp-github": "allow",
+          "devops-readonly": "allow",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
+    },
+    "plankestrator": {
+      "mode": "primary",
+      "model": "bifrost-litellm/QWEN3.7-plus",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": { "*": "deny" },
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "question": "allow",
+        "webfetch": "deny",
+        "todowrite": "allow",
+        "patch": "deny",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
+        "serena_insert_after_symbol": "allow",
+        "task": {
+          "*": "deny",
+          "plankestrator-identity-probe": "allow",
+          "orchestrator-identity-probe": "deny",
+          "plan-writer-simple": "allow",
+          "plan-writer-complex": "allow",
+          "plan-reviewer-simple": "allow",
+          "plan-reviewer-complex": "allow",
+          "research-writer-simple": "allow",
+          "research-writer-complex": "allow",
+          "research-reviewer": "allow",
+          "devops-readonly": "allow",
+          "view-image": "allow",
+          "generate-image": "allow",
+          "generate-image-gpt": "allow"
+        }
+      },
+      "options": {}
     },
     "plan-writer-simple": {
-      "mode": "subagent", "model": "bifrost-litellm/QWEN3.7-plus", "temperature": 0.1,
-      "permission": { "edit": "allow", "bash": "deny", "read": "allow", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
-        "serena_insert_after_symbol": "allow", "task": { "*": "deny", "devops-readonly": "allow", "view-image": "allow" }
-      }, "options": {}
+      "mode": "subagent",
+      "model": "bifrost-litellm/QWEN3.7-plus",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "allow",
+        "bash": "deny",
+        "read": "allow",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
+        "serena_insert_after_symbol": "allow",
+        "task": {
+          "*": "deny",
+          "devops-readonly": "allow",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "execute-bug": {
-      "mode": "subagent", "model": "bifrost-litellm/GLM-5.2", "temperature": 0.2,
-      "permission": { "edit": "allow", "bash": "allow", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
-        "serena_insert_after_symbol": "allow", "task": { "*": "deny", "view-image": "allow" }
-      }, "options": {}
+      "mode": "subagent",
+      "model": "bifrost-litellm/GLM-5.2",
+      "temperature": 0.2,
+      "permission": {
+        "edit": "allow",
+        "bash": "allow",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
+        "serena_insert_after_symbol": "allow",
+        "task": {
+          "*": "deny",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "plan-reviewer-complex": {
-      "mode": "subagent", "model": "bifrost-litellm/Kimi K2.7", "temperature": 0.1,
-      "permission": { "edit": "allow", "bash": "deny", "read": "allow", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
-        "serena_insert_after_symbol": "allow", "task": { "*": "deny", "devops-readonly": "allow", "view-image": "allow" }
-      }, "options": {}
+      "mode": "subagent",
+      "model": "bifrost-litellm/Kimi K2.7",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "allow",
+        "bash": "deny",
+        "read": "allow",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
+        "serena_insert_after_symbol": "allow",
+        "task": {
+          "*": "deny",
+          "devops-readonly": "allow",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "consistency-checker": {
-      "mode": "subagent", "model": "bifrost-litellm/QWEN3.7-plus", "temperature": 0.1,
-      "permission": { "edit": "allow", "bash": "deny", "read": "allow", "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow", "serena_find_referencing_symbols": "allow", "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow", "serena_safe_delete_symbol": "allow", "serena_replace_symbol_body": "allow",
+      "mode": "subagent",
+      "model": "bifrost-litellm/QWEN3.7-plus",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "allow",
+        "bash": "deny",
+        "read": "allow",
+        "unity-mcp.*": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_rename_symbol": "allow",
+        "serena_safe_delete_symbol": "allow",
+        "serena_replace_symbol_body": "allow",
         "serena_insert_after_symbol": "allow",
-        "task": { "*": "deny", "dev-reviewer": "allow", "utility": "allow", "view-image": "allow" }
-      }, "options": {}
+        "task": {
+          "*": "deny",
+          "dev-reviewer": "allow",
+          "utility": "allow",
+          "view-image": "allow"
+        }
+      },
+      "options": {}
     },
     "view-image": {
-      "mode": "subagent", "model": "bifrost-litellm/Kimi K2.6", "temperature": 0.1,
+      "mode": "subagent",
+      "model": "bifrost-litellm/Kimi K2.6",
+      "temperature": 0.1,
       "prompt": "You are an image analysis agent. Analyze images and describe what you see. You have direct vision capabilities. Analyze images directly through your model — do NOT use MCP servers for image analysis. You CAN use read, glob, and grep tools to access files when needed.",
       "permission": {
         "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" },
-        "read": "allow", "glob": "allow", "grep": "allow",
-        "zread.*": "deny", "webSearchPrime.*": "deny", "webReader.*": "deny",
-        "serena.*": "deny", "unity-mcp.*": "deny", "zai-mcp-server.*": "deny"
-      }, "options": {}
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "zread.*": "deny",
+        "webSearchPrime.*": "deny",
+        "webReader.*": "deny",
+        "serena.*": "deny",
+        "unity-mcp.*": "deny",
+        "zai-mcp-server.*": "deny"
+      },
+      "options": {}
+    },
+    "generate-image": {
+      "mode": "subagent",
+      "model": "bifrost-litellm/gemini/gemini-3.1-flash-image",
+      "temperature": 0.5,
+      "prompt": "You are an image generation agent. Generate images from the user's prompt using the Gemini image model. Treat the user's request as the image description and produce the image directly. Do not edit files, do not run shell commands, do not call MCP servers. The image model is responsible for producing the visual output — your role is to forward a clear, well-structured image prompt and let the model render it.",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "read": "deny",
+        "webfetch": "deny",
+        "patch": "deny",
+        "glob": "deny",
+        "grep": "deny",
+        "todowrite": "deny",
+        "question": "deny",
+        "task": "deny",
+        "serena.*": "deny",
+        "unity-mcp.*": "deny",
+        "zread.*": "deny",
+        "webSearchPrime.*": "deny",
+        "webReader.*": "deny"
+      },
+      "options": {}
+    },
+    "generate-image-gpt": {
+      "mode": "subagent",
+      "model": "bifrost-litellm/gpt-image-2",
+      "temperature": 0.5,
+      "prompt": "You are an image generation agent for the 'gpt image' path. The user explicitly requested GPT-based image generation (e.g. 'используй gpt image'). Generate the image using the gpt-image-2 model directly from the user's prompt. Do not edit files, do not run shell commands, do not call MCP servers. Forward a clear image prompt and let the model render it.",
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "read": "deny",
+        "webfetch": "deny",
+        "patch": "deny",
+        "glob": "deny",
+        "grep": "deny",
+        "todowrite": "deny",
+        "question": "deny",
+        "task": "deny",
+        "serena.*": "deny",
+        "unity-mcp.*": "deny",
+        "zread.*": "deny",
+        "webSearchPrime.*": "deny",
+        "webReader.*": "deny"
+      },
+      "options": {}
     }
   },
   "command": {
-    "read-url": { "description": "Read content from a URL", "template": "Read and analyze this URL: `$ARGUMENTS`", "agent": "mcp-read", "subtask": true },
-    "document": { "description": "Generate documentation", "template": "Document the following: `$ARGUMENTS`", "agent": "docs-writer", "subtask": true },
-    "github": { "description": "Search GitHub repositories", "template": "Search GitHub for: `$ARGUMENTS`", "agent": "mcp-github", "subtask": true },
-    "summarize": { "description": "Summarize content", "template": "Summarize the following: `$ARGUMENTS`", "agent": "summarizer", "subtask": true },
-    "search": { "description": "Search the web for information", "template": "Search for: `$ARGUMENTS`", "agent": "mcp-search", "subtask": true }
+    "read-url": {
+      "description": "Read content from a URL",
+      "template": "Read and analyze this URL: `$ARGUMENTS`",
+      "agent": "mcp-read",
+      "subtask": true
+    },
+    "document": {
+      "description": "Generate documentation",
+      "template": "Document the following: `$ARGUMENTS`",
+      "agent": "docs-writer",
+      "subtask": true
+    },
+    "github": {
+      "description": "Search GitHub repositories",
+      "template": "Search GitHub for: `$ARGUMENTS`",
+      "agent": "mcp-github",
+      "subtask": true
+    },
+    "summarize": {
+      "description": "Summarize content",
+      "template": "Summarize the following: `$ARGUMENTS`",
+      "agent": "summarizer",
+      "subtask": true
+    },
+    "search": {
+      "description": "Search the web for information",
+      "template": "Search for: `$ARGUMENTS`",
+      "agent": "mcp-search",
+      "subtask": true
+    }
   },
   "shell": "powershell"
 }
