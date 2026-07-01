@@ -1170,56 +1170,6 @@
         "zai-mcp-server.*": "deny"
       },
       "options": {}
-    },
-    "generate-image": {
-      "mode": "subagent",
-      "model": "bifrost-litellm/gemini/gemini-3.1-flash-image",
-      "temperature": 0.5,
-      "prompt": "You are an image generation agent. Generate images from the user's prompt using the Gemini image model. Treat the user's request as the image description and produce the image directly. Do not edit files, do not run shell commands, do not call MCP servers. The image model is responsible for producing the visual output — your role is to forward a clear, well-structured image prompt and let the model render it.",
-      "permission": {
-        "edit": "deny",
-        "write": "deny",
-        "bash": "deny",
-        "read": "deny",
-        "webfetch": "deny",
-        "patch": "deny",
-        "glob": "deny",
-        "grep": "deny",
-        "todowrite": "deny",
-        "question": "deny",
-        "task": "deny",
-        "serena.*": "deny",
-        "unity-mcp.*": "deny",
-        "zread.*": "deny",
-        "webSearchPrime.*": "deny",
-        "webReader.*": "deny"
-      },
-      "options": {}
-    },
-    "generate-image-gpt": {
-      "mode": "subagent",
-      "model": "bifrost-litellm/gpt-image-2",
-      "temperature": 0.5,
-      "prompt": "You are an image generation agent for the 'gpt image' path. The user explicitly requested GPT-based image generation (e.g. 'используй gpt image'). Generate the image using the gpt-image-2 model directly from the user's prompt. Do not edit files, do not run shell commands, do not call MCP servers. Forward a clear image prompt and let the model render it.",
-      "permission": {
-        "edit": "deny",
-        "write": "deny",
-        "bash": "deny",
-        "read": "deny",
-        "webfetch": "deny",
-        "patch": "deny",
-        "glob": "deny",
-        "grep": "deny",
-        "todowrite": "deny",
-        "question": "deny",
-        "task": "deny",
-        "serena.*": "deny",
-        "unity-mcp.*": "deny",
-        "zread.*": "deny",
-        "webSearchPrime.*": "deny",
-        "webReader.*": "deny"
-      },
-      "options": {}
     }
   },
   "command": {
