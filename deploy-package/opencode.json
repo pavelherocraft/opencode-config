@@ -12,18 +12,6 @@
         "apiKey": "{env:LITELLM_API_KEY}"
       },
       "models": {
-        "GLM-4.7": {
-          "name": "GLM-4.7",
-          "limit": {
-            "context": 204800,
-            "output": 131072
-          },
-          "options": {
-            "thinking": {
-              "type": "enabled"
-            }
-          }
-        },
         "GLM-5.1": {
           "name": "GLM-5.1",
           "limit": {
@@ -51,7 +39,7 @@
         "GLM-5.2": {
           "name": "GLM-5.2",
           "limit": {
-            "context": 1048576,
+            "context": 204800,
             "output": 131072
           },
           "options": {
@@ -145,6 +133,27 @@
           },
           "attachment": true
         },
+        "deepseek-v4-pro": {
+          "name": "deepseek-v4-pro",
+          "limit": {
+            "context": 1048576,
+            "output": 393216
+          }
+        },
+        "seed-2.1": {
+          "name": "seed-2.1",
+          "limit": {
+            "context": 262144,
+            "output": 262144
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          "attachment": true
+        },
         "gemini/gemini-3-pro-image": {
           "name": "gemini/gemini-3-pro-image",
           "limit": {
@@ -176,8 +185,8 @@
         "gpt-image-1.5": {
           "name": "gpt-image-1.5",
           "limit": {
-            "context": 0,
-            "output": 0
+            "context": 1048576,
+            "output": 131072
           },
           "modalities": {
             "input": [
@@ -190,8 +199,8 @@
         "gpt-image-2": {
           "name": "gpt-image-2",
           "limit": {
-            "context": 0,
-            "output": 0
+            "context": 1048576,
+            "output": 131072
           },
           "modalities": {
             "input": [
