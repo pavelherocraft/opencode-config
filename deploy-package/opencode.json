@@ -39,7 +39,7 @@
         "GLM-5.2": {
           "name": "GLM-5.2",
           "limit": {
-            "context": 204800,
+            "context": 1048576,
             "output": 131072
           },
           "options": {
