@@ -73,12 +73,12 @@ If plan-writer-complex reported plan_written: true with a plan_file path:
 
 **Input detection:**
 Look for JSON output from plan-writer-complex:
-```json
+`json
 {
   "plan_file": "path/to/PLAN.md",
   "plan_written": true
 }
-```
+`
 If found, read from that file.
 
 Review checklist:
@@ -93,7 +93,7 @@ Review checklist:
 - [ ] Risks have mitigations
 
 Output format:
-```
+`
 ## Review Result
 APPROVED | NEEDS_REVISION
 
@@ -122,7 +122,7 @@ APPROVED | NEEDS_REVISION
 
 ## Final Plan
 [approved plan or revised plan]
-```
+`
 
 Rules:
 - Be thorough

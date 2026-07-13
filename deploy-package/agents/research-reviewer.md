@@ -73,12 +73,12 @@ If research-writer-complex reported research_written: true with a research_file 
 
 **Input detection:**
 Look for JSON output from research-writer-complex:
-```json
+`json
 {
   "research_file": "path/to/RESEARCH.md",
   "research_written": true
 }
-```
+`
 If found, read from that file.
 
 ## REVIEW CHECKLIST

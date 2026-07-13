@@ -1,5 +1,5 @@
 ---
-description: Development worker. Implements simple straightforward code changes. MiniMax-M3.
+description: Development worker. Implements simple straightforward code changes.
 mode: subagent
 model: bifrost-litellm/MiniMax-M3
 temperature: 0.2
