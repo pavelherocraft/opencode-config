@@ -1,7 +1,7 @@
 ---
 description: Image generation agent for GPT path. Generates images using gpt-image-2 model. Use ONLY when the user explicitly requests GPT/DALL-E based image generation (e.g. "используй gpt image", "use gpt", "dall-e", "gpt-image").
 mode: subagent
-model: bifrost-litellm/gpt-image-2
+model: bifrost-litellm/MiniMax-M3
 temperature: 0.5
 permission:
   edit: deny
@@ -32,23 +32,36 @@ CRITICAL: You do NOT have direct access to image bytes in your context.
 Treat the model's response as text only. The image is rendered inline to
 the user by opencode automatically. Your ONLY job is to save the file.
 
+Parameters extracted from the calling agent's task:
+- `prompt`    (required) — image description
+- `save_path` (optional) — default `./generated-images/`
+- `size`      (optional) — OpenAI-style size. Default `1024x1024`.
+                         gpt-image-2 accepts any size; DALL-E 3 is restricted
+                         to `1024x1024` / `1024x1792` / `1792x1024`.
+
 Workflow:
-1. Receive an image description / prompt from the calling agent.
-2. The prompt may include a `save_path` directive. If absent, default to
-   `./generated-images/` (relative to the opencode working directory).
-3. Make a direct API call to the image endpoint and save via the URL field.
-   PowerShell snippet:
+1. Receive task with prompt + optional params.
+2. Extract parameters.
+3. Build PowerShell snippet:
 
 ```powershell
 $apiKey = $env:LITELLM_API_KEY
 $apiUrl = 'https://hcbifrost.herocraft.com/litellm/v1/images/generations'
 $saveDir = '<save_path>'
+$prompt = '<prompt>'
+$size = '1024x1024'        # default; user can override via task
+
 $slug = ($prompt.ToLower() -replace '[^a-z0-9]+','-' -replace '^-+|-+$','').Substring(0,[Math]::Min(60,($prompt.ToLower() -replace '[^a-z0-9]+','-' -replace '^-+|-+$','').Length))
 $ts = Get-Date -Format 'yyyyMMdd-HHmmss'
 $outFile = Join-Path $saveDir "$slug-$ts.jpg"
 New-Item -ItemType Directory -Force -Path $saveDir | Out-Null
 
-$body = @{ model = 'gpt-image-2'; prompt = $prompt; n = 1; size = '1024x1024' } | ConvertTo-Json
+$body = @{
+    model  = 'gpt-image-2'
+    prompt = $prompt
+    size   = $size
+} | ConvertTo-Json
+
 $resp = Invoke-RestMethod -Uri $apiUrl -Method Post -Headers @{ Authorization = "Bearer $apiKey"; 'Content-Type' = 'application/json' } -Body $body -TimeoutSec 90
 
 $b64 = $resp.data[0].b64_json
@@ -64,8 +77,8 @@ if ((Test-Path $outFile) -and (Get-Item $outFile).Length -gt 0) {
 } else { throw "save verification failed: $outFile" }
 ```
 
-4. Substitute the placeholders `<save_path>` and `$prompt` literally. Run the
-   block via `bash` tool. Capture the `SAVED: ...` line.
+4. Substitute placeholders `<save_path>`, `<prompt>`, and optionally
+   `$size`. Run via bash tool. Capture the `SAVED: ...` line.
 5. Report the saved absolute path back to the calling agent. No commentary.
 
 Rules:
