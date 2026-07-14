@@ -89,8 +89,8 @@
         "MiniMax-M2.1-highspeed": {
           "name": "MiniMax-M2.1-highspeed",
           "limit": {
-            "context": 0,
-            "output": 0
+            "context": 200000,
+            "output": 131072
           }
         },
         "MiniMax-M2.5": {
@@ -108,8 +108,8 @@
         "MiniMax-M2.5-highspeed": {
           "name": "MiniMax-M2.5-highspeed",
           "limit": {
-            "context": 0,
-            "output": 0
+            "context": 200000,
+            "output": 131072
           }
         },
         "MiniMax-M2.7": {
@@ -122,8 +122,8 @@
         "MiniMax-M2.7-highspeed": {
           "name": "MiniMax-M2.7-highspeed",
           "limit": {
-            "context": 0,
-            "output": 0
+            "context": 204800,
+            "output": 131072
           }
         },
         "MiniMax-M3": {
