@@ -86,6 +86,13 @@
           },
           "attachment": true
         },
+        "MiniMax-M2.1-highspeed": {
+          "name": "MiniMax-M2.1-highspeed",
+          "limit": {
+            "context": 0,
+            "output": 0
+          }
+        },
         "MiniMax-M2.5": {
           "name": "MiniMax-M2.5",
           "limit": {
@@ -98,11 +105,25 @@
             }
           }
         },
+        "MiniMax-M2.5-highspeed": {
+          "name": "MiniMax-M2.5-highspeed",
+          "limit": {
+            "context": 0,
+            "output": 0
+          }
+        },
         "MiniMax-M2.7": {
           "name": "MiniMax-M2.7",
           "limit": {
             "context": 204800,
             "output": 131072
+          }
+        },
+        "MiniMax-M2.7-highspeed": {
+          "name": "MiniMax-M2.7-highspeed",
+          "limit": {
+            "context": 0,
+            "output": 0
           }
         },
         "MiniMax-M3": {
@@ -188,6 +209,9 @@
             "input": [
               "text",
               "image"
+            ],
+            "output": [
+              "image"
             ]
           },
           "attachment": true
@@ -201,6 +225,9 @@
           "modalities": {
             "input": [
               "text",
+              "image"
+            ],
+            "output": [
               "image"
             ]
           },
@@ -216,6 +243,9 @@
             "input": [
               "text",
               "image"
+            ],
+            "output": [
+              "image"
             ]
           },
           "attachment": true
@@ -229,6 +259,9 @@
           "modalities": {
             "input": [
               "text",
+              "image"
+            ],
+            "output": [
               "image"
             ]
           },
