@@ -178,11 +178,42 @@
             }
           }
         },
+        "bytedance/doubao-seed-2.1-turbo-260628": {
+          "name": "bytedance/doubao-seed-2.1-turbo-260628",
+          "limit": {
+            "context": 262144,
+            "output": 262144
+          }
+        },
+        "deepseek-ai/deepseek-v3.2": {
+          "name": "deepseek-ai/deepseek-v3.2",
+          "limit": {
+            "context": 163840,
+            "output": 163840
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          }
+        },
+        "deepseek-ai/deepseek-v4-flash": {
+          "name": "deepseek-ai/deepseek-v4-flash",
+          "limit": {
+            "context": 1048576,
+            "output": 393216
+          }
+        },
         "deepseek-v4-pro": {
           "name": "deepseek-v4-pro",
           "limit": {
             "context": 1048576,
             "output": 393216
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
           }
         },
         "seed-2.1": {
