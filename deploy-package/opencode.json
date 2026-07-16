@@ -86,6 +86,26 @@
           },
           "attachment": true
         },
+        "Kimi K3": {
+          "name": "Kimi K3",
+          "limit": {
+            "context": 1048576,
+            "output": 1048576
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ]
+          },
+          "attachment": true
+        },
         "MiniMax-M2.1-highspeed": {
           "name": "MiniMax-M2.1-highspeed",
           "limit": {
@@ -176,6 +196,13 @@
             "thinking": {
               "type": "enabled"
             }
+          }
+        },
+        "atlas_glm-5.1": {
+          "name": "atlas_glm-5.1",
+          "limit": {
+            "context": 204800,
+            "output": 131072
           }
         },
         "bytedance/doubao-seed-2.1-turbo-260628": {
