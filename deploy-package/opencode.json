@@ -357,6 +357,46 @@
               "type": "enabled"
             }
           }
+        },
+        "qwen3.7-max": {
+          "name": "qwen3.7-max",
+          "limit": {
+            "context": 1048576,
+            "output": 32768
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ]
+          },
+          "attachment": true
+        },
+        "qwen3.8-max-preview": {
+          "name": "qwen3.8-max-preview",
+          "limit": {
+            "context": 1048576,
+            "output": 32768
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ]
+          },
+          "attachment": true
         }
       }
     },
