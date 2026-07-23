@@ -358,6 +358,26 @@
             }
           }
         },
+        "qwen3.6-flash": {
+          "name": "qwen3.6-flash",
+          "limit": {
+            "context": 1048576,
+            "output": 32768
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ]
+          },
+          "attachment": true
+        },
         "qwen3.7-max": {
           "name": "qwen3.7-max",
           "limit": {
