@@ -48,6 +48,18 @@
             }
           }
         },
+        "GLM-5.3": {
+          "name": "GLM-5.3",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          }
+        },
         "Kimi K2.6": {
           "name": "Kimi K2.6",
           "limit": {
@@ -398,11 +410,39 @@
           },
           "attachment": true
         },
-        "qwen3.8-max-preview": {
-          "name": "qwen3.8-max-preview",
+        "AlibabaTokenPlan/deepseek-v4-flash-0731": {
+          "name": "AlibabaTokenPlan/deepseek-v4-flash-0731",
           "limit": {
             "context": 1048576,
-            "output": 32768
+            "output": 393216
+          }
+        },
+        "AlibabaTokenPlan/deepseek-v4-pro-0813": {
+          "name": "AlibabaTokenPlan/deepseek-v4-pro-0813",
+          "limit": {
+            "context": 1048576,
+            "output": 393216
+          }
+        },
+        "atlas/deepseek-v4-flash-0731": {
+          "name": "atlas/deepseek-v4-flash-0731",
+          "limit": {
+            "context": 1048576,
+            "output": 393216
+          }
+        },
+        "atlas/deepseek-v4-pro-0813": {
+          "name": "atlas/deepseek-v4-pro-0813",
+          "limit": {
+            "context": 1048576,
+            "output": 393216
+          }
+        },
+        "qwen3.8-max": {
+          "name": "qwen3.8-max",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
           },
           "options": {
             "thinking": {
@@ -597,7 +637,7 @@
     },
     "dev-planner": {
       "mode": "subagent",
-      "model": "bifrost-litellm/QWEN3.7-plus",
+      "model": "bifrost-litellm/qwen3.8-max",
       "temperature": 0.1,
       "permission": {
         "edit": {
@@ -668,7 +708,7 @@
     },
     "plan-writer-complex": {
       "mode": "subagent",
-      "model": "bifrost-litellm/GLM-5.2",
+      "model": "bifrost-litellm/qwen3.8-max",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -737,7 +777,7 @@
     },
     "rework": {
       "mode": "subagent",
-      "model": "bifrost-litellm/GLM-5.2",
+      "model": "bifrost-litellm/Kimi K3",
       "temperature": 0.2,
       "permission": {
         "edit": "allow",
@@ -786,7 +826,7 @@
     },
     "plan-reviewer-simple": {
       "mode": "subagent",
-      "model": "bifrost-litellm/Kimi K2.7",
+      "model": "bifrost-litellm/GLM-5.2",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -940,7 +980,7 @@
     },
     "devops-reviewer": {
       "mode": "subagent",
-      "model": "bifrost-litellm/QWEN3.7-plus",
+      "model": "bifrost-litellm/qwen3.8-max",
       "temperature": 0.1,
       "permission": {
         "edit": "deny",
@@ -1129,7 +1169,7 @@
     },
     "research-reviewer": {
       "mode": "subagent",
-      "model": "bifrost-litellm/Kimi K2.7",
+      "model": "bifrost-litellm/GLM-5.2",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -1152,7 +1192,7 @@
     },
     "dev-reviewer": {
       "mode": "subagent",
-      "model": "bifrost-litellm/Kimi K2.7",
+      "model": "bifrost-litellm/Kimi K3",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -1174,7 +1214,7 @@
     },
     "research-writer-complex": {
       "mode": "subagent",
-      "model": "bifrost-litellm/GLM-5.2",
+      "model": "bifrost-litellm/Kimi K3",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -1289,7 +1329,7 @@
     },
     "plan-reviewer-complex": {
       "mode": "subagent",
-      "model": "bifrost-litellm/Kimi K2.7",
+      "model": "bifrost-litellm/Kimi K3",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
