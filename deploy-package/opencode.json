@@ -60,6 +60,34 @@
             }
           }
         },
+        "GLM-5.3-Flash": {
+          "name": "GLM-5.3-Flash",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          "attachment": true
+        },
+        "GLM-5.3-Flash (res)": {
+          "name": "GLM-5.3-Flash (res)",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          "attachment": true
+        },
         "Kimi K2.6": {
           "name": "Kimi K2.6",
           "limit": {
@@ -208,6 +236,13 @@
             "thinking": {
               "type": "enabled"
             }
+          }
+        },
+        "aliyun/qwen3.8-flash": {
+          "name": "aliyun/qwen3.8-flash",
+          "limit": {
+            "context": 262144,
+            "output": 131072
           }
         },
         "atlas_glm-5.1": {
@@ -437,6 +472,21 @@
             "context": 1048576,
             "output": 393216
           }
+        },
+        "atlas/qwen3.8-max": {
+          "name": "atlas/qwen3.8-max",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ]
+          },
+          "attachment": true
         },
         "qwen3.8-max": {
           "name": "qwen3.8-max",
