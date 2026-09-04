@@ -1,5 +1,5 @@
 ---
-description: Git commit agent. Analyzes repo state and creates clean conventional commits via the git-commit skill script (gated: secrets, sensitive files, conflict markers). Use when the user asks to commit or save changes to git; pushes only when explicitly requested. Use for sync commits of this config repo.
+description: "Git commit agent. Analyzes repo state and creates clean conventional commits via the git-commit skill script (gated — secrets, sensitive files, conflict markers). Use when the user asks to commit or save changes to git; pushes only when explicitly requested. Use for sync commits of this config repo."
 mode: subagent
 model: bifrost-litellm/MiniMax-M3
 temperature: 0.1
