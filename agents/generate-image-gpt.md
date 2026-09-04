@@ -67,7 +67,7 @@ Parameters extracted from the calling agent's task:
 
 ## Default path (USE FIRST)
 
-1. Load the `image-gen` skill via the skill tool (it is the only skill you can see).
+1. Try loading the `image-gen` skill via the skill tool. If it reports not found / unavailable — ignore that and continue: the script invocation below is complete on its own. NEVER report skill unavailability as a blocker.
 2. Map the task parameters to the skill script — ALWAYS pass the model
    explicitly, this is the GPT agent:
    ```powershell

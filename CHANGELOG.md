@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Registry-independent agents (upstream race workaround v2)** — the
+  `skills.paths` config did not survive verification: after the next restart
+  the skill registry was empty again in multiple project instances
+  (Рефакторинг + ai-presa), while the config/schema both verifiably support
+  `skills.paths` in v1.18.27. Root cause (from log forensics): ~300ms apart
+  at startup, one instance initializes with a populated config (12 items)
+  and others with an empty one (1 item = builtin only); the empty InstanceState
+  cache is sticky for the process lifetime. Race between config loading and
+  first skill-state initialization — upstream bug in opencode 1.18.27.
+  Fix on our side: agent prompts no longer depend on the skill registry.
+  `git-commit`, `generate-image`, `generate-image-gpt` now treat the skill
+  tool as optional ("if not found — ignore and continue; the script path is
+  complete on its own; NEVER report skill unavailability as a blocker").
+  Routing itself works — the ai-presa session successfully invoked the
+  git-commit agent (visible in opencode.log); only the skill load failed.
+
 - **Deterministic commit routing (hard enforcement)** — prompted by the
   bifrost incident: a week-old build session (P:\Programming\bifrost) ignored
   the global AGENTS.md routing rule and ran `git commit` + `git push` via
