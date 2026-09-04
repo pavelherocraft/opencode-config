@@ -100,6 +100,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **TRUE root cause of empty skill registry — my own YAML bug** (user's
+  suspicion confirmed): both SKILL.md files had unquoted `description:`
+  values containing `": "` sequences (`(-Analyze: status`, `"SAVED: <path>"`),
+  so YAML decoded description as a nested map. In opencode's `add()`
+  (packages/opencode/src/skill/index.ts) a parse failure is converted to a
+  value by tryPromise's catch and `isSkillFrontmatter` then silently drops
+  the skill — zero log lines. The earlier "startup race" theory was wrong;
+  `skills.paths` was fine all along. Fixes: descriptions single-quoted in
+  both SKILL.md files; verified live — registry went from builtin-only to
+  containing `git-commit` + `image-gen`, and the V1 skill tool loads the
+  skill after `POST /instance/dispose?directory=...` (no app restart
+  needed).
+- **Discovery path workaround**: `~/.agents/skills/` now holds REAL COPIES
+  of both skills (external-dir scan uses dot:true and works); an NTFS
+  junction was tried first and is NOT followed by opencode's glob — copies
+  are required. NOTE: after editing skills in `~/.config/opencode/skills`,
+  re-copy to `~/.agents/skills/` (or dispose + the copies go stale).
+- **skills/ mirrored to the repo** (was missing).
+- **Server API access documented**: desktop server listens on a rotating
+  localhost port with basic auth from env `OPENCODE_SERVER_USERNAME/
+  OPENCODE_SERVER_PASSWORD`; useful endpoints: GET /config, GET /skill,
+  GET /path, POST /instance/dispose?directory=..., GET /doc (route list).
+- **Upstream issue draft rewritten** (`ISSUE-opencode-silent-skill-drop.md`):
+  silent frontmatter drop (no logging), junctions not followed, no live
+  rebuild — replaces the withdrawn race theory.
+
 - **Flaky skill registry on startup** (opencode 1.18.27 race): after a
   restart, task-instance skill discovery ran "successfully empty" — registry
   degraded to the built-in skill only, so `git-commit` agents got
