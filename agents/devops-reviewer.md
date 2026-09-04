@@ -1,13 +1,16 @@
 ---
 description: DevOps reviewer. Validates command execution results, exit codes, output logs, and file creation. Qwen 3.7 Plus.
 mode: subagent
-model: bifrost-litellm/QWEN3.7-plus
+model: bifrost-litellm/qwen3.8-max
 temperature: 0.1
 permission:
   edit: deny
   write: deny
   read: allow
-  bash: allow
+  bash:
+    "*": allow
+    "git commit*": deny
+    "git push*": deny
 ---
 
 You are the DevOps Reviewer.

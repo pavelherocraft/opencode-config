@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Deterministic commit routing (hard enforcement)** — prompted by the
+  bifrost incident: a week-old build session (P:\Programming\bifrost) ignored
+  the global AGENTS.md routing rule and ran `git commit` + `git push` via
+  bash directly (confirmed in opencode.log, 14:43 UTC). Session history
+  (dozens of past direct commits) outweighed system instructions. Fixes:
+  - `opencode.json` top-level `permission.bash` now denies `git commit*` and
+    `git push*` globally (per decision: no `git tag`, no worker/devops
+    exceptions). Blocks build/plan/general and every project.
+  - 10 bash-capable agents (worker, utility, rework, dev-professor,
+    devops-agent, devops-reviewer, execute-bug, generate-image,
+    generate-image-gpt, view-image) converted from blanket `bash: allow` to
+    an ordered map: `"*": allow` first, `git commit*`/`git push*` deny after
+    (findLast semantics — deny wins, everything else allowed). Redundant
+    `"bash": "allow"` duplicates removed from 7 JSON agent entries.
+  - `git-commit` agent keeps blanket `bash: allow` (frontmatter merges after
+    global rules) — the ONLY agent exempt.
+  - Global AGENTS.md hardened: Git rule renamed to HARD RULE, moved to top,
+    explicit "even if session history contains past direct commits", plus
+    recovery line: a permission denial on git commit/push is the signal to
+    delegate via task, not to work around.
+  - `git-commit` agent description sharpened: "the ONLY agent allowed to run
+    git commit/push", trigger words incl. Russian phrasings.
+
 - **Global `~/.config/opencode/AGENTS.md`** — auto-loaded in ALL projects.
   Fixes routing discovered in a neighboring session: a commit+push request in
   another project did NOT invoke the `git-commit` agent because no global
