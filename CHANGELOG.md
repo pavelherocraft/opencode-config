@@ -49,6 +49,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Skill visibility punch-through** (root-caused in opencode source): the
+  global `permission.skill = {"*": "deny"}` is merged AFTER .md frontmatter
+  permissions (`Permission.merge(defaults, specific, user)` + `evaluate` =
+  `findLast`), so per-agent frontmatter allows could never win. Fix: added
+  `agent.<name>.permission.skill` allows in `opencode.json` for
+  `generate-image` / `generate-image-gpt` (`image-gen`) and `git-commit`
+  (`git-commit`) — `cfg.agent` entries merge last and override the global
+  deny. Embedded skills (`customize-opencode`) bypass the filter by design.
+- **`git-commit.md` frontmatter YAML bug**: unquoted `gated: secrets` (colon
+  + space) in description broke frontmatter parsing — the agent silently ran
+  on defaults (global model, `mode=all`, global permissions, no skill tool).
+  Description is now quoted; agent runs as `subagent` on MiniMax-M3.
 - **`image-gen/scripts/generate.ps1` extension bug**: gemini path pre-assigned
   `.jpg` while the actual payload MIME was `image/png`, and the post-hoc
   rename regexes (`\.png$` on a `.jpg`-named file) never matched — PNG bytes
