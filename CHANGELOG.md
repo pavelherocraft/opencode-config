@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Global `~/.config/opencode/AGENTS.md`** — auto-loaded in ALL projects.
+  Fixes routing discovered in a neighboring session: a commit+push request in
+  another project did NOT invoke the `git-commit` agent because no global
+  instruction existed (the agent itself was available — 35 agents in the
+  global dir load everywhere). Now MANDATORY rules live globally: git
+  commits/pushes → `git-commit` agent only; image generation →
+  `generate-image`/`generate-image-gpt` agents only. Also absorbs the
+  MCP-first rules from `instructions.md`, which was never wired into
+  opencode.json (dead file). Mirror: `AGENTS.global.md` (hash-verified).
+- **`.gitignore`**: ignore `generated-images/`, `*.7z`, `opencode.db*`,
+  `log/`, `tool-output/` artifacts (see below — creation was interrupted).
+
 - **Agent `git-commit`** (`~/.config/opencode/agents/git-commit.md`, synced to
   repo `agents/`): gated conventional-commit agent.
   - Model MiniMax-M3 @ 0.1; permissions: bash/read/glob/grep allow,

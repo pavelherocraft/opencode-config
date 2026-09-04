@@ -1,0 +1,12 @@
+# Build artifacts / archives
+*.7z
+
+# Generated images from image-gen skill tests
+generated-images/
+
+# opencode local data (never commit)
+opencode.db
+opencode.db-shm
+opencode.db-wal
+log/
+tool-output/
