@@ -123,7 +123,7 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 
 ## 4. Routing Tables
 
-### orchestrator Whitelist (21 agents)
+### orchestrator Whitelist (24 agents)
 
 orchestrator can only call these agents:
 
@@ -150,6 +150,9 @@ orchestrator can only call these agents:
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
 | docs-planner | Documentation planning (DOCS DEEP) |
+| generate-image | Image generation (Gemini) |
+| generate-image-gpt | Image generation (GPT/DALL-E) |
+| git-commit | Gated conventional git commits |
 
 ### plankestrator Whitelist (9 agents)
 
@@ -192,7 +195,10 @@ const ROUTING_TABLES = {
     'execute-bug',
     'consistency-checker',
     'view-image',
-    'docs-planner'
+    'docs-planner',
+    'generate-image',
+    'generate-image-gpt',
+    'git-commit'
   ],
   plankestrator: [
     'plankestrator-identity-probe',
@@ -867,7 +873,10 @@ const ROUTING_TABLES = {
     'execute-bug',
     'consistency-checker',
     'view-image',
-    'docs-planner'
+    'docs-planner',
+    'generate-image',
+    'generate-image-gpt',
+    'git-commit'
   ],
   plankestrator: [
     'plankestrator-identity-probe',

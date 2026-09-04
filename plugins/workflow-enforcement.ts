@@ -25,7 +25,10 @@ const ROUTING_TABLES = {
     "execute-bug",
     "consistency-checker",
     "view-image",
-    "docs-planner"
+    "docs-planner",
+    "generate-image",
+    "generate-image-gpt",
+    "git-commit"
   ],
   plankestrator: [
     "plankestrator-identity-probe",

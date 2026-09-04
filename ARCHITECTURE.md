@@ -4,7 +4,7 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 
 ## 1. Routing Tables
 
-### orchestrator Whitelist (21 agents)
+### orchestrator Whitelist (24 agents)
 
 | # | Agent Name | Role |
 |---|------------|------|
@@ -29,6 +29,9 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 | 19 | consistency-checker | Architecture consistency validation |
 | 20 | view-image | Image analysis |
 | 21 | docs-planner | Documentation planning (DOCS DEEP) |
+| 22 | generate-image | Image generation (Gemini) |
+| 23 | generate-image-gpt | Image generation (GPT/DALL-E) |
+| 24 | git-commit | Gated conventional git commits |
 
 ### plankestrator Whitelist (9 agents)
 
@@ -48,11 +51,11 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 
 | Primary Agent | Whitelist Count | Total (primary + whitelist) |
 |---------------|-----------------|-----------------------------|
-| orchestrator | 21 | 22 (orchestrator + 21 subagents) |
+| orchestrator | 24 | 25 (orchestrator + 24 subagents) |
 | plankestrator | 9 | 10 (plankestrator + 9 subagents) |
-| **Grand Total** | **30** | **32** |
+| **Grand Total** | **33** | **35** |
 
-Note: 30 unique subagents + 2 primary agents = 32 unique agents total.
+Note: 33 unique subagents + 2 primary agents = 35 unique agents total.
 ## Subagent Models
 
 | Agent | Model |

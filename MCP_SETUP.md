@@ -1,4 +1,4 @@
-﻿# MCP Setup Guide — OpenCode Agent Orchestration System
+# MCP Setup Guide — OpenCode Agent Orchestration System
 
 Полное и исчерпывающее руководство по развертыванию системы оркестрации агентов OpenCode на машинах коллег.
 
@@ -366,8 +366,8 @@ DO NOT call execute-bug without this prefix. execute-bug MUST read bug_plan.md b
 | serena_* | allow | Все Serena инструменты |
 | task | { "*": "deny", ... } | Whitelist ниже |
 
-**Task Whitelist (21 agents):**
-orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bugfix, rework, mcp-read, utility, bugfix-triage, plan-bug, devops-agent, devops-reviewer, dev-planner, mcp-search, docs-writer, summarizer, execute-bug, consistency-checker, view-image, docs-planner
+**Task Whitelist (24 agents):**
+orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bugfix, rework, mcp-read, utility, bugfix-triage, plan-bug, devops-agent, devops-reviewer, dev-planner, mcp-search, docs-writer, summarizer, execute-bug, consistency-checker, view-image, docs-planner, generate-image, generate-image-gpt, git-commit
 
 #### plankestrator
 
@@ -659,7 +659,7 @@ This configuration:
 
 ## 6. Routing Tables
 
-### orchestrator Whitelist (21 agents)
+### orchestrator Whitelist (24 agents)
 
 | Agent | Role |
 |-------|------|
@@ -684,6 +684,9 @@ This configuration:
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
 | docs-planner | Documentation planning (DOCS DEEP) |
+| generate-image | Image generation (Gemini) |
+| generate-image-gpt | Image generation (GPT/DALL-E) |
+| git-commit | Gated conventional git commits |
 
 ### plankestrator Whitelist (9 agents)
 
@@ -902,7 +905,8 @@ const ROUTING_TABLES = {
     "worker", "bugfix", "rework", "mcp-read", "utility",
     "bugfix-triage", "plan-bug", "devops-agent", "devops-reviewer",
     "dev-planner", "mcp-search", "docs-writer", "summarizer",
-    "execute-bug", "consistency-checker", "view-image", "docs-planner"
+    "execute-bug", "consistency-checker", "view-image", "docs-planner",
+    "generate-image", "generate-image-gpt", "git-commit"
   ],
   plankestrator: [
     "plankestrator-identity-probe", "plan-writer-simple", "plan-writer-complex",
@@ -1294,7 +1298,7 @@ opencode --agent plankestrator
 | Subagents | 30 | `~/.config/opencode/agents/` |
 | MCP servers | 5 | zai_zread, zai_web_search, zai_web_reader, serena, unity-mcp |
 | Plugin hooks | 3 | workflow-enforcement.ts |
-| Routing tables | 2 | orchestrator (21), plankestrator (9) |
+| Routing tables | 2 | orchestrator (24), plankestrator (9) |
 | Pipelines | 13 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 | Custom commands | 5 | opencode.json |
 | Models | 6 | bifrost-litellm (GLM-5.2, QWEN3.7-plus, Kimi K2.6/K2.7, MiniMax-M3, GLM-4.7) |
