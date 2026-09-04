@@ -61,6 +61,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Flaky skill registry on startup** (opencode 1.18.27 race): after a
+  restart, task-instance skill discovery ran "successfully empty" — registry
+  degraded to the built-in skill only, so `git-commit` agents got
+  `Skill "git-commit" not found. Available skills: customize-opencode` with
+  identical config/files that worked on the previous boot. Live config edits
+  (removing/adding AGENTS.md) did not rebuild the poisoned InstanceState —
+  only a restart re-runs discovery. Workaround: explicit
+  `"skills": { "paths": ["~/.config/opencode/skills"] }` in opencode.json
+  adds an independent discovery source bypassing the flaky config-dir scan.
+  Post-restart verification: skill loads via skill tool (MiniMax-M3,
+  mode=subagent). Candidate for an upstream issue.
 - **Skill visibility punch-through** (root-caused in opencode source): the
   global `permission.skill = {"*": "deny"}` is merged AFTER .md frontmatter
   permissions (`Permission.merge(defaults, specific, user)` + `evaluate` =
