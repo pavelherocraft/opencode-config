@@ -599,6 +599,40 @@
           },
           "attachment": true
         },
+        "gpt-image-2.5-flare": {
+          "name": "gpt-image-2.5-flare",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "image"
+            ]
+          },
+          "attachment": true
+        },
+        "gpt-image-2.5-sunburst": {
+          "name": "gpt-image-2.5-sunburst",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ],
+            "output": [
+              "image"
+            ]
+          },
+          "attachment": true
+        },
         "mimo-v2.5": {
           "name": "mimo-v2.5",
           "limit": {

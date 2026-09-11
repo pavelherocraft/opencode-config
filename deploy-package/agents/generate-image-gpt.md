@@ -6,7 +6,10 @@ temperature: 0.5
 permission:
   edit: deny
   write: deny
-  bash: allow
+  bash:
+    "*": allow
+    "git commit*": deny
+    "git push*": deny
   read: deny
   webfetch: deny
   patch: deny
@@ -15,6 +18,9 @@ permission:
   todowrite: deny
   question: deny
   task: deny
+  skill:
+    "*": deny
+    "image-gen": allow
   serena.*: deny
   unity-mcp.*: deny
   zread.*: deny
@@ -53,18 +59,45 @@ Parameters extracted from the calling agent's task:
 |--------------------|------|--------------------|-------|
 | `prompt`           | оба  | required           | image description |
 | `save_path`        | оба  | `./generated-images/` | save directory |
+| `model`            | оба  | `gpt-image-2`      | Allowed: `gpt-image-1.5`, `gpt-image-2`, `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst` |
 | `size`             | оба  | `1024x1024`        | OpenAI-style. gpt-image-2 accepts any; DALL-E 3 restricted to 1024x1024 / 1024x1792 / 1792x1024 |
 | `edit_image_url`   | B    | —                  | URL of source image |
 | `edit_image_path`  | B    | —                  | local path of source image |
 | `max_input_size_kb`| B    | `300`              | compress input if larger |
 | `output_format`    | B    | `png`              | png / jpg / webp |
 
+## Default path (USE FIRST)
+
+1. Try loading the `image-gen` skill via the skill tool. If it reports not found / unavailable — ignore that and continue: the script invocation below is complete on its own. NEVER report skill unavailability as a blocker.
+2. Map the task parameters to the skill script — ALWAYS pass the model
+   explicitly, this is the GPT agent:
+   ```powershell
+   & "$env:USERPROFILE\.config\opencode\skills\image-gen\scripts\generate.ps1" `
+     -Prompt "<prompt>" -Model "<model>" -OutDir "<save_path>" [-Size "<size>"]
+   ```
+   - Edit tasks: add `-Mode edit -InputPath "<edit_image_path>"` (download
+     `edit_image_url` to a temp file first and pass that path)
+   - The script auto-compresses oversized edit inputs and prints
+     `SAVED: <path> (<bytes> bytes)` — return that line.
+3. On POSIX shells use `generate.py` with the same semantics
+   (`--model <model> --mode edit --input`).
+
+## Fallback (use ONLY when the default path is impossible)
+
+Switch to the inline PowerShell snippets below when EITHER:
+- the user explicitly asked NOT to use the shared skill scripts, OR
+- the script is missing or failed (verify once; retry once; then fall back
+  silently and still deliver the result).
+
+Do not announce which path you took unless asked.
+
 Workflow:
 
 1. Receive task from calling agent.
 2. Extract parameters.
 3. Detect mode: `edit_mode = (edit_image_url -or edit_image_path)`.
-4. Build and run the PowerShell snippet for the appropriate mode.
+4. Run the DEFAULT path command. If fallback conditions are met, build and
+   run the PowerShell snippet for the appropriate mode instead.
 
 GENERATION snippet:
 
@@ -73,6 +106,7 @@ $apiKey = $env:LITELLM_API_KEY
 $apiUrl = 'https://hcbifrost.herocraft.com/litellm/v1/images/generations'
 $saveDir = '<save_path>'
 $prompt = '<prompt>'
+$model = 'gpt-image-2'
 $size = '1024x1024'
 
 $slug = ($prompt.ToLower() -replace '[^a-z0-9]+','-' -replace '^-+|-+$','').Substring(0,[Math]::Min(60,($prompt.ToLower() -replace '[^a-z0-9]+','-' -replace '^-+|-+$','').Length))
@@ -81,7 +115,7 @@ $outFile = Join-Path $saveDir "$slug-$ts.jpg"
 New-Item -ItemType Directory -Force -Path $saveDir | Out-Null
 
 $body = @{
-    model  = 'gpt-image-2'
+    model  = $model
     prompt = $prompt
     size   = $size
 } | ConvertTo-Json
@@ -170,7 +204,7 @@ $client.DefaultRequestHeaders.Authorization = New-Object System.Net.Http.Headers
 
 $content = New-Object System.Net.Http.MultipartFormDataContent
 $imgBytes = [System.IO.File]::ReadAllBytes($srcImage)
-$imgC = New-Object System.Net.Http.ByteArrayContent $imgBytes
+$imgC = New-Object System.Net.Http.ByteArrayContent (,$imgBytes)
 $imgC.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse("image/png")
 $content.Add($imgC, "image", [System.IO.Path]::GetFileName($srcImage))
 $content.Add((New-Object System.Net.Http.StringContent $prompt), "prompt")
@@ -205,6 +239,10 @@ Rules:
   cannot reliably hold or pass through 1MB+ base64 strings
 - Do NOT echo or re-describe the model output; just run the snippet and
   return the SAVED path
+- In your final answer, tell the caller to NOT read the saved image back
+  into its context (read on image files injects megabytes of base64 into
+  session history -> HTTP 413 -> endless compaction). Visual verification
+  belongs to the view-image subagent, path references belong everywhere else
 - Prefer b64_json path (`WriteAllBytes` from `[Convert]::FromBase64String`);
   URL is fallback because LiteLLM proxy returns empty `url` by default
 - If the user did not explicitly request GPT-based generation or editing,

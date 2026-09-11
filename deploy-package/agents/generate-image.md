@@ -6,7 +6,10 @@ temperature: 0.5
 permission:
   edit: deny
   write: deny
-  bash: allow
+  bash:
+    "*": allow
+    "git commit*": deny
+    "git push*": deny
   read: deny
   webfetch: deny
   patch: deny
@@ -15,6 +18,9 @@ permission:
   todowrite: deny
   question: deny
   task: deny
+  skill:
+    "*": deny
+    "image-gen": allow
   serena.*: deny
   unity-mcp.*: deny
   zread.*: deny
@@ -49,6 +55,7 @@ Parameters extracted from the calling agent's task:
 |--------------------|------|--------------------|-------|
 | `prompt`           | оба  | required           | image description |
 | `save_path`        | оба  | `./generated-images/` | save directory |
+| `model`            | оба  | `gemini/gemini-3.1-flash-image` | Allowed: `gemini/gemini-3-pro-image`, `gemini/gemini-3.1-flash-image` |
 | `size`             | оба  | `1024x1024`        | OpenAI-style; LiteLLM auto-maps for Gemini |
 | `aspect_ratio`     | A    | —                  | Gemini-native. Allowed: 1:1, 16:9, 9:16, 4:3, 3:4, 4:5, 5:4, 2:3, 3:2, 21:9 |
 | `image_size`       | A    | —                  | Gemini-native. Allowed: 1K, 2K, 4K (4K only on Pro) |
@@ -57,12 +64,38 @@ Parameters extracted from the calling agent's task:
 | `max_input_size_kb`| B    | `300`              | compress input if larger |
 | `output_format`    | B    | `png`              | png / jpg / webp |
 
+## Default path (USE FIRST)
+
+1. Try loading the `image-gen` skill via the skill tool. If it reports not found / unavailable — ignore that and continue: the script invocation below is complete on its own. NEVER report skill unavailability as a blocker.
+2. Map the task parameters to the skill script:
+   ```powershell
+   & "$env:USERPROFILE\.config\opencode\skills\image-gen\scripts\generate.ps1" `
+     -Prompt "<prompt>" -OutDir "<save_path>" [-Size "<size>"]
+   ```
+   - Quality upgrade: add `-Model gemini/gemini-3-pro-image`
+   - Edit tasks: add `-Mode edit -InputPath "<edit_image_path>"` (download
+     `edit_image_url` to a temp file first and pass that path)
+   - The script auto-compresses oversized edit inputs and prints
+     `SAVED: <path> (<bytes> bytes)` — return that line.
+3. On POSIX shells use `generate.py` with the same semantics
+   (`--prompt --out --model --mode edit --input`).
+
+## Fallback (use ONLY when the default path is impossible)
+
+Switch to the inline PowerShell snippets below when EITHER:
+- the user explicitly asked NOT to use the shared skill scripts, OR
+- the script is missing or failed (verify once; retry once; then fall back
+  silently and still deliver the result).
+
+Do not announce which path you took unless asked.
+
 Workflow:
 
 1. Receive task from calling agent.
 2. Extract parameters. Validate against allowed values.
 3. Detect mode: `edit_mode = (edit_image_url -or edit_image_path)`.
-4. Build and run the PowerShell snippet for the appropriate mode.
+4. Run the DEFAULT path command. If fallback conditions are met, build and
+   run the PowerShell snippet for the appropriate mode instead.
 
 GENERATION snippet:
 
@@ -71,6 +104,7 @@ $apiKey = $env:LITELLM_API_KEY
 $apiUrl = 'https://hcbifrost.herocraft.com/litellm/v1/images/generations'
 $saveDir = '<save_path>'
 $prompt = '<prompt>'
+$model = 'gemini/gemini-3.1-flash-image'
 $size = '1024x1024'
 $aspectRatio = $null
 $imageSize = $null
@@ -86,13 +120,13 @@ if ($aspectRatio -or $imageSize) {
     if ($imageSize)   { $imageConfig.imageSize   = $imageSize }
     $imageConfig.imageOutputOptions = @{ mimeType = 'image/jpeg'; compressionQuality = 85 }
     $body = @{
-        model       = 'gemini/gemini-3.1-flash-image'
+        model       = $model
         prompt      = $prompt
         imageConfig = $imageConfig
     } | ConvertTo-Json -Depth 5
 } else {
     $body = @{
-        model  = 'gemini/gemini-3.1-flash-image'
+        model  = $model
         prompt = $prompt
         size   = $size
     } | ConvertTo-Json
@@ -182,7 +216,7 @@ $client.DefaultRequestHeaders.Authorization = New-Object System.Net.Http.Headers
 
 $content = New-Object System.Net.Http.MultipartFormDataContent
 $imgBytes = [System.IO.File]::ReadAllBytes($srcImage)
-$imgC = New-Object System.Net.Http.ByteArrayContent $imgBytes
+$imgC = New-Object System.Net.Http.ByteArrayContent (,$imgBytes)
 $imgC.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse("image/png")
 $content.Add($imgC, "image", [System.IO.Path]::GetFileName($srcImage))
 $content.Add((New-Object System.Net.Http.StringContent $prompt), "prompt")
@@ -217,6 +251,10 @@ Rules:
   cannot reliably hold or pass through 1MB+ base64 strings
 - Do NOT echo or re-describe the model output; just run the snippet and
   return the SAVED path
+- In your final answer, tell the caller to NOT read the saved image back
+  into its context (read on image files injects megabytes of base64 into
+  session history -> HTTP 413 -> endless compaction). Visual verification
+  belongs to the view-image subagent, path references belong everywhere else
 - Prefer b64_json path (`WriteAllBytes` from `[Convert]::FromBase64String`);
   URL is fallback because LiteLLM proxy returns empty `url` by default
 - For "use gpt image" / "use dall-e" / explicit GPT requests, refuse and
