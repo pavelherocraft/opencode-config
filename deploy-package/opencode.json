@@ -1,7 +1,29 @@
-{
+﻿{
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "prune": true
+  },
+  "attachment": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 1600,
+      "max_height": 1600,
+      "max_base64_bytes": 262144
+    }
+  },
+  "permission": {
+    "skill": {
+      "*": "deny"
+    },
+    "bash": {
+      "git commit*": "deny",
+      "git push*": "deny"
+    }
+  },
+  "skills": {
+    "paths": [
+      "~/.config/opencode/skills"
+    ]
   },
   "provider": {
     "bifrost-litellm": {
@@ -112,25 +134,6 @@
           },
           "attachment": true
         },
-        "Kimi K2.6": {
-          "name": "Kimi K2.6",
-          "limit": {
-            "context": 262144,
-            "output": 262144
-          },
-          "options": {
-            "thinking": {
-              "type": "enabled"
-            }
-          },
-          "modalities": {
-            "input": [
-              "text",
-              "image"
-            ]
-          },
-          "attachment": true
-        },
         "Kimi K2.7": {
           "name": "Kimi K2.7",
           "limit": {
@@ -158,7 +161,12 @@
           },
           "options": {
             "thinking": {
-              "type": "enabled"
+              "type": "enabled",
+              "allowedEfforts": [
+                "low",
+                "high",
+                "max"
+              ]
             }
           },
           "modalities": {
@@ -169,6 +177,47 @@
             ]
           },
           "attachment": true
+        },
+        "Kimi K3-256K": {
+          "name": "Kimi K3-256K",
+          "limit": {
+            "context": 262144,
+            "output": 32768
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled",
+              "allowedEfforts": [
+                "low",
+                "high",
+                "max"
+              ]
+            }
+          },
+          "modalities": {
+            "input": [
+              "text"
+            ]
+          },
+          "attachment": false
+        },
+        "Kimi K2.8": {
+          "name": "Kimi K2.8",
+          "limit": {
+            "context": 262144,
+            "output": 32768
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text"
+            ]
+          },
+          "attachment": false
         },
         "MiniMax-M2.1-highspeed": {
           "name": "MiniMax-M2.1-highspeed",
@@ -545,20 +594,6 @@
           },
           "attachment": true
         },
-        "AlibabaTokenPlan/deepseek-v4-flash-0731": {
-          "name": "AlibabaTokenPlan/deepseek-v4-flash-0731",
-          "limit": {
-            "context": 1048576,
-            "output": 393216
-          }
-        },
-        "AlibabaTokenPlan/deepseek-v4-pro-0813": {
-          "name": "AlibabaTokenPlan/deepseek-v4-pro-0813",
-          "limit": {
-            "context": 1048576,
-            "output": 393216
-          }
-        },
         "atlas/deepseek-v4-flash-0731": {
           "name": "atlas/deepseek-v4-flash-0731",
           "limit": {
@@ -761,9 +796,32 @@
     }
   },
   "agent": {
+    "generate-image": {
+      "permission": {
+        "skill": {
+          "*": "deny",
+          "image-gen": "allow"
+        }
+      }
+    },
+    "generate-image-gpt": {
+      "permission": {
+        "skill": {
+          "*": "deny",
+          "image-gen": "allow"
+        }
+      }
+    },
+    "git-commit": {
+      "permission": {
+        "skill": {
+          "*": "deny",
+          "git-commit": "allow"
+        }
+      }
+    },
     "mcp-github": {
       "mode": "subagent",
-      "model": "bifrost-litellm/MiniMax-M2.7",
       "temperature": 0.1,
       "permission": {
         "edit": "deny",
@@ -787,7 +845,6 @@
     },
     "dev-planner": {
       "mode": "subagent",
-      "model": "bifrost-litellm/qwen3.8-max",
       "temperature": 0.1,
       "permission": {
         "edit": {
@@ -812,7 +869,6 @@
     },
     "bugfix": {
       "mode": "subagent",
-      "model": "bifrost-litellm/QWEN3.7-plus",
       "temperature": 0.2,
       "permission": {
         "edit": "allow",
@@ -834,7 +890,6 @@
     },
     "mcp-read": {
       "mode": "subagent",
-      "model": "bifrost-litellm/MiniMax-M2.7",
       "temperature": 0.1,
       "permission": {
         "edit": "deny",
@@ -858,7 +913,6 @@
     },
     "plan-writer-complex": {
       "mode": "subagent",
-      "model": "bifrost-litellm/qwen3.8-max",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -882,11 +936,9 @@
     },
     "worker": {
       "mode": "subagent",
-      "model": "bifrost-litellm/MiniMax-M3",
       "temperature": 0.2,
       "permission": {
         "edit": "allow",
-        "bash": "allow",
         "unity-mcp.*": "allow",
         "serena_find_symbol": "allow",
         "serena_find_referencing_symbols": "allow",
@@ -904,12 +956,10 @@
     },
     "utility": {
       "mode": "subagent",
-      "model": "bifrost-litellm/MiniMax-M2.7",
       "temperature": 0.1,
       "permission": {
         "edit": "deny",
         "write": "deny",
-        "bash": "allow",
         "unity-mcp.*": "allow",
         "serena_find_symbol": "allow",
         "serena_find_referencing_symbols": "allow",
@@ -927,11 +977,9 @@
     },
     "rework": {
       "mode": "subagent",
-      "model": "bifrost-litellm/Kimi K3",
       "temperature": 0.2,
       "permission": {
         "edit": "allow",
-        "bash": "allow",
         "unity-mcp.*": "allow",
         "serena_find_symbol": "allow",
         "serena_find_referencing_symbols": "allow",
@@ -949,7 +997,6 @@
     },
     "research-writer-simple": {
       "mode": "subagent",
-      "model": "bifrost-litellm/mimo-v2.5-pro",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -976,7 +1023,6 @@
     },
     "plan-reviewer-simple": {
       "mode": "subagent",
-      "model": "bifrost-litellm/GLM-5.2",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -1000,7 +1046,6 @@
     },
     "plan-bug": {
       "mode": "subagent",
-      "model": "bifrost-litellm/MiniMax-M3",
       "temperature": 0.1,
       "permission": {
         "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" },
@@ -1021,7 +1066,6 @@
     },
     "docs-writer": {
       "mode": "subagent",
-      "model": "bifrost-litellm/mimo-v2.5-pro",
       "temperature": 0.3,
       "permission": {
         "edit": "allow",
@@ -1043,7 +1087,6 @@
     },
     "docs-planner": {
       "mode": "subagent",
-      "model": "bifrost-litellm/QWEN3.7-plus",
       "temperature": 0.2,
       "permission": {
         "edit": { "*.md": "allow", "*": "deny" },
@@ -1062,11 +1105,9 @@
     },
     "dev-professor": {
       "mode": "subagent",
-      "model": "bifrost-litellm/GLM-5.2",
       "temperature": 0.2,
       "permission": {
         "edit": "allow",
-        "bash": "allow",
         "unity-mcp.*": "allow",
         "serena_find_symbol": "allow",
         "serena_find_referencing_symbols": "allow",
@@ -1084,7 +1125,6 @@
     },
     "devops-readonly": {
       "mode": "subagent",
-      "model": "bifrost-litellm/MiniMax-M3",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -1107,12 +1147,10 @@
     },
     "devops-agent": {
       "mode": "subagent",
-      "model": "bifrost-litellm/MiniMax-M3",
       "temperature": 0.1,
       "permission": {
         "edit": "deny",
         "write": "deny",
-        "bash": "allow",
         "unity-mcp.*": "allow",
         "serena_find_symbol": "allow",
         "serena_find_referencing_symbols": "allow",
@@ -1130,13 +1168,11 @@
     },
     "devops-reviewer": {
       "mode": "subagent",
-      "model": "bifrost-litellm/qwen3.8-max",
       "temperature": 0.1,
       "permission": {
         "edit": "deny",
         "write": "deny",
         "read": "allow",
-        "bash": "allow",
         "unity-mcp.*": "allow",
         "serena_find_symbol": "allow",
         "serena_find_referencing_symbols": "allow",
@@ -1154,7 +1190,6 @@
     },
     "orchestrator-identity-probe": {
       "mode": "subagent",
-      "model": "bifrost-litellm/QWEN3.7-plus",
       "temperature": 0.1,
       "permission": {
         "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" },
@@ -1175,7 +1210,6 @@
     },
     "plankestrator-identity-probe": {
       "mode": "subagent",
-      "model": "bifrost-litellm/QWEN3.7-plus",
       "temperature": 0.1,
       "permission": {
         "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" },
@@ -1196,9 +1230,7 @@
     },
     "orchestrator": {
       "mode": "primary",
-      "model": "bifrost-litellm/QWEN3.7-plus",
       "temperature": 0.1,
-      "prompt": "You MUST output JSON in EVERY response. First line: 'IDENTITY VERIFIED: I am orchestrator...'. Second: JSON code block with fields: agent, type, complexity, plan_exists, plan_source, goal, next_agent, pipeline. Third: Call Task tool if next_agent is not null. This is MANDATORY. NO EXCEPTIONS.\n\n## Tool Priority\n\nFor code operations, ALWAYS try Serena MCP tools FIRST:\n- serena_find_symbol (not grep)\n- serena_find_referencing_symbols (not grep)\n- serena_get_symbols_overview (not grep)\n- serena_rename_symbol (not edit with regex)\n- serena_replace_symbol_body (not edit)\n\nUse built-in tools (grep, read, edit) as FALLBACK when Serena fails or for non-symbol tasks.\n\n## Image Analysis Priority\n\nFor image analysis tasks, ALWAYS use view-image agent FIRST (NOT zai-mcp-server):\n- Call Task tool with view-image subagent\n- view-image has direct vision capabilities via bifrost-litellm/Kimi K2.6\n- Use zai-mcp-server only as FALLBACK when view-image is unavailable\n\n## Pipeline Selection Rules — CRITICAL\n\nYou MUST select the correct pipeline based on task type AND plan_exists flag:\n\n| Task Type | plan_exists | Pipeline |\n|-----------|-------------|----------|\n| DEV SIMPLE | false | [\"worker\", \"utility\"] |\n| DEV SIMPLE | true | [\"worker\", \"consistency-checker\", \"utility\"] |\n| DEV COMPLEX | any | [\"dev-planner\", \"dev-professor\", \"dev-reviewer\", \"rework\", \"consistency-checker\", \"utility\"] |\n| BUGFIX SIMPLE | any | [\"bugfix-triage\", \"worker\", \"utility\"] |\n| BUGFIX DEEP | any | [\"bugfix-triage\", \"plan-bug\", \"execute-bug\", \"dev-reviewer\", \"rework\", \"consistency-checker\", \"utility\"] |\n| DEVOPS | any | [\"devops-agent\", \"devops-reviewer\"] |\n| DOCS | any | [\"docs-writer\", \"utility\"] |\n\n**MANDATORY RULE:** When plan_exists=true and type=DEV and complexity=SIMPLE, the pipeline MUST be [\"worker\", \"consistency-checker\", \"utility\"]. NEVER omit consistency-checker when a plan exists. This is the most common mistake — do NOT use [\"worker\", \"utility\"] when plan_exists=true.",
       "permission": {
         "edit": "deny",
         "write": "deny",
@@ -1208,16 +1240,8 @@
         "question": "deny",
         "webfetch": "deny",
         "bash": { "*": "deny" },
-        "todowrite": "allow",
+        "todowrite": "deny",
         "patch": "deny",
-        "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow",
-        "serena_find_referencing_symbols": "allow",
-        "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow",
-        "serena_safe_delete_symbol": "allow",
-        "serena_replace_symbol_body": "allow",
-        "serena_insert_after_symbol": "allow",
         "task": {
           "*": "deny",
           "orchestrator-identity-probe": "allow",
@@ -1243,14 +1267,14 @@
           "view-image": "allow",
           "docs-planner": "allow",
           "generate-image": "allow",
-          "generate-image-gpt": "allow"
+          "generate-image-gpt": "allow",
+          "git-commit": "allow"
         }
       },
       "options": {}
     },
     "mcp-search": {
       "mode": "subagent",
-      "model": "bifrost-litellm/MiniMax-M2.7",
       "temperature": 0.1,
       "permission": {
         "edit": "deny",
@@ -1274,7 +1298,6 @@
     },
     "summarizer": {
       "mode": "subagent",
-      "model": "bifrost-litellm/MiniMax-M2.7",
       "temperature": 0.1,
       "permission": {
         "edit": "deny",
@@ -1298,7 +1321,6 @@
     },
     "bugfix-triage": {
       "mode": "subagent",
-      "model": "bifrost-litellm/QWEN3.7-plus",
       "temperature": 0.1,
       "permission": {
         "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" },
@@ -1319,7 +1341,6 @@
     },
     "research-reviewer": {
       "mode": "subagent",
-      "model": "bifrost-litellm/GLM-5.2",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -1342,7 +1363,6 @@
     },
     "dev-reviewer": {
       "mode": "subagent",
-      "model": "bifrost-litellm/Kimi K3",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -1364,7 +1384,6 @@
     },
     "research-writer-complex": {
       "mode": "subagent",
-      "model": "bifrost-litellm/Kimi K3",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -1391,7 +1410,6 @@
     },
     "plankestrator": {
       "mode": "primary",
-      "model": "bifrost-litellm/QWEN3.7-plus",
       "temperature": 0.1,
       "permission": {
         "edit": "deny",
@@ -1400,18 +1418,10 @@
         "read": "allow",
         "grep": "allow",
         "glob": "allow",
-        "question": "allow",
+        "question": "deny",
         "webfetch": "deny",
-        "todowrite": "allow",
+        "todowrite": "deny",
         "patch": "deny",
-        "unity-mcp.*": "allow",
-        "serena_find_symbol": "allow",
-        "serena_find_referencing_symbols": "allow",
-        "serena_get_symbols_overview": "allow",
-        "serena_rename_symbol": "allow",
-        "serena_safe_delete_symbol": "allow",
-        "serena_replace_symbol_body": "allow",
-        "serena_insert_after_symbol": "allow",
         "task": {
           "*": "deny",
           "plankestrator-identity-probe": "allow",
@@ -1424,16 +1434,13 @@
           "research-writer-complex": "allow",
           "research-reviewer": "allow",
           "devops-readonly": "allow",
-          "view-image": "allow",
-          "generate-image": "allow",
-          "generate-image-gpt": "allow"
+          "view-image": "allow"
         }
       },
       "options": {}
     },
     "plan-writer-simple": {
       "mode": "subagent",
-      "model": "bifrost-litellm/QWEN3.7-plus",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -1457,11 +1464,9 @@
     },
     "execute-bug": {
       "mode": "subagent",
-      "model": "bifrost-litellm/GLM-5.2",
       "temperature": 0.2,
       "permission": {
         "edit": "allow",
-        "bash": "allow",
         "unity-mcp.*": "allow",
         "serena_find_symbol": "allow",
         "serena_find_referencing_symbols": "allow",
@@ -1479,7 +1484,6 @@
     },
     "plan-reviewer-complex": {
       "mode": "subagent",
-      "model": "bifrost-litellm/Kimi K3",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -1503,7 +1507,6 @@
     },
     "consistency-checker": {
       "mode": "subagent",
-      "model": "bifrost-litellm/QWEN3.7-plus",
       "temperature": 0.1,
       "permission": {
         "edit": "allow",
@@ -1528,9 +1531,7 @@
     },
     "view-image": {
       "mode": "subagent",
-      "model": "bifrost-litellm/Kimi K2.6",
       "temperature": 0.1,
-      "prompt": "You are an image analysis agent. Analyze images and describe what you see. You have direct vision capabilities. Analyze images directly through your model — do NOT use MCP servers for image analysis. You CAN use read, glob, and grep tools to access files when needed.",
       "permission": {
         "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" },
         "read": "allow",
