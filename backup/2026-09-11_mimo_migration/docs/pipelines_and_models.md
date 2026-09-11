@@ -534,7 +534,6 @@ docs_plan.md        docs_plan.md                                    ▼
 | **bifrost-litellm/Kimi K2.7** | dev-reviewer, plan-reviewer-simple, plan-reviewer-complex, research-reviewer | Ревью кода, планов, исследований |
 | **bifrost-litellm/MiniMax-M2.7** | mcp-github, mcp-read, mcp-search, summarizer, utility | MCP инструменты, суммаризация, валидация |
 | **bifrost-litellm/mimo-v2.5-pro** | docs-writer, research-writer-simple | Документация, исследование |
-| **bifrost-litellm/mimo-v2.5** | generate-image, generate-image-gpt, git-commit | Оркестрация image-gen skill, conventional commits |
 | **bifrost-litellm/Kimi K2.6** | view-image | Анализ изображений (vision) |
 
 ---

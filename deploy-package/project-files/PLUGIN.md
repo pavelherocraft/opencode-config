@@ -123,7 +123,7 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 
 ## 4. Routing Tables
 
-### orchestrator Whitelist (21 agents)
+### orchestrator Whitelist (24 agents)
 
 orchestrator can only call these agents:
 
@@ -150,8 +150,11 @@ orchestrator can only call these agents:
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
 | docs-planner | Documentation planning (DOCS DEEP) |
+| generate-image | Image generation (Gemini) |
+| generate-image-gpt | Image generation (GPT/DALL-E) |
+| git-commit | Gated conventional git commits |
 
-### plankestrator Whitelist (9 agents)
+### plankestrator Whitelist (10 agents)
 
 plankestrator can only call these agents:
 
@@ -166,6 +169,7 @@ plankestrator can only call these agents:
 | research-writer-complex | Complex research |
 | research-reviewer | Research review |
 | devops-readonly | DevOps read-only |
+| view-image | Image analysis |
 
 ### Routing Table Implementation
 
@@ -192,7 +196,10 @@ const ROUTING_TABLES = {
     'execute-bug',
     'consistency-checker',
     'view-image',
-    'docs-planner'
+    'docs-planner',
+    'generate-image',
+    'generate-image-gpt',
+    'git-commit'
   ],
   plankestrator: [
     'plankestrator-identity-probe',
@@ -203,7 +210,8 @@ const ROUTING_TABLES = {
     'research-writer-simple',
     'research-writer-complex',
     'research-reviewer',
-    'devops-readonly'
+    'devops-readonly',
+    'view-image'
   ]
 };
 ```
@@ -218,9 +226,7 @@ Primary agents (`orchestrator`, `plankestrator`) are pure routers. The plugin en
 | `read` | ✅ Yes (inspection convenience for quick lookups) |
 | `glob` | ✅ Yes (inspection convenience for quick lookups) |
 | `grep` | ✅ Yes (inspection convenience for quick lookups) |
-| `todowrite` | ✅ Yes (track pipeline progress) |
-| `question` | ✅ Yes (ask user clarifying questions) |
-| `bash`, `edit`, `write`, `patch`, `webfetch` | ❌ No — hard block with error |
+| `bash`, `edit`, `write`, `patch`, `webfetch`, `todowrite`, `question` | ❌ No — hard block with error |
 | Any MCP action tool (`unity-mcp_*`, `serena_*`, `zai_*` write-side) | ❌ No — hard block with error |
 
 **Why read/glob/grep are allowed:**
@@ -245,8 +251,9 @@ Attempted Call: plan-writer-simple
 Allowed Agents: orchestrator-identity-probe, dev-reviewer, dev-professor, 
                 mcp-github, worker, bugfix, rework, mcp-read, utility, 
                 bugfix-triage, plan-bug, devops-agent, devops-reviewer,
-                dev-planner, mcp-search, docs-writer, summarizer, execute-bug,
-                consistency-checker, view-image
+                 dev-planner, mcp-search, docs-writer, summarizer, execute-bug,
+                 consistency-checker, view-image, docs-planner, generate-image,
+                 generate-image-gpt, git-commit
 
 This violates the routing table configuration.
 Please follow the correct workflow for your agent type.
@@ -754,7 +761,7 @@ await client.app.log({
 
 ### 1. Agent Detection May Still Fail
 
-**Issue**: If session title doesn't contain "orchestrator" or "plankestrator", session.agent is not set, and the agent doesn't output JSON before making a task call, the reverse routing lookup may fail if the subagent name is ambiguous (exists in both routing tables).
+**Issue**: If session title doesn't contain "orchestrator" or "plankestrator", session.agent is not set, and the agent doesn't output JSON before making a task call, the reverse routing lookup may fail if the subagent name is ambiguous (exists in both routing tables). Confirmed case (post Variant B): `view-image` now exists in BOTH routing tables; for an UNLOCKED session the reverse lookup returns `orchestrator` (iterated first). Effect is limited to the info log "Reverse routing hint (not enforced)" — NO state mutation (see `detectAgentFromSubagent`).
 
 **Symptoms**:
 - `currentAgent` remains `null`
@@ -867,7 +874,10 @@ const ROUTING_TABLES = {
     'execute-bug',
     'consistency-checker',
     'view-image',
-    'docs-planner'
+    'docs-planner',
+    'generate-image',
+    'generate-image-gpt',
+    'git-commit'
   ],
   plankestrator: [
     'plankestrator-identity-probe',
@@ -878,7 +888,8 @@ const ROUTING_TABLES = {
     'research-writer-simple',
     'research-writer-complex',
     'research-reviewer',
-    'devops-readonly'
+    'devops-readonly',
+    'view-image'
   ]
 };
 ```

@@ -6,7 +6,7 @@ OpenCode uses two primary agents:
 - **orchestrator** — BUGFIX, DEVOPS, DEV, DOCS
 - **plankestrator** — PLAN, RESEARCH, RESEARCH+PLAN
 
-32 total agents (2 primary + 30 subagents).
+35 total agents (2 primary + 33 subagents).
 
 ## 2. Prerequisites
 
@@ -53,10 +53,10 @@ Copy-Item "plugins\*" "$env:USERPROFILE\.config\opencode\plugins\" -Force
 | serena | Local | `serena.exe start-mcp-server --transport stdio` |
 | unity-mcp | Remote | `http://localhost:8080/mcp` |
 
-## 5. Agent Definitions (32 agents)
+## 5. Agent Definitions (35 agents)
 
 ### Primary: orchestrator, plankestrator
-### Subagents: worker, bugfix, bugfix-triage, execute-bug, plan-bug, dev-planner, dev-professor, dev-reviewer, rework, consistency-checker, utility, docs-writer, docs-planner, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-reviewer, devops-readonly, plan-writer-simple, plan-writer-complex, plan-reviewer-simple, plan-reviewer-complex, research-writer-simple, research-writer-complex, research-reviewer, view-image, orchestrator-identity-probe, plankestrator-identity-probe
+### Subagents: worker, bugfix, bugfix-triage, execute-bug, plan-bug, dev-planner, dev-professor, dev-reviewer, rework, consistency-checker, utility, docs-writer, docs-planner, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-reviewer, devops-readonly, plan-writer-simple, plan-writer-complex, plan-reviewer-simple, plan-reviewer-complex, research-writer-simple, research-writer-complex, research-reviewer, view-image, orchestrator-identity-probe, plankestrator-identity-probe, generate-image, generate-image-gpt, git-commit
 
 ## 6. Pipelines
 
@@ -84,7 +84,7 @@ Copy-Item "plugins\*" "$env:USERPROFILE\.config\opencode\plugins\" -Force
 - [ ] OpenCode CLI installed
 - [ ] LITELLM_API_KEY set
 - [ ] opencode.json copied
-- [ ] 32 agent files copied
+- [ ] 35 agent files copied
 - [ ] Plugin copied
 - [ ] serena.exe installed
 - [ ] opencode starts without errors

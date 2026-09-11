@@ -1,7 +1,7 @@
 ---
 description: Image generation and editing agent (default). Generates or edits images using the Gemini image model. Use when the user asks to draw, generate, create, render, edit, or modify an image and does NOT explicitly request GPT/DALL-E.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/mimo-v2.5
 temperature: 0.5
 permission:
   edit: deny

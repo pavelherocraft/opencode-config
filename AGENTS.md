@@ -200,11 +200,13 @@ Handles planning and research tasks:
 
 **plankestrator is a router, not a writer.** It MUST classify each request (PLAN / RESEARCH / RESEARCH+PLAN / OUT OF SCOPE), determine complexity (SIMPLE / COMPLEX), resolve the matching pipeline from its routing table, and then call the **first** agent via the `task` tool. After each agent in the pipeline returns, plankestrator advances the state machine (CLASSIFY → EXECUTE → REVIEW → COMPLETE) and calls the **next** agent. It NEVER writes the plan or research content itself — that is `plan-writer-*` / `research-writer-*` work, delegated through the pipeline.
 
+**Inspection limits (v4):** plankestrator may use `read`/`grep`/`glob` ONLY on Turn 1 to classify (prompt: max 2 calls; plugin hard limit: 3). After the first pipeline Task call any inspection throws ⛔. Complexity is classified from the request text, not from files; RESEARCH+PLAN is always COMPLEX. Self-work content markers (`## Findings`, `## Analysis`, `Executive Summary`, ...) in plankestrator's own message are detected by the plugin and block further inspection.
+
 **Tool allowance for primary agents** (enforced by `plugins/workflow-enforcement.ts`):
 
 | Allowed | Forbidden |
 |---------|-----------|
-| `task` (delegate), `read`, `glob`, `grep` (inspection), `todowrite`, `question` | `bash`, `edit`, `write`, `patch`, `webfetch`, MCP action tools |
+| `task` (delegate), `read`, `glob`, `grep` (inspection) | `bash`, `edit`, `write`, `patch`, `webfetch`, `todowrite`, `question`, MCP action tools |
 
 ## Routing Tables
 
@@ -237,7 +239,7 @@ Handles planning and research tasks:
 | generate-image-gpt | Image generation (GPT/DALL-E) |
 | git-commit | Gated conventional git commits |
 
-### plankestrator Whitelist (9 agents)
+### plankestrator Whitelist (10 agents)
 
 | Agent Name | Role |
 |------------|------|
@@ -250,6 +252,7 @@ Handles planning and research tasks:
 | research-writer-complex | Complex research |
 | research-reviewer | Research review |
 | devops-readonly | DevOps read-only |
+| view-image | Image analysis |
 
 ## Key Agent Permissions
 
@@ -418,6 +421,9 @@ Avoid generic names like `New session` or `Untitled`. They prevent the plugin fr
 - Validates JSON output format includes required fields
 - Detects and prevents identity drift
 - Ensures agents stay within their whitelisted agent set
+- Inspection budget & post-pipeline inspection ban for plankestrator (v4)
+- Self-work content marker detection in primary-agent messages (v4)
+- Parent/child session attribution: subagent sessions preserve the parent's identity lock; enforcement suppressed while a Task subagent runs (v4)
 
 ### Detailed Documentation
 

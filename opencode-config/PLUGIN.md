@@ -123,7 +123,7 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 
 ## 4. Routing Tables
 
-### orchestrator Whitelist (21 agents)
+### orchestrator Whitelist (24 agents)
 
 orchestrator can only call these agents:
 
@@ -150,8 +150,11 @@ orchestrator can only call these agents:
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
 | docs-planner | Documentation planning (DOCS DEEP) |
+| generate-image | Image generation (Gemini) |
+| generate-image-gpt | Image generation (GPT/DALL-E) |
+| git-commit | Gated conventional git commits |
 
-### plankestrator Whitelist (9 agents)
+### plankestrator Whitelist (10 agents)
 
 plankestrator can only call these agents:
 
@@ -166,6 +169,7 @@ plankestrator can only call these agents:
 | research-writer-complex | Complex research |
 | research-reviewer | Research review |
 | devops-readonly | DevOps read-only |
+| view-image | Image analysis |
 
 ### Routing Table Implementation
 
@@ -203,7 +207,8 @@ const ROUTING_TABLES = {
     'research-writer-simple',
     'research-writer-complex',
     'research-reviewer',
-    'devops-readonly'
+    'devops-readonly',
+    'view-image'
   ]
 };
 ```
@@ -733,7 +738,7 @@ await client.app.log({
 
 ### 1. Agent Detection May Still Fail
 
-**Issue**: If session title doesn't contain "orchestrator" or "plankestrator", session.agent is not set, and the agent doesn't output JSON before making a task call, the reverse routing lookup may fail if the subagent name is ambiguous (exists in both routing tables).
+**Issue**: If session title doesn't contain "orchestrator" or "plankestrator", session.agent is not set, and the agent doesn't output JSON before making a task call, the reverse routing lookup may fail if the subagent name is ambiguous (exists in both routing tables). Confirmed case (post Variant B): `view-image` now exists in BOTH routing tables; for an UNLOCKED session the reverse lookup returns `orchestrator` (iterated first). Effect is limited to the info log "Reverse routing hint (not enforced)" — NO state mutation (see `detectAgentFromSubagent`).
 
 **Symptoms**:
 - `currentAgent` remains `null`
@@ -857,7 +862,8 @@ const ROUTING_TABLES = {
     'research-writer-simple',
     'research-writer-complex',
     'research-reviewer',
-    'devops-readonly'
+    'devops-readonly',
+    'view-image'
   ]
 };
 ```

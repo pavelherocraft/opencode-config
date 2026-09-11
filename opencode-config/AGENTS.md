@@ -200,7 +200,7 @@ Handles planning and research tasks:
 
 ## Routing Tables
 
-### orchestrator Whitelist (21 agents)
+### orchestrator Whitelist (24 agents)
 
 | Agent Name | Role |
 |------------|------|
@@ -225,8 +225,11 @@ Handles planning and research tasks:
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
 | docs-planner | Documentation planning (DOCS DEEP) |
+| generate-image | Image generation (Gemini) |
+| generate-image-gpt | Image generation (GPT/DALL-E) |
+| git-commit | Gated conventional git commits |
 
-### plankestrator Whitelist (9 agents)
+### plankestrator Whitelist (10 agents)
 
 | Agent Name | Role |
 |------------|------|
@@ -239,6 +242,7 @@ Handles planning and research tasks:
 | research-writer-complex | Complex research |
 | research-reviewer | Research review |
 | devops-readonly | DevOps read-only |
+| view-image | Image analysis |
 
 ## Key Agent Permissions
 

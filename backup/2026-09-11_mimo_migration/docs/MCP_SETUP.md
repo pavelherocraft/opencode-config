@@ -47,16 +47,12 @@ OpenCode использует архитектуру с двумя primary-аг�
 
 | Model | Provider | Agents Count | Agents |
 |-------|----------|--------------|-------|
-| `QWEN3.7-plus` | bifrost-litellm | 7 | orchestrator, plankestrator, orchestrator-identity-probe, plankestrator-identity-probe, bugfix, consistency-checker, plan-writer-simple |
-| `MiniMax-M2.7` | bifrost-litellm | 5 | utility, mcp-github, mcp-read, mcp-search, summarizer |
-| `MiniMax-M3` | bifrost-litellm | 4 | worker, plan-bug, devops-agent, devops-readonly |
-| `GLM-5.3 (res)` | bifrost-litellm | 4 | execute-bug, dev-professor, plan-reviewer-simple, research-reviewer |
-| `Kimi K3` | bifrost-litellm | 4 | dev-reviewer, rework, plan-reviewer-complex, research-writer-complex |
-| `mimo-v2.5` | bifrost-litellm | 3 | generate-image, generate-image-gpt, git-commit |
-| `qwen3.8-max` | bifrost-litellm | 3 | dev-planner, devops-reviewer, plan-writer-complex |
+| `QWEN3.7-plus` | bifrost-litellm | 11 | orchestrator, plankestrator, bugfix, bugfix-triage, dev-planner, devops-reviewer, plan-writer-simple, consistency-checker, orchestrator-identity-probe, plankestrator-identity-probe, docs-planner |
+| `GLM-5.2` | bifrost-litellm | 5 | dev-professor, plan-writer-complex, research-writer-complex, execute-bug, rework |
+| `MiniMax-M3` | bifrost-litellm | 4 | plan-bug, devops-agent, devops-readonly, worker |
+| `Kimi K2.7` | bifrost-litellm | 4 | dev-reviewer, plan-reviewer-simple, plan-reviewer-complex, research-reviewer |
+| `MiniMax-M2.7` | bifrost-litellm | 5 | mcp-github, mcp-read, mcp-search, summarizer, utility |
 | `mimo-v2.5-pro` | bifrost-litellm | 2 | docs-writer, research-writer-simple |
-| `GLM-5.3-Flash (res)` | bifrost-litellm | 1 | bugfix-triage |
-| `aliyun/qwen3.8-flash` | bifrost-litellm | 1 | docs-planner |
 | `Kimi K2.6` | bifrost-litellm | 1 | view-image |
 
 ### MCP Servers
@@ -431,9 +427,6 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **plan-reviewer-complex** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **consistency-checker** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
 | **view-image** | subagent | bifrost-litellm/Kimi K2.6 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
-| **git-commit** | subagent | bifrost-litellm/mimo-v2.5 | 0.1 | deny | deny | allow | **allow** | - | Only agent allowed to run git commit/push (gated via git-commit skill) |
-| **generate-image** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (default Gemini image model); git commit/push denied |
-| **generate-image-gpt** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (GPT/DALL-E path, on explicit user request only); git commit/push denied |
 
 ### Primary Agent Permissions
 
@@ -1360,7 +1353,7 @@ opencode --agent plankestrator
 | Routing tables | 2 | orchestrator (24), plankestrator (10) |
 | Pipelines | 13 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 | Custom commands | 5 | opencode.json |
-| Models | 11 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, MiniMax-M2.7, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, mimo-v2.5-pro, GLM-5.3-Flash (res), aliyun/qwen3.8-flash, Kimi K2.6) |
+| Models | 6 | bifrost-litellm (GLM-5.2, QWEN3.7-plus, Kimi K2.6/K2.7, MiniMax-M3, GLM-4.7) |
 
 ### Quick Reference
 

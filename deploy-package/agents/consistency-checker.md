@@ -96,8 +96,8 @@ Files to verify:
 **Source**: ARCHITECTURE.md Section 1 — Routing Tables
 
 Verify that the routing table in `workflow-enforcement.ts` matches ARCHITECTURE.md Section 1 exactly:
-- `workflow-enforcement.ts` → `ROUTING_TABLES.orchestrator` array (21 agents)
-- `workflow-enforcement.ts` → `ROUTING_TABLES.plankestrator` array (9 agents)
+- `workflow-enforcement.ts` → `ROUTING_TABLES.orchestrator` array (24 agents)
+- `workflow-enforcement.ts` → `ROUTING_TABLES.plankestrator` array (10 agents)
 - `AGENTS.md` → orchestrator Whitelist table
 - `AGENTS.md` → plankestrator Whitelist table
 - `PLUGIN.md` → orchestrator Whitelist table
@@ -110,10 +110,10 @@ All locations must list exactly the same agents as ARCHITECTURE.md Section 1.
 **Source**: ARCHITECTURE.md Section 1 — Agent Count Summary
 
 Verify that agent count headers are accurate across all files:
-- `AGENTS.md`: "orchestrator Whitelist (21 agents)" — count must match actual rows
-- `PLUGIN.md`: "orchestrator Whitelist (21 agents)" — count must match actual rows
-- `AGENTS.md`: "plankestrator Whitelist (9 agents)" — count must match actual rows
-- `PLUGIN.md`: "plankestrator Whitelist (9 agents)" — count must match actual rows
+- `AGENTS.md`: "orchestrator Whitelist (24 agents)" — count must match actual rows
+- `PLUGIN.md`: "orchestrator Whitelist (24 agents)" — count must match actual rows
+- `AGENTS.md`: "plankestrator Whitelist (10 agents)" — count must match actual rows
+- `PLUGIN.md`: "plankestrator Whitelist (10 agents)" — count must match actual rows
 
 ### Check 4: Pipeline Synchronization
 

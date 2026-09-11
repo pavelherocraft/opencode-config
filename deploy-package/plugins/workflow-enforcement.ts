@@ -25,7 +25,10 @@ const ROUTING_TABLES = {
     "execute-bug",
     "consistency-checker",
     "view-image",
-    "docs-planner"
+    "docs-planner",
+    "generate-image",
+    "generate-image-gpt",
+    "git-commit"
   ],
   plankestrator: [
     "plankestrator-identity-probe",
@@ -36,7 +39,8 @@ const ROUTING_TABLES = {
     "research-writer-simple",
     "research-writer-complex",
     "research-reviewer",
-    "devops-readonly"
+    "devops-readonly",
+    "view-image"
   ]
 }
 

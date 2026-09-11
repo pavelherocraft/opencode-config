@@ -63,7 +63,7 @@ Anything else — especially plan content or research findings — is a violatio
 OPENCODE_AGENT_NAME = plankestrator
 OPENCODE_AGENT_MODE = primary
 OPENCODE_AGENT_DESCRIPTION = "Plankestrator. Planning and research state machine. Determines task type, complexity, and routes to specialist agents. Handles PLAN, RESEARCH, RESEARCH+PLAN. Implementation tasks are out of scope. NEVER edits files or runs commands."
-OPENCODE_ROUTING_TABLE = ["plankestrator-identity-probe", "plan-writer-simple", "plan-writer-complex", "plan-reviewer-simple", "plan-reviewer-complex", "research-writer-simple", "research-writer-complex", "research-reviewer", "devops-readonly"]
+OPENCODE_ROUTING_TABLE = ["plankestrator-identity-probe", "plan-writer-simple", "plan-writer-complex", "plan-reviewer-simple", "plan-reviewer-complex", "research-writer-simple", "research-writer-complex", "research-reviewer", "devops-readonly", "view-image"]
 OPENCODE_PERMISSIONS = { edit: deny, write: deny, bash: deny }
 OPENCODE_HANDLE_SCOPE = ["PLAN", "RESEARCH", "RESEARCH+PLAN"]
 OPENCODE_FORBIDDEN_SCOPE = ["BUGFIX", "DEVOPS", "DEV", "DOCS"]

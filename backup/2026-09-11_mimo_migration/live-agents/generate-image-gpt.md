@@ -1,7 +1,7 @@
 ---
 description: Image generation and editing agent for GPT path. Generates or edits images using gpt-image-2 model. Use ONLY when the user explicitly requests GPT/DALL-E based image generation or editing (e.g. "используй gpt image", "use gpt", "dall-e", "gpt-image").
 mode: subagent
-model: bifrost-litellm/mimo-v2.5
+model: bifrost-litellm/MiniMax-M3
 temperature: 0.5
 permission:
   edit: deny

@@ -2,7 +2,7 @@
 
 ## Что это за пакет
 
-Это полный пакет конфигурации для системы оркестрации агентов OpenCode. Он содержит все необходимые файлы для развёртывания системы с двумя primary-агентами (orchestrator и plankestrator), 30 subagents, плагином принудительного контроля рабочих процессов и интеграцией с MCP-серверами.
+Это полный пакет конфигурации для системы оркестрации агентов OpenCode. Он содержит все необходимые файлы для развёртывания системы с двумя primary-агентами (orchestrator и plankestrator), 33 subagents, плагином принудительного контроля рабочих процессов и интеграцией с MCP-серверами.
 
 ## Структура папок
 
@@ -11,12 +11,12 @@ deploy-package/
 ├── README.md                          # Этот файл
 ├── DEPLOYMENT_GUIDE.md                # Пошаговая инструкция установки
 ├── opencode.json                      # Главная конфигурация (провайдеры, MCP, агенты)
-├── agents/                            # Определения 32 агентов
+├── agents/                            # Определения 35 агентов
 │   ├── orchestrator.md                # Primary agent (BUGFIX/DEVOPS/DEV/DOCS)
 │   ├── plankestrator.md               # Primary agent (PLAN/RESEARCH/RESEARCH+PLAN)
 │   ├── worker.md                      # Implementation agent
 │   ├── bugfix.md                      # Bug fix agent
-│   ├── ...                            # Ещё 28 агентов
+│   ├── ...                            # Ещё 31 агент
 │   └── view-image.md                  # Image analysis agent
 ├── plugins/                           # Плагины
 │   ├── workflow-enforcement.ts        # Плагин контроля рабочих процессов
@@ -85,7 +85,7 @@ Copy-Item project-files\*.md "C:\path\to\your\project\" -Force
 | Unity Editor | 2021.3 LTS+ | Хост MCP-сервера Unity |
 | unity-mcp package | Последняя | Интеграция Unity MCP |
 
-## Агенты (32 файла)
+## Агенты (35 файлов)
 
 ### Primary агенты (2)
 
@@ -94,9 +94,9 @@ Copy-Item project-files\*.md "C:\path\to\your\project\" -Force
 | orchestrator | Операционные задачи: BUGFIX, DEVOPS, DEV, DOCS | QWEN3.7-plus |
 | plankestrator | Планирование и исследования: PLAN, RESEARCH, RESEARCH+PLAN | QWEN3.7-plus |
 
-### Subagents (30)
+### Subagents (33)
 
-Включают: worker, bugfix, execute-bug, dev-planner, dev-professor, dev-reviewer, rework, consistency-checker, utility, docs-writer, docs-planner, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-reviewer, devops-readonly, bugfix-triage, plan-bug, plan-writer-simple, plan-writer-complex, plan-reviewer-simple, plan-reviewer-complex, research-writer-simple, research-writer-complex, research-reviewer, view-image, orchestrator-identity-probe, plankestrator-identity-probe.
+Включают: worker, bugfix, execute-bug, dev-planner, dev-professor, dev-reviewer, rework, consistency-checker, utility, docs-writer, docs-planner, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-reviewer, devops-readonly, bugfix-triage, plan-bug, plan-writer-simple, plan-writer-complex, plan-reviewer-simple, plan-reviewer-complex, research-writer-simple, research-writer-complex, research-reviewer, view-image, orchestrator-identity-probe, plankestrator-identity-probe, generate-image, generate-image-gpt, git-commit.
 
 ## MCP-серверы
 

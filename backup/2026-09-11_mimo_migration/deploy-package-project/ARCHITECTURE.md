@@ -48,9 +48,9 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | research-writer-complex | bifrost-litellm/Kimi K3 |
 | research-reviewer | bifrost-litellm/GLM-5.3 (res) |
 | devops-readonly | bifrost-litellm/MiniMax-M3 |
-| git-commit | bifrost-litellm/mimo-v2.5 |
-| generate-image | bifrost-litellm/mimo-v2.5 |
-| generate-image-gpt | bifrost-litellm/mimo-v2.5 |
+| git-commit | bifrost-litellm/MiniMax-M3 |
+| generate-image | bifrost-litellm/MiniMax-M3 |
+| generate-image-gpt | bifrost-litellm/MiniMax-M3 |
 | view-image | bifrost-litellm/Kimi K2.6 |
 
 Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3.7-plus` and are documented in §Identity Lock Mechanism (v3), item 5 — not duplicated in the Subagent Models table.

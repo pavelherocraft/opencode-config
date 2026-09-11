@@ -39,7 +39,8 @@ const ROUTING_TABLES = {
     "research-writer-simple",
     "research-writer-complex",
     "research-reviewer",
-    "devops-readonly"
+    "devops-readonly",
+    "view-image"
   ]
 }
 
@@ -640,8 +641,27 @@ This is enforced by the workflow-enforcement plugin.
         const otherAgent = currentAgent === "orchestrator" ? "plankestrator" : "orchestrator"
         const otherAllowedAgents = ROUTING_TABLES[otherAgent as keyof typeof ROUTING_TABLES] || []
         
-        if (otherAllowedAgents.includes(targetAgent)) {
-          // Switch to the correct agent based on routing
+        if (identityLocked && otherAllowedAgents.includes(targetAgent)) {
+          // FIX: v3 identity lock — a locked session MUST NOT be re-bound by the
+          // routing fallback. Treat as a hard routing-table violation instead.
+          throw new Error(`
+WORKFLOW VIOLATION - ROUTING TABLE ENFORCEMENT (identity lock active)
+
+Locked Agent: ${lockedAgentName}
+Current Agent: ${currentAgent}
+Attempted Call: ${targetAgent}
+Allowed Agents: ${allowedAgents.join(", ")}
+
+"${targetAgent}" belongs to the ${otherAgent} whitelist, but this session is
+identity-locked to ${lockedAgentName} (v3 lock: the agent cannot be re-bound).
+Do NOT call agents outside your own routing table.
+
+Orchestrator handles: BUGFIX, DEVOPS, DEV, DOCS
+Plankestrator handles: PLAN, RESEARCH, RESEARCH+PLAN
+          `)
+        } else if (otherAllowedAgents.includes(targetAgent)) {
+          // Switch to the correct agent based on routing (UNLOCKED sessions only —
+          // race condition mitigation when message.updated has not fired yet)
           const previousAgent = currentAgent
           currentAgent = otherAgent
           // FIX: Set to TRUE — agent already outputted JSON at beginning of response

@@ -205,15 +205,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Model migration `2026-09-11`: agents `generate-image`, `generate-image-gpt`, `git-commit` → `bifrost-litellm/mimo-v2.5`** (was `bifrost-litellm/MiniMax-M3`). Rationale: these agents do minimal LLM work — `generate-image*` orchestrate the `image-gen` skill (text-to-image / edit) and `git-commit` runs the gated conventional-commits script. MiniMax-M3 (1M ctx, 131K output, thinking) is sufficient and reserves flagship capacity for code-heavy agents (`worker`, `plan-bug`, `devops-agent`, `devops-readonly`, which stay on MiniMax-M3).
-  - **Frontmatter (6 files)**: `model:` line 4 changed in live agents (`C:\Users\Admin\.config\opencode\agents\{generate-image,generate-image-gpt,git-commit}.md`) and their deploy-package snapshots (`deploy-package/agents/{generate-image,generate-image-gpt,git-commit}.md`).
-  - **`ARCHITECTURE.md` ×3 copies** (`root/`, `opencode-config/`, `deploy-package/project-files/`): Subagent Models table — rows for `git-commit`, `generate-image`, `generate-image-gpt` updated to `bifrost-litellm/mimo-v2.5`. Rows for `worker`, `plan-bug`, `devops-agent`, `devops-readonly` preserved on MiniMax-M3 (4 agents remain).
-  - **`MCP_SETUP.md`**: Models Distribution fully re-synced (old: 7 rows, sum 32, missing the 3 image/git-commit agents; new: 11 rows, sum 35 = 2 primary + 33 subagents). Detailed Subagents—Full Table: +3 new rows for `git-commit` / `generate-image` / `generate-image-gpt` (model, temperature, edit/write/read/bash permissions copied from frontmatter; task whitelist `–` since all three have `task: deny`). Summary row "Models" updated `6 → 11` with full list of the 11 bifrost-litellm models.
-  - **`pipelines_and_models.md`**: +1 row in the model table near `mimo-v2.5-pro` entry, keeping mimo models grouped.
-  - **Files NOT touched (per plan):** historical/fallback docs (`RESEARCH_LLM_FALLBACK.md`, `PLAN_LLM_FALLBACK.md`, `IMPLEMENTATION_PLAN.md`, `REMEDIATION_PLAN_V2.md`, `VALIDATION_REPORT.md`, `VIEW_IMAGE_RESEARCH.md`), `AGENTS.md`, `PLUGIN.md`, both `opencode.json` files (no per-agent model field).
-  - Backup: `backup/2026-09-11_mimo_migration/` — 12 source files in 6 subfolders (`live-agents/`, `deploy-package-agents/`, `root/`, `opencode-config/`, `deploy-package-project/`, `docs/`) + `HASHES.txt` (SHA256 of each file).
-  - **Restart required:** opencode picks up new frontmatter `model:` on next session start.
-
 - **Orchestrator routing table expanded 21 → 24 agents** (+`generate-image`,
   +`generate-image-gpt`, +`git-commit`) — synchronized across every source of
   truth:
