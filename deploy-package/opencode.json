@@ -89,8 +89,17 @@
             "output": 131072
           },
           "options": {
-            "thinking": {
-              "type": "enabled"
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
             }
           }
         },
@@ -101,8 +110,17 @@
             "output": 131072
           },
           "options": {
-            "thinking": {
-              "type": "enabled"
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
             }
           }
         },
@@ -111,6 +129,20 @@
           "limit": {
             "context": 1048576,
             "output": 131072
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
           },
           "modalities": {
             "input": [
@@ -125,6 +157,20 @@
           "limit": {
             "context": 1048576,
             "output": 131072
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
           },
           "modalities": {
             "input": [
@@ -160,13 +206,17 @@
             "output": 1048576
           },
           "options": {
-            "thinking": {
-              "type": "enabled",
-              "allowedEfforts": [
-                "low",
-                "high",
-                "max"
-              ]
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
             }
           },
           "modalities": {
@@ -185,21 +235,19 @@
             "output": 32768
           },
           "options": {
-            "thinking": {
-              "type": "enabled",
-              "allowedEfforts": [
-                "low",
-                "high",
-                "max"
-              ]
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
             }
-          },
-          "modalities": {
-            "input": [
-              "text"
-            ]
-          },
-          "attachment": false
+          }
         },
         "Kimi K2.8": {
           "name": "Kimi K2.8",
@@ -448,8 +496,38 @@
             "output": 131072
           },
           "options": {
-            "thinking": {
-              "type": "enabled"
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          }
+        },
+        "tencent/glm5-3flash (reserved - use when main is exhausted)": {
+          "name": "tencent/glm5-3flash (reserved - use when main is exhausted)",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
             }
           }
         },
