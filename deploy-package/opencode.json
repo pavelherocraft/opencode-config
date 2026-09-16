@@ -34,54 +34,6 @@
         "apiKey": "{env:LITELLM_API_KEY}"
       },
       "models": {
-        "GLM-5.1": {
-          "name": "GLM-5.1",
-          "limit": {
-            "context": 204800,
-            "output": 131072
-          },
-          "options": {
-            "thinking": {
-              "type": "enabled"
-            }
-          }
-        },
-        "GLM-5.1 (res)": {
-          "name": "GLM-5.1 (res)",
-          "limit": {
-            "context": 204800,
-            "output": 131072
-          },
-          "options": {
-            "thinking": {
-              "type": "enabled"
-            }
-          }
-        },
-        "GLM-5.2": {
-          "name": "GLM-5.2",
-          "limit": {
-            "context": 1048576,
-            "output": 131072
-          },
-          "options": {
-            "thinking": {
-              "type": "enabled"
-            }
-          }
-        },
-        "GLM-5.2 (res)": {
-          "name": "GLM-5.2 (res)",
-          "limit": {
-            "context": 1048576,
-            "output": 131072
-          },
-          "options": {
-            "thinking": {
-              "type": "enabled"
-            }
-          }
-        },
         "GLM-5.3": {
           "name": "GLM-5.3",
           "limit": {
@@ -430,6 +382,20 @@
           "limit": {
             "context": 262144,
             "output": 262144
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          "attachment": true
+        },
+        "tencent/DeepSeek-V4.1-Flash": {
+          "name": "tencent/DeepSeek-V4.1-Flash",
+          "limit": {
+            "context": 1048576,
+            "output": 393216
           },
           "modalities": {
             "input": [
