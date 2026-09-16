@@ -397,6 +397,20 @@
             "context": 1048576,
             "output": 393216
           },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          },
           "modalities": {
             "input": [
               "text",
