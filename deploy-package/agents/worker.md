@@ -5,7 +5,10 @@ model: bifrost-litellm/MiniMax-M3
 temperature: 0.2
 permission:
   edit: allow
-  bash: allow
+  bash:
+    "*": allow
+    "git commit*": deny
+    "git push*": deny
 ---
 
 You are the Development Worker.

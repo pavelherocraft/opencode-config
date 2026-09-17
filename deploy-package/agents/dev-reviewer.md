@@ -1,7 +1,7 @@
 ---
-description: Code reviewer. Reviews implementations, finds issues, fixes them directly. Kimi K2.7 Code.
+description: Code reviewer. Reviews implementations, finds issues, fixes them directly. Kimi K3.
 mode: subagent
-model: bifrost-litellm/Kimi K2.7
+model: bifrost-litellm/Kimi K3
 temperature: 0.1
 permission:
   edit: allow

@@ -1,7 +1,7 @@
 ---
-description: Bugfix triage agent. Analyzes bugs and determines if simple fix or needs deep investigation. Qwen3.7 Plus.
+description: Bugfix triage agent. Analyzes bugs and determines if simple fix or needs deep investigation. GLM-5.3-Flash (res).
 mode: subagent
-model: bifrost-litellm/QWEN3.7-plus
+model: bifrost-litellm/GLM-5.3-Flash (res)
 temperature: 0.1
 permission:
   edit:

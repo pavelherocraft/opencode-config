@@ -1,7 +1,7 @@
 ---
-description: Complex plan writer. Creates detailed implementation plans for complex tasks with architecture decisions. GLM-5.2.
+description: Complex plan writer. Creates detailed implementation plans for complex tasks with architecture decisions. qwen3.8-max.
 mode: subagent
-model: bifrost-litellm/GLM-5.2
+model: bifrost-litellm/qwen3.8-max
 temperature: 0.1
 permission:
   edit: allow

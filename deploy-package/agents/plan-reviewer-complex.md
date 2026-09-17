@@ -1,7 +1,7 @@
 ---
-description: Complex plan reviewer. Reviews detailed plans for architecture, security, and completeness. Kimi K2.7 Code.
+description: Complex plan reviewer. Reviews detailed plans for architecture, security, and completeness. Kimi K3.
 mode: subagent
-model: bifrost-litellm/Kimi K2.7
+model: bifrost-litellm/Kimi K3
 temperature: 0.1
 permission:
   edit: allow

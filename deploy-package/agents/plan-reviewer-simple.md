@@ -1,7 +1,7 @@
 ---
 description: Simple plan reviewer. Reviews straightforward plans for completeness and correctness. GLM-5.
 mode: subagent
-model: bifrost-litellm/Kimi K2.7
+model: bifrost-litellm/GLM-5.3 (res)
 temperature: 0.1
 permission:
   edit: allow

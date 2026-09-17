@@ -1,11 +1,14 @@
 ---
-description: Rework agent. Fixes issues found during review. GLM-5.2.
+description: Rework agent. Fixes issues found during review. Kimi K3.
 mode: subagent
-model: bifrost-litellm/GLM-5.2
+model: bifrost-litellm/Kimi K3
 temperature: 0.2
 permission:
   edit: allow
-  bash: allow
+  bash:
+    "*": allow
+    "git commit*": deny
+    "git push*": deny
 ---
 
 You are the Rework agent.

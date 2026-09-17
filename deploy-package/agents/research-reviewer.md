@@ -1,7 +1,7 @@
 ---
-description: Research reviewer. Validates research findings for accuracy, completeness, and source quality. Kimi K2.7 Code.
+description: Research reviewer. Validates research findings for accuracy, completeness, and source quality. GLM-5.3 (res).
 mode: subagent
-model: bifrost-litellm/Kimi K2.7
+model: bifrost-litellm/GLM-5.3 (res)
 temperature: 0.1
 permission:
   edit: allow

@@ -1,11 +1,14 @@
 ---
-description: Development professor. Reviews plan from file, then implements complex code. GLM-5.2.
+description: Development professor. Reviews plan from file, then implements complex code. GLM-5.3 (res).
 mode: subagent
-model: bifrost-litellm/GLM-5.2
+model: bifrost-litellm/GLM-5.3 (res)
 temperature: 0.2
 permission:
   edit: allow
-  bash: allow
+  bash:
+    "*": allow
+    "git commit*": deny
+    "git push*": deny
 ---
 
 You are the Development Professor.

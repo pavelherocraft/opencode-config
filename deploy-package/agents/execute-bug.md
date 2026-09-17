@@ -1,11 +1,14 @@
 ---
-description: Bugfix execution agent. Reads plan from bug_plan.md, then implements deep bug fixes. GLM-5.2.
+description: Bugfix execution agent. Reads plan from bug_plan.md, then implements deep bug fixes. GLM-5.3 (res).
 mode: subagent
-model: bifrost-litellm/GLM-5.2
+model: bifrost-litellm/GLM-5.3 (res)
 temperature: 0.2
 permission:
   edit: allow
-  bash: allow
+  bash:
+    "*": allow
+    "git commit*": deny
+    "git push*": deny
 ---
 
 You are the Bugfix Execution agent.

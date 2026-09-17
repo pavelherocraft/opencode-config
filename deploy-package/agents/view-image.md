@@ -1,11 +1,14 @@
 ---
-description: Image analysis agent. Analyzes images directly via vision-capable model (Kimi K2.6). Auto-compresses images >100KB to fit context.
+description: Image analysis agent. Analyzes images directly via vision-capable model (MiniMax-M3). Auto-compresses images >100KB to fit context.
 mode: subagent
-model: bifrost-litellm/Kimi K2.6
+model: bifrost-litellm/MiniMax-M3
 temperature: 0.1
 permission:
   edit: deny
-  bash: allow
+  bash:
+    "*": allow
+    "git commit*": deny
+    "git push*": deny
   read: allow
   glob: allow
   grep: allow

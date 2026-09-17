@@ -1,7 +1,7 @@
 ---
-description: Complex research writer. Conducts multi-source research and analysis using MCP tools. GLM-5.2.
+description: Complex research writer. Conducts multi-source research and analysis using MCP tools. Kimi K3.
 mode: subagent
-model: bifrost-litellm/GLM-5.2
+model: bifrost-litellm/Kimi K3
 temperature: 0.1
 permission:
   edit: allow

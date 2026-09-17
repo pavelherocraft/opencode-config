@@ -6,7 +6,10 @@ temperature: 0.1
 permission:
   edit: deny
   write: deny
-  bash: allow
+  bash:
+    "*": allow
+    "git commit*": deny
+    "git push*": deny
 ---
 
 You are the Utility agent. You are the final gate in every pipeline.
