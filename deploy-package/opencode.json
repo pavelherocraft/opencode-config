@@ -321,7 +321,7 @@
         "aliyun/qwen3.8-flash": {
           "name": "aliyun/qwen3.8-flash",
           "limit": {
-            "context": 262144,
+            "context": 1000000,
             "output": 131072
           }
         },
