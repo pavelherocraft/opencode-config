@@ -347,6 +347,8 @@ PER PLAN STEP: dev-planner -> dev-professor -> dev-reviewer -> consistency-check
 
 Super-complex tasks with a large plan (>3 steps) or huge volume of work. The full review/consistency/syntax chain runs **for every step** of the plan. Triggered by explicit request OR when a plan with more than 3 steps and huge volume of work exists.
 
+**Step list** (determined ONCE, priority order): (1) user named the steps explicitly → used verbatim; (2) research/plan file has step headings (`## P0-1`, `## Phase 1`, `## Шаг 1`) → orchestrator extracts them via its one classification `read` or a single `mcp-read` Task call; (3) no list anywhere → one `dev-planner` call with `MODE: DECOMPOSITION` returning JSON `{decomposition: true, steps: [{id, title, description}, ...]}` without writing dev_plan.md. Then the per-step loop: dev-planner (writes dev_plan.md for THIS step) → dev-professor (reads dev_plan.md, implements the step) → dev-reviewer → consistency-checker → [rework loop, max 3] → utility → next step. Never one dev-professor call for the whole task.
+
 ### DEVOPS
 
 devops-agent -> devops-reviewer

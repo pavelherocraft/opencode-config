@@ -60,6 +60,38 @@ Pick exactly ONE row. No improvisation. `next_agent` = first element of `pipelin
 
 **Auto-DOCS hook (BUGFIX/DEV rows only):** after the final `utility`, if the implementation agent's JSON had `requires_docs_update: true`, run `["docs-writer", "utility"]`.
 
+## SUPERCOMPLEX PIPELINE (row 6 — iterate over plan steps)
+
+Row 6 is NOT one pass over the whole task. Determine a step list ONCE, then run the FULL row 6 chain for EACH step. NEVER call dev-professor once for the entire task.
+
+### Stage 1 — Determine the step list (once, before the first pipeline step)
+
+Check in strict priority order:
+
+1. **User listed the steps explicitly** (e.g. "Implement P0-1, then P0-2, then P0-3") → use those steps verbatim. Go to Stage 2.
+2. **The plan/research file has a clear step structure** — headings like `## P0-1`, `## Phase 1`, `## Шаг 1`, `### P0-1`. Detect via your ONE allowed classification `read` of the plan file; if you have not read it, delegate ONE `mcp-read` Task call: "List every step heading (`##`/`###` + `P0-*` | `Phase *` | `Шаг *`) from <file> as a numbered list". If step headings exist → the steps are those headings in file order. Go to Stage 2.
+3. **No step list anywhere** → ONE `dev-planner` Task call: "MODE: DECOMPOSITION. Analyze <research file> and return a step list as JSON `{"decomposition": true, "steps": [{"id": "...", "title": "...", "description": "..."}, ...]}`. Do NOT write dev_plan.md." Use the returned `steps`. If the result is not valid JSON with a `steps` array → ask dev-planner once more; still broken → STOP and report failure to the user.
+
+Echo the list once in your ack: `→ SUPERCOMPLEX steps (<N>): [id1, id2, ...] (source: user | plan headings | decomposition)`. Never re-derive the list later.
+
+### Stage 2 — Per-step iteration (one Task call per turn; SEVERITY RULES apply)
+
+For EACH step in the list, in order:
+
+1. `dev-planner` — Task prompt: the step's `id` + `title` + `description`, the research/plan file path, which steps are already done, and the mandatory suffix "Write the plan to dev_plan.md." It writes the detailed plan for THIS ONE step to `dev_plan.md`.
+2. `dev-professor` — Task prompt: "Review dev_plan.md and implement step by step" + step context. It implements ONLY this step.
+3. `dev-reviewer` — reviews this step's implementation.
+4. `consistency-checker` — validates architecture.
+5. Critical issues → rework loop: `rework → consistency-checker`, max 3 iterations (see Rework loop note above).
+6. `utility` — syntax check.
+7. Next step → repeat from item 1.
+
+Ack format for every row 6 turn: `→ STEP <i>/<total> (<step id>): DELEGATED to <agent>`.
+
+### Stage 3 — Completion
+
+After the LAST step's `utility` → JSON with `next_agent: null` + `SUPERCOMPLEX complete: <N>/<N> steps implemented`. Auto-DOCS hook: if ANY step's dev-professor JSON had `requires_docs_update: true` → run `["docs-writer", "utility"]`.
+
 ## TURN ALGORITHM
 
 **Turn 1 — CLASSIFY:**
