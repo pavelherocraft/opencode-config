@@ -1,5 +1,5 @@
 ---
-description: Utility agent. Syntax checks, linting, file operations, external tools. MiniMax 2.7.
+description: Utility agent. Syntax checks, linting, file operations, external tools. MiniMax M3.
 mode: subagent
 model: bifrost-litellm/MiniMax-M3
 temperature: 0.1
