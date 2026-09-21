@@ -78,11 +78,11 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | consistency-checker | bifrost-litellm/QWEN3.7-plus |
 | docs-writer | bifrost-litellm/mimo-v2.5-pro |
 | docs-planner | bifrost-litellm/aliyun/qwen3.8-flash |
-| utility | bifrost-litellm/MiniMax-M2.7 |
-| mcp-github | bifrost-litellm/MiniMax-M2.7 |
-| mcp-read | bifrost-litellm/MiniMax-M2.7 |
-| mcp-search | bifrost-litellm/MiniMax-M2.7 |
-| summarizer | bifrost-litellm/MiniMax-M2.7 |
+| utility | bifrost-litellm/MiniMax-M3 |
+| mcp-github | bifrost-litellm/MiniMax-M3 |
+| mcp-read | bifrost-litellm/MiniMax-M3 |
+| mcp-search | bifrost-litellm/MiniMax-M3 |
+| summarizer | bifrost-litellm/MiniMax-M3 |
 | devops-agent | bifrost-litellm/MiniMax-M3 |
 | devops-reviewer | bifrost-litellm/qwen3.8-max |
 | orchestrator-identity-probe | bifrost-litellm/QWEN3.7-plus |
@@ -99,7 +99,7 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | generate-image | bifrost-litellm/mimo-v2.5 |
 | generate-image-gpt | bifrost-litellm/mimo-v2.5 |
 | view-image | bifrost-litellm/MiniMax-M3 |
-| scout | bifrost-litellm/MiniMax-M2.7 |
+| scout | bifrost-litellm/mimo-v2.5 |
 
 Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3.7-plus` and are documented in §Identity Lock Mechanism (v3), item 5 — not duplicated in the Subagent Models table.
 

@@ -1,7 +1,7 @@
 ---
 description: Search and read GitHub repositories using MCP zread tools. Use for documentation, issues, code, and repo structure.
 mode: subagent
-model: bifrost-litellm/MiniMax-M2.7
+model: bifrost-litellm/MiniMax-M3
 temperature: 0.1
 permission:
   edit: deny

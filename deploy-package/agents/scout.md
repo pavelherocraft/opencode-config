@@ -1,7 +1,7 @@
 ---
 description: Local filesystem reconnaissance scout. Cheap parallel exploration — greps, globs, reads files and returns compact findings (paths + line numbers + short excerpts). NEVER analyzes or synthesizes — facts only. Use for codebase/file exploration instead of burning expensive model tokens.
 mode: subagent
-model: bifrost-litellm/MiniMax-M2.7
+model: bifrost-litellm/mimo-v2.5
 temperature: 0.1
 permission:
   read: allow

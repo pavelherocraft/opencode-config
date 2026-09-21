@@ -48,11 +48,10 @@ OpenCode использует архитектуру с двумя primary-аг�
 | Model | Provider | Agents Count | Agents |
 |-------|----------|--------------|-------|
 | `QWEN3.7-plus` | bifrost-litellm | 7 | orchestrator, plankestrator, orchestrator-identity-probe, plankestrator-identity-probe, bugfix, consistency-checker, plan-writer-simple |
-| `MiniMax-M2.7` | bifrost-litellm | 6 | utility, mcp-github, mcp-read, mcp-search, summarizer, scout |
-| `MiniMax-M3` | bifrost-litellm | 5 | worker, plan-bug, devops-agent, devops-readonly, view-image |
+| `MiniMax-M3` | bifrost-litellm | 10 | worker, plan-bug, devops-agent, devops-readonly, view-image, utility, mcp-github, mcp-read, mcp-search, summarizer |
 | `GLM-5.3 (res)` | bifrost-litellm | 4 | execute-bug, dev-professor, plan-reviewer-simple, research-reviewer |
 | `Kimi K3` | bifrost-litellm | 4 | dev-reviewer, rework, plan-reviewer-complex, research-writer-complex |
-| `mimo-v2.5` | bifrost-litellm | 3 | generate-image, generate-image-gpt, git-commit |
+| `mimo-v2.5` | bifrost-litellm | 4 | generate-image, generate-image-gpt, git-commit, scout |
 | `qwen3.8-max` | bifrost-litellm | 3 | dev-planner, devops-reviewer, plan-writer-complex |
 | `mimo-v2.5-pro` | bifrost-litellm | 2 | docs-writer, research-writer-simple |
 | `GLM-5.3-Flash (res)` | bifrost-litellm | 1 | bugfix-triage |
@@ -209,7 +208,6 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
       "GLM-5.2 (res)": { "name": "GLM-5.2 (res)", "limit": { "context": 1048576, "output": 131072 } },
       "Kimi K2.6": { "name": "Kimi K2.6", "limit": { "context": 262144, "output": 262144 }, "modalities": { "input": ["text", "image"] }, "attachment": true },
       "Kimi K2.7": { "name": "Kimi K2.7", "limit": { "context": 262144, "output": 262144 }, "modalities": { "input": ["text", "image"] }, "attachment": true },
-      "MiniMax-M2.7": { "name": "MiniMax-M2.7", "limit": { "context": 204800, "output": 131072 } },
       "MiniMax-M3": { "name": "MiniMax-M3", "limit": { "context": 512000, "output": 131072 }, "modalities": { "input": ["text", "image", "video"] }, "attachment": true },
       "QWEN3.7-plus": { "name": "QWEN3.7-plus", "limit": { "context": 1000000, "output": 80000 }, "modalities": { "input": ["text", "image", "video"] }, "attachment": true }
     }
@@ -400,13 +398,13 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 
 | Agent | Mode | Model | Temperature | edit | write | read | bash | task whitelist extras |
 |-------|------|-------|-------------|------|-------|------|------|----------------------|
-| **mcp-github** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
+| **mcp-github** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | deny | view-image |
 | **dev-planner** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | *.md | - | deny | view-image, scout |
 | **bugfix** | subagent | bifrost-litellm/QWEN3.7-plus | 0.2 | allow | - | - | deny | view-image |
-| **mcp-read** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
+| **mcp-read** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | deny | view-image |
 | **plan-writer-complex** | subagent | bifrost-litellm/GLM-5.2 | 0.1 | allow | - | allow | deny | devops-readonly, view-image, scout |
 | **worker** | subagent | bifrost-litellm/MiniMax-M3 | 0.2 | allow | - | - | **allow** | view-image |
-| **utility** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | - | **allow** | view-image |
+| **utility** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | - | **allow** | view-image |
 | **rework** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | deny | view-image |
 | **research-writer-simple** | subagent | bifrost-litellm/mimo-v2.5-pro | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image, scout |
 | **plan-reviewer-simple** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
@@ -419,8 +417,8 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **devops-reviewer** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | allow | deny | view-image |
 | **orchestrator-identity-probe** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | - | deny | view-image |
 | **plankestrator-identity-probe** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | - | deny | view-image |
-| **mcp-search** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
-| **summarizer** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
+| **mcp-search** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | deny | view-image |
+| **summarizer** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | deny | view-image |
 | **bugfix-triage** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | - | deny | view-image, scout |
 | **research-reviewer** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | view-image |
 | **dev-reviewer** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | - | deny | view-image |
@@ -433,7 +431,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **git-commit** | subagent | bifrost-litellm/mimo-v2.5 | 0.1 | deny | deny | allow | **allow** | - | Only agent allowed to run git commit/push (gated via git-commit skill) |
 | **generate-image** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (default Gemini image model); git commit/push denied |
 | **generate-image-gpt** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (GPT/DALL-E path, on explicit user request only); git commit/push denied |
-| **scout** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | – | Local FS recon: read/glob/grep only; task: deny; no opencode.json section (frontmatter-only); never a pipeline step |
+| **scout** | subagent | bifrost-litellm/mimo-v2.5 | 0.1 | deny | deny | allow | deny | – | Local FS recon: read/glob/grep only; task: deny; no opencode.json section (frontmatter-only); never a pipeline step |
 
 ### Primary Agent Permissions
 
@@ -1362,7 +1360,7 @@ opencode --agent plankestrator
 | Routing tables | 2 | orchestrator (24), plankestrator (10) |
 | Pipelines | 13 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 | Custom commands | 5 | opencode.json |
-| Models | 10 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, MiniMax-M2.7, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, mimo-v2.5-pro, GLM-5.3-Flash (res), aliyun/qwen3.8-flash) |
+| Models | 9 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, mimo-v2.5-pro, GLM-5.3-Flash (res), aliyun/qwen3.8-flash) |
 
 ### Quick Reference
 
