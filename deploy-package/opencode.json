@@ -392,34 +392,6 @@
           },
           "attachment": true
         },
-        "tencent/DeepSeek-V4.1-Flash": {
-          "name": "tencent/DeepSeek-V4.1-Flash",
-          "limit": {
-            "context": 1048576,
-            "output": 393216
-          },
-          "options": {
-            "reasoningEffort": "high"
-          },
-          "variants": {
-            "low": {
-              "reasoningEffort": "low"
-            },
-            "high": {
-              "reasoningEffort": "high"
-            },
-            "max": {
-              "reasoningEffort": "max"
-            }
-          },
-          "modalities": {
-            "input": [
-              "text",
-              "image"
-            ]
-          },
-          "attachment": true
-        },
         "tencent/Hy3": {
           "name": "tencent/Hy3",
           "limit": {
@@ -441,6 +413,27 @@
           "options": {
             "thinking": {
               "type": "enabled"
+            }
+          }
+        },
+        "tencent/Kimi K3 (reserved - use when main is exhausted)": {
+          "name": "tencent/Kimi K3 (reserved - use when main is exhausted)",
+          "limit": {
+            "context": 1048576,
+            "output": 1048576
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
             }
           }
         },
@@ -646,6 +639,34 @@
               "type": "enabled"
             }
           }
+        },
+        "openrouter/deepseek-v4.1-flash": {
+          "name": "openrouter/deepseek-v4.1-flash",
+          "limit": {
+            "context": 1048576,
+            "output": 384000
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          "attachment": true
         },
         "qwen3.6-flash": {
           "name": "qwen3.6-flash",
