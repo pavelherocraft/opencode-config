@@ -65,7 +65,7 @@ You MUST read this file at the start of every consistency check run. All validat
 
 | Check | ARCHITECTURE.md Section | What It Defines |
 |-------|--------------------------|-----------------|
-| Routing Tables | Section 1: Routing Tables | orchestrator whitelist (21), plankestrator whitelist (9) |
+| Routing Tables | Section 1: Routing Tables | orchestrator whitelist (24), plankestrator whitelist (9) |
 | Pipelines | Section 2: Pipelines | All 9 pipeline definitions |
 | JSON Fields | Section 3: JSON Validation Fields | Required fields per agent |
 | MCP Servers | Section 4: MCP Servers | Allowed MCP tools |
@@ -123,6 +123,8 @@ Verify that pipeline definitions in `AGENTS.md` and `PLUGIN.md` are consistent w
 - All 9 pipeline names present
 - Pipeline steps match
 - Pipeline order matches
+- Pipeline Notation subsection present in ARCHITECTURE.md §2 and mirrored in AGENTS.md; RESEARCH internal-DAG examples match in both files
+- Top-level pipelines remain linear `string[]` — no wave syntax (`∥`, `barrier`) inside PIPELINE TABLE of orchestrator.md / plankestrator.md
 
 ### Check 5: JSON Validation Fields
 
@@ -132,6 +134,7 @@ Verify that JSON validation in `workflow-enforcement.ts` matches ARCHITECTURE.md
 - `REQUIRED_JSON_FIELDS.orchestrator` includes all 9 fields from Section 3
 - `REQUIRED_JSON_FIELDS.plankestrator` includes all 7 fields from Section 3
 - `VALID_VALUES` match the valid values in Section 3
+- File-Pointer Fields (§3): `plan_file` / `research_file` are OPTIONAL subagent fields — they must NOT appear in `REQUIRED_JSON_FIELDS`; writer prompts (plan-writer-*, research-writer-*) emit them and reviewer prompts (plan-reviewer-*, research-reviewer) consume them
 
 ### Check 6: Permission Consistency
 
