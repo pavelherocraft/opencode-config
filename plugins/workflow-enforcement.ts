@@ -28,7 +28,8 @@ const ROUTING_TABLES = {
     "docs-planner",
     "generate-image",
     "generate-image-gpt",
-    "git-commit"
+    "git-commit",
+    "advisor"
   ],
   plankestrator: [
     "plankestrator-identity-probe",
@@ -72,6 +73,38 @@ const IDENTITY_PROBE_AGENTS = [
 ]
 
 // ============================================================
+// v5 (OMP P0-1) — Reviewer severity taxonomy (Emission-Guard-аналог).
+// Источник: RESEARCH_OMP_FEATURES.md, Recommendation P0-1.
+// nit → логируется, НЕ триггерит rework; concern → rework-loop;
+// blocker → triggered turn (немедленный rework + эскалация).
+// Fail-closed: отсутствие severity orchestrator трактует как concern.
+// ============================================================
+const SEVERITY_AGENTS = ["dev-reviewer", "consistency-checker", "advisor"]
+const VALID_SEVERITIES = ["nit", "concern", "blocker"]
+// Фильтр пустых фраз (OMP emission-guard, п.2): шумовые «замечания» не считаются findings
+const EMPTY_FINDING_PHRASES = [
+  "stop", "done", "lgtm", "no issues", "nothing to add",
+  "looks good", "ok", "fine", "no problems", "all good"
+]
+// Бюджет на update (OMP emission-guard, п.4): max 4 non-blocker; blocker освобождён
+const MAX_NON_BLOCKER_FINDINGS_PER_UPDATE = 4
+// Session-scoped дедупликация точного текста (OMP emission-guard, п.3):
+// agent → набор нормализованных текстов замечаний; сброс на session.created top-level
+let seenFindings: Map<string, Set<string>> = new Map()
+
+// ============================================================
+// v5 (OMP P0-3) — Per-audience context files (WATCHDOG.md-аналог).
+// Reviewer-агенты читают REVIEW_CONTEXT.md (project root → user level);
+// плагин дополнительно инжектит указатель в Task-prompt (belt-and-braces).
+// ============================================================
+const CONTEXT_FILE_AGENTS = [
+  "dev-reviewer", "consistency-checker", "devops-reviewer",
+  "plan-reviewer-simple", "plan-reviewer-complex", "research-reviewer",
+  "advisor"
+]
+const REVIEW_CONTEXT_FILE = "REVIEW_CONTEXT.md"
+
+// ============================================================
 // Plugin State (per-process, reset on session.created)
 // ============================================================
 let currentAgent: string | null = null
@@ -80,6 +113,20 @@ let lockedAgentName: string | null = null
 let hasOutputtedJSON: Map<string, boolean> = new Map()
 let workflowSteps: Array<{timestamp: number, tool: string, agent: string, target?: string}> = []
 let currentMode: "plan" | "build" = "build"
+
+// ============================================================
+// v4 — состояние предотвращения self-work plankestrator
+// (сбрасывается на session.created ВЕРХНЕГО уровня; дочерние сессии
+// не сбрасывают — см. parentID-guard)
+// ============================================================
+// Максимум read+grep+glob за сессию, ВСЕ — до первого pipeline Task-вызова.
+// Промпт требует от модели max 2 (plankestrator.md) — плагин оставляет
+// 1 вызов запаса: промпт строже закона, закон ловит эскалацию.
+const INSPECTION_BUDGET = 3
+// Маркер self-work-контента в последнем assistant-сообщении родителя
+let selfWorkDetected: boolean = false
+// >0 пока выполняется Task-субагент — enforcement приостановлен (атрибуция)
+let activeTaskDepth = 0
 
 // ============================================================
 // Forbidden vocabulary per agent — sanity check on message text.
@@ -96,6 +143,24 @@ const FORBIDDEN_VOCAB: Record<string, string[]> = {
     "I am orchestrator", "I'm orchestrator", "I am the Conductor",
     "I am the Task classifier", "Task classifier and router",
     "bugfix-triage", "execute-bug", "devops-agent", "consistency-checker"
+  ]
+}
+
+// ============================================================
+// Self-work markers (v4) — маркеры САМОСТОЯТЕЛЬНОЙ plan/research-работы
+// в сообщении locked primary-агента (исследование: Пробел 3, Рек. 3).
+// Намеренно НЕ смешиваются с FORBIDDEN_VOCAB: тот логируется как
+// "contains {otherAgent} terminology" (стр. 420) — семантика другая.
+// Заголовочные токены ("## ...") снижают false-positive: обычные слова
+// ("research", "findings") встречались бы в легальной маршрутной прозе
+// и именах файлов ("RESEARCH.md"). Русские маркеры добавлены сверх
+// списка исследования: модель отвечает пользователю по-русски.
+// ============================================================
+const SELF_WORK_MARKERS: Record<string, string[]> = {
+  plankestrator: [
+    "## Findings", "## Research", "Executive Summary", "## Analysis",
+    "### Root Cause", "## Recommendations", "## Overview",
+    "## Выводы", "## Результаты исследования"
   ]
 }
 
@@ -123,6 +188,31 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
       // session.created — detect initial agent identity
       // ----------------------------------------------------------
       if (event.type === "session.created") {
+        // v4: ДОЧЕРНИЕ сессии (Task-субагенты) НЕ должны стирать identity-lock и
+        // workflow-состояние РОДИТЕЛЬСКОЙ primary-сессии. Без этого guard'а первая
+        // же делегация сбрасывает identityLocked=false и workflowSteps=[]
+        // (безусловный reset ниже), молча отключая Gate A, routing enforcement и
+        // INSPECTION GATE на остаток сессии родителя. Вызовы инструментов
+        // субагентов атрибутируются отдельно через activeTaskDepth
+        // (depth-guard в tool.execute.before / message.updated).
+        const childCheckData = (event as any).properties?.session
+          || (event as any).properties
+          || event
+        const parentSessionID = childCheckData?.parentID
+          || (event as any).properties?.parentID
+          || (event as any).parentID
+        if (parentSessionID) {
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "info",
+              message: `CHILD session created (parentID=${parentSessionID}) — primary-agent state PRESERVED`,
+              extra: { parentID: String(parentSessionID) }
+            }
+          })
+          return
+        }
+
         // CRITICAL FIX: Reset module-level identity-lock state on every new
         // session BEFORE attempting detection. Plugin state persists across
         // sessions within the same opencode process. Without this reset, a
@@ -139,6 +229,9 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         identityLocked = false
         lockedAgentName = null
         hasOutputtedJSON = new Map()
+        selfWorkDetected = false
+        activeTaskDepth = 0
+        seenFindings = new Map()  // v5: сброс дедуп-журнала замечаний
 
         // Try to detect agent from event data
         const sessionData = (event as any).properties?.session
@@ -249,6 +342,63 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
       // message.updated — validate JSON output + detect agent
       // ----------------------------------------------------------
       if (event.type === "message.updated") {
+        // v4: сообщения, созданные ПОКА выполняется Task-субагент, принадлежат
+        // субагенту (writer легально пишет "## Findings" и свой JSON) —
+        // enforcement атрибутирован родителю, пропускаем.
+        if (activeTaskDepth > 0) {
+          // v5 (OMP P0-1): сообщения субагентов не проходят primary-валидацию,
+          // НО JSON reviewer-агентов проверяется на severity (warn-only: плагин
+          // не может блокировать вывод субагента; fail-closed потребление —
+          // в промпте orchestrator'а: missing severity = concern).
+          const subMessage = (event as any).properties?.message || (event as any).message
+          const subJson = subMessage ? extractJSONFromMessage(subMessage) : null
+          const subAgent = subJson?.agent ? String(subJson.agent) : null
+          if (subJson && subAgent && SEVERITY_AGENTS.includes(subAgent)) {
+            // 1. Присутствие и валидность severity
+            if (!subJson.severity) {
+              await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
+                message: `REVIEWER SEVERITY MISSING — ${subAgent} JSON без severity; orchestrator MUST treat as "concern" (fail-closed)`,
+                extra: { agent: subAgent } } })
+            } else if (!VALID_SEVERITIES.includes(String(subJson.severity))) {
+              await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
+                message: `REVIEWER SEVERITY INVALID — ${subAgent}: "${subJson.severity}", expected: ${VALID_SEVERITIES.join("|")}`,
+                extra: { agent: subAgent, severity: String(subJson.severity) } } })
+            }
+            // 2. blocker → error-level (triggered turn: немедленный rework + эскалация)
+            if (String(subJson.severity) === "blocker") {
+              await client.app.log({ body: { service: "workflow-enforcement", level: "error",
+                message: `BLOCKER FINDING — ${subAgent} вернул severity=blocker; orchestrator: немедленный rework + ⚠️ BLOCKER ack + эскалация пользователю при персистировании`,
+                extra: { agent: subAgent } } })
+            }
+            // 3. Дедуп + фильтр пустых фраз + бюджет (emission-guard)
+            const seen = seenFindings.get(subAgent) ?? new Set<string>()
+            let nonBlockerCount = 0
+            for (const f of collectFindings(subJson)) {
+              const norm = normalizeFinding(f.text)
+              if (!norm || EMPTY_FINDING_PHRASES.includes(norm)) {
+                await client.app.log({ body: { service: "workflow-enforcement", level: "info",
+                  message: `EMPTY FINDING FILTERED — ${subAgent}: "${f.text.slice(0, 80)}"`, extra: { agent: subAgent } } })
+                continue
+              }
+              if (seen.has(norm)) {
+                await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
+                  message: `DUPLICATE FINDING SUPPRESSED — ${subAgent} повторно вернул замечание (между итерациями rework-loop)`,
+                  extra: { agent: subAgent, finding: norm.slice(0, 120) } } })
+                continue
+              }
+              seen.add(norm)
+              if (f.severity !== "blocker") nonBlockerCount++
+            }
+            seenFindings.set(subAgent, seen)
+            if (nonBlockerCount > MAX_NON_BLOCKER_FINDINGS_PER_UPDATE) {
+              await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
+                message: `FINDING BUDGET EXCEEDED — ${subAgent}: ${nonBlockerCount} non-blocker findings (max ${MAX_NON_BLOCKER_FINDINGS_PER_UPDATE}); избыток — шум`,
+                extra: { agent: subAgent, count: nonBlockerCount, budget: MAX_NON_BLOCKER_FINDINGS_PER_UPDATE } } })
+            }
+          }
+          return
+        }
+
         const message = (event as any).properties?.message
           || (event as any).message
 
@@ -379,7 +529,7 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
             await client.app.log({
               body: {
                 service: "workflow-enforcement",
-                level: "warn",
+                level: "error",
                 message: "INVALID JSON OUTPUT",
                 extra: {
                   agent: currentAgent,
@@ -432,6 +582,42 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
             // (e.g. orchestrator mentioning "plan-writer" in an OUT OF SCOPE message).
           }
         }
+
+        // ==========================================================
+        // SELF-WORK CONTENT CHECK (v4) — plankestrator.
+        // Заголовочные маркеры ("## Findings" и т.п.) в СОБСТВЕННОМ сообщении
+        // locked plankestrator = модель написала plan/research-контент сама
+        // вместо делегирования (исследование: Пробел 3, Рек. 3).
+        // Эскалация в отличие от forbidden-vocab: выставляет selfWorkDetected →
+        // следующий read/grep/glob бросает throw (INSPECTION GATE). Task-вызовы
+        // НЕ блокируются — делегирование и есть желаемая коррекция.
+        // Guard 1: только assistant-сообщения — пользователь легально может
+        // вставить документ с такими заголовками (user-message → пропуск).
+        // Guard 2 (выше по потоку): activeTaskDepth > 0 → сообщения субагентов
+        // не проверяются (research-writer легально пишет "## Findings" в файл).
+        // ==========================================================
+        if (identityLocked && lockedAgentName && SELF_WORK_MARKERS[lockedAgentName]) {
+          const msgRole = String((message as any).role || (message as any).info?.role || "assistant")
+          if (msgRole === "assistant") {
+            const selfContent = String(message.content || message.text || "")
+            const selfWorkHits = SELF_WORK_MARKERS[lockedAgentName].filter(t => selfContent.includes(t))
+            if (selfWorkHits.length > 0) {
+              selfWorkDetected = true
+              await client.app.log({
+                body: {
+                  service: "workflow-enforcement",
+                  level: "error",
+                  message: `SELF-WORK CONTENT DETECTED — ${lockedAgentName} message contains plan/research content markers`,
+                  extra: {
+                    lockedAgent: lockedAgentName,
+                    markers: selfWorkHits,
+                    excerpt: selfContent.slice(0, 200)
+                  }
+                }
+              })
+            }
+          }
+        }
       }
     },
 
@@ -440,6 +626,26 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
     // ==========================================================
     "tool.execute.before": async (input, output) => {
       const timestamp = Date.now()
+
+      // v4: пока выполняется Task-субагент (activeTaskDepth > 0), ЛЮБОЙ tool-вызов
+      // принадлежит субагенту, а не locked primary-агенту (родитель приостановлен
+      // в ожидании результата). Enforcement атрибутирован только родительской
+      // сессии → пропускаем. Вложенные делегирования (субагент → суб-субагент)
+      // поддерживают баланс счётчика: +1 здесь, -1 в tool.execute.after.
+      if (activeTaskDepth > 0) {
+        if (input.tool === "task") {
+          activeTaskDepth += 1
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "warn",
+              message: "TASK CALL WHILE SUBAGENT ACTIVE — routing check skipped (nested delegation, or prohibited parallel Task from primary agent)",
+              extra: { depth: activeTaskDepth }
+            }
+          })
+        }
+        return
+      }
 
       // BYPASS: Built-in OpenCode Plan mode (Shift+Tab toggle).
       // In Plan mode the user is on the default primary agent (e.g. "build")
@@ -508,6 +714,111 @@ Fix: do NOT call ${input.tool} directly. Instead, call Task with the appropriate
      subagent_type from your routing table:
 ${(ROUTING_TABLES[lockedAgentName as keyof typeof ROUTING_TABLES] || []).map(a => `       - ${a}`).join("\n")}
         `)
+      }
+
+      // ==========================================================
+      // INSPECTION GATE (v4) — предотвращение self-work plankestrator.
+      // Источник: RESEARCH_PLANKESTRATOR_ISSUE.md, Приоритет 1, пп. 1–3.
+      // Проверка выполняется ДО workflowSteps.push() (строка ~564), поэтому
+      // inspectionsUsed считает ТОЛЬКО предыдущие вызовы: текущий вызов —
+      // (inspectionsUsed+1)-й. Бюджет 3 = разрешены вызовы 1..3, 4-й → throw.
+      // Промпт требует от модели max 2 — запас 1 вызов (промпт строже плагина).
+      // ==========================================================
+      if (
+        identityLocked &&
+        lockedAgentName === "plankestrator" &&
+        (input.tool === "read" || input.tool === "grep" || input.tool === "glob")
+      ) {
+        // «Пайплайн начался» = был task-вызов ЦЕЛЬЮ которого не является
+        // auxiliary-агент. view-image — инспекционный helper ДО классификации
+        // (plankestrator.md стр. 59; исследование стр. 128), identity-probe —
+        // процедура идентификации. Task с неизвестной целью считается стартом
+        // пайплайна (консервативно).
+        const AUXILIARY_TARGETS = new Set([...IDENTITY_PROBE_AGENTS, "view-image"])
+        const pipelineStarted = workflowSteps.some(
+          s => s.tool === "task" && (!s.target || !AUXILIARY_TARGETS.has(s.target))
+        )
+        const inspectionsUsed = workflowSteps.filter(
+          s => s.tool === "read" || s.tool === "grep" || s.tool === "glob"
+        ).length
+
+        if (pipelineStarted) {
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "error",
+              message: `INSPECTION AFTER PIPELINE START BLOCKED — plankestrator tried "${input.tool}"`,
+              extra: { lockedAgent: lockedAgentName, attemptedTool: input.tool, inspectionsUsed }
+            }
+          })
+          throw new Error(`
+⛔ INSPECTION AFTER PIPELINE START — DELEGATE INSTEAD
+
+You are running as: plankestrator (identity-locked).
+The pipeline has already started — ALL inspection (read/grep/glob) is now FORBIDDEN.
+This is the "Turns 2..N" rule (same rule orchestrator follows).
+
+Fix: advance the pipeline. Identity line → JSON block → Task call with the NEXT
+agent from your routing table:
+${ROUTING_TABLES.plankestrator.map(a => `   - ${a}`).join("\n")}
+
+Need file/code context? Delegate to devops-readonly via Task — never read yourself.
+          `)
+        }
+
+        if (selfWorkDetected) {
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "error",
+              message: `INSPECTION BLOCKED — self-work content detected in previous plankestrator message`,
+              extra: { lockedAgent: lockedAgentName, attemptedTool: input.tool }
+            }
+          })
+          throw new Error(`
+⛔ SELF-WORK CONTENT DETECTED IN YOUR PREVIOUS MESSAGE
+
+You are running as: plankestrator (identity-locked).
+Your last message contained plan/research content markers (e.g. "## Findings",
+"## Analysis", "Executive Summary"). Producing plan/research CONTENT is self-work —
+it belongs to plan-writer-* / research-writer-* agents, NOT to you.
+
+Fix: do NOT continue investigating. Identity line → JSON block → ONE Task call
+with next_agent from your routing table → ack line. Your message text must contain
+NOTHING else.
+          `)
+        }
+
+        if (inspectionsUsed >= INSPECTION_BUDGET) {
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "error",
+              message: `INSPECTION BUDGET EXHAUSTED — plankestrator tried "${input.tool}" (used ${inspectionsUsed}/${INSPECTION_BUDGET})`,
+              extra: { lockedAgent: lockedAgentName, attemptedTool: input.tool, used: inspectionsUsed, budget: INSPECTION_BUDGET }
+            }
+          })
+          throw new Error(`
+⛔ INSPECTION BUDGET EXHAUSTED — CLASSIFY AND DELEGATE NOW
+
+You are running as: plankestrator (identity-locked).
+You have used all ${INSPECTION_BUDGET} allowed inspection calls (read/grep/glob).
+Further inspection is self-work, not classification.
+
+Fix: STOP inspecting. Type and complexity are determined from the REQUEST TEXT
+(number of questions / topics / objects to compare), NOT from files.
+Identity line → JSON block → Task call with next_agent from your routing table.
+          `)
+        }
+
+        await client.app.log({
+          body: {
+            service: "workflow-enforcement",
+            level: "info",
+            message: `Inspection allowed: plankestrator "${input.tool}" (used ${inspectionsUsed}/${INSPECTION_BUDGET}, pipeline not started)`,
+            extra: { used: inspectionsUsed, budget: INSPECTION_BUDGET }
+          }
+        })
       }
 
       // Check: is this the first task tool call? (race condition mitigation)
@@ -598,9 +909,18 @@ ${(ROUTING_TABLES[lockedAgentName as keyof typeof ROUTING_TABLES] || []).map(a =
         return
       }
       
-      // Check: agent must output JSON before calling non-identity-probe agents
+      // Check: agent must output JSON before calling non-identity-probe agents.
+      // v4: для LOCKED primary-агентов grace-исключение isFirstTaskCall БОЛЬШЕ НЕ
+      // применяется — оно существует только как race-mitigation для UNLOCKED сессий
+      // (session.created ещё не определил агента). Если identityLocked=true, гонки
+      // нет: lock установлен до первого хода модели.
+      // Auxiliary-цели остаются исключены: identity-probe и view-image легально
+      // вызываются ОТДЕЛЬНЫМ ходом ДО классификационного JSON
+      // (plankestrator.md Turn 1 step 3; исследование стр. 128 — ⚠️ нюанс).
+      const AUXILIARY_TASK_TARGETS = [...IDENTITY_PROBE_AGENTS, "view-image"]
+      const jsonGracePeriod = isFirstTaskCall && !identityLocked
       const agentJSONStatus = hasOutputtedJSON.get(currentAgent) ?? false
-      if (!agentJSONStatus && targetAgent && !IDENTITY_PROBE_AGENTS.includes(targetAgent) && !isFirstTaskCall) {
+      if (!agentJSONStatus && targetAgent && !AUXILIARY_TASK_TARGETS.includes(targetAgent) && !jsonGracePeriod) {
         throw new Error(`
 ⛔ JSON OUTPUT REQUIRED — PLUGIN ENFORCEMENT
 
@@ -630,6 +950,7 @@ This is enforced by the workflow-enforcement plugin.
             extra: { currentAgent, mode: currentMode }
           }
         })
+        activeTaskDepth += 1 // v4: built-in агент (explore/general) тоже субагент
         return
       }
 
@@ -692,6 +1013,29 @@ Plankestrator handles: PLAN, RESEARCH, RESEARCH+PLAN
         }
       }
 
+      // v5 (OMP P0-3): инъекция указателя контекстного файла в Task-prompt
+      // reviewer-агентам. Если мутация output.args не поддержана рантаймом —
+      // не страшно: промпты reviewer'ов содержат самостоятельное чтение файла.
+      if (targetAgent && CONTEXT_FILE_AGENTS.includes(targetAgent)) {
+        const taskArgs = (output as any)?.args
+        if (taskArgs && typeof taskArgs.prompt === "string" && !taskArgs.prompt.includes(REVIEW_CONTEXT_FILE)) {
+          taskArgs.prompt = `[CONTEXT FILE] Before starting, read ${REVIEW_CONTEXT_FILE} in the project root (if absent — ~/.config/opencode/${REVIEW_CONTEXT_FILE}). It contains reviewer-specific priorities, known traps and the severity taxonomy. Then proceed with the task below.\n\n` + taskArgs.prompt
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "info",
+              message: `Context file pointer injected into Task prompt for ${targetAgent} (${REVIEW_CONTEXT_FILE})`,
+              extra: { targetAgent, contextFile: REVIEW_CONTEXT_FILE }
+            }
+          })
+        }
+      }
+
+      // v4: родительский Task-вызов прошёл routing — сейчас запустится субагент.
+      // Пока activeTaskDepth > 0, все tool-вызовы и сообщения принадлежат СУБАГЕНТУ
+      // (родитель приостановлен) → enforcement для них подавляется (см. depth-guard).
+      activeTaskDepth += 1
+
       // Log valid routing
       await client.app.log({
         body: {
@@ -707,6 +1051,11 @@ Plankestrator handles: PLAN, RESEARCH, RESEARCH+PLAN
     // "tool.execute.after" — log tool completion
     // ==========================================================
     "tool.execute.after": async (input, output) => {
+      // v4: Task-субагент завершён (успешно или с ошибкой — after-хук fires в обоих
+      // случаях, см. success-флаг ниже) → вернуть enforcement в родительскую сессию.
+      if (input.tool === "task") {
+        activeTaskDepth = Math.max(0, activeTaskDepth - 1)
+      }
       await client.app.log({
         body: {
           service: "workflow-enforcement",
@@ -1037,4 +1386,33 @@ function validateJSONOutput(json: any, agent: string): {valid: boolean, errors: 
     errors,
     missingFields
   }
+}
+
+// ============================================================
+// v5 (OMP P0-1) — Severity helpers
+// ============================================================
+
+/** Нормализация текста замечания для дедупликации (OMP emission-guard, п.1:
+ *  lowercase, NFKC, схлопывание не-алфанум). */
+function normalizeFinding(text: string): string {
+  return text.normalize("NFKC").toLowerCase().replace(/[^a-zа-яё0-9]+/gi, " ").trim()
+}
+
+/** Сбор текстов замечаний из JSON reviewer-агента:
+ *  findings[] (dev-reviewer), notes[] (advisor) и details[] (consistency-checker). */
+function collectFindings(json: any): Array<{ text: string, severity: string | null }> {
+  const out: Array<{ text: string, severity: string | null }> = []
+  for (const f of Array.isArray(json?.findings) ? json.findings : []) {
+    const text = String(f?.description || f?.note || "")
+    if (text) out.push({ text, severity: f?.severity != null ? String(f.severity) : null })
+  }
+  for (const n of Array.isArray(json?.notes) ? json.notes : []) {
+    const text = String(n?.note || n?.description || "")
+    if (text) out.push({ text, severity: n?.severity != null ? String(n.severity) : null })
+  }
+  for (const d of Array.isArray(json?.details) ? json.details : []) {
+    const text = String(d?.description || "")
+    if (text) out.push({ text, severity: d?.severity != null ? String(d.severity) : (json?.severity != null ? String(json.severity) : null) })
+  }
+  return out
 }

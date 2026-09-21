@@ -176,6 +176,14 @@ All architecture requirements are defined in ARCHITECTURE.md in the project root
 
 The consistency-checker agent reads ARCHITECTURE.md to validate all configuration files.
 
+## Per-Audience Context Files
+
+`REVIEW_CONTEXT.md` (project root + user-level `~/.config/opencode/REVIEW_CONTEXT.md`) — инструкции ТОЛЬКО для reviewer-агентов (приоритеты ревью, known traps, severity-таксономия). Исполнительные агенты его не читают. Plugin v5 инжектит указатель файла в Task-prompt reviewer'ов; промпты reviewer'ов читают файл самостоятельно. Аналог OMP WATCHDOG.md. Детали: ARCHITECTURE.md §8.
+
+## Model Roles
+
+Назначение моделей всем 37 агентам централизовано в ARCHITECTURE.md §Model Roles (единственный источник правды; frontmatter `model:` литерален — рантайм не поддерживает алиасы). Prewalk-принцип: tier(planner) ≥ tier(executor). Валидация — consistency-checker Check 11. Смена модели = 4 синхронных места (roles table, frontmatter, Subagent Models, MCP_SETUP Distribution).
+
 ## Dual Primary Agents Architecture
 
 OpenCode uses two primary agents that handle different task types. Agents do NOT call each other — the user must manually switch between them.
@@ -210,7 +218,7 @@ Handles planning and research tasks:
 
 ## Routing Tables
 
-### orchestrator Whitelist (24 agents)
+### orchestrator Whitelist (25 agents)
 
 | Agent Name | Role |
 |------------|------|
@@ -238,6 +246,7 @@ Handles planning and research tasks:
 | generate-image | Image generation (Gemini) |
 | generate-image-gpt | Image generation (GPT/DALL-E) |
 | git-commit | Gated conventional git commits |
+| advisor | Step-boundary advisory reviewer (severity-tagged, read-only) |
 
 ### plankestrator Whitelist (10 agents)
 
@@ -308,7 +317,7 @@ Simple bug fixes use the straightforward pipeline with triage, implementation, a
 
 ### BUGFIX DEEP
 
-bugfix-triage -> plan-bug (writes bug_plan.md) -> execute-bug (reads bug_plan.md) -> dev-reviewer -> rework -> consistency-checker -> [rework loop: rework → consistency-checker, max 3] -> utility
+bugfix-triage -> plan-bug (writes bug_plan.md) -> execute-bug (reads bug_plan.md) -> advisor -> dev-reviewer -> rework -> consistency-checker -> [rework loop: rework → consistency-checker, max 3] -> utility
 
 Complex bug fixes include planning (plan-bug writes to bug_plan.md), execution (execute-bug reads from bug_plan.md), review, rework cycles, and consistency validation.
 
@@ -327,7 +336,7 @@ DEV SIMPLE has two variants depending on whether a plan exists:
 ### DEV COMPLEX
 
 
-dev-planner -> dev-professor -> dev-reviewer -> rework -> consistency-checker -> [rework loop: rework → consistency-checker, max 3] -> utility
+dev-planner -> dev-professor -> advisor -> dev-reviewer -> rework -> consistency-checker -> [rework loop: rework → consistency-checker, max 3] -> utility
 
 
 Complex development tasks include planning, guidance, review, rework, and consistency validation.
@@ -353,6 +362,15 @@ DOCS DEEP:   docs-planner (writes docs_plan.md)
            → dev-reviewer → rework → consistency-checker
            → [rework loop: rework → consistency-checker, max 3] → utility
 ```
+
+### Severity Taxonomy (reviewer agents, v5)
+
+Reviewer-агенты (dev-reviewer, consistency-checker, advisor) возвращают `severity: nit|concern|blocker`:
+- `nit` — логируется, НЕ триггерит rework (после dev-reviewer с severity=nit и всеми исправленными findings шаг rework пропускается);
+- `concern` — триггерит rework-loop;
+- `blocker` — triggered turn: немедленный rework + `⚠️ BLOCKER` в ack; персистенция после 3-й итерации → failure report.
+Отсутствующее severity = `concern` (fail-closed). Дедупликация замечаний между итерациями и бюджет (max 4 non-blocker на update) — в plugin v5. Детали: ARCHITECTURE.md §3 «Reviewer Severity Field».
+Advisor (step-boundary watchdog) — pre-reviewer в DEV COMPLEX и BUGFIX DEEP: nit/concern/blocker notes, NIT_ONLY_MODE (immuneTurns=3) после сработавшего blocker.
 
 ### Auto-DOCS Hook (BUGFIX / DEV pipelines)
 

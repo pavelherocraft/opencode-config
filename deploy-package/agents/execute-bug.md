@@ -1,7 +1,7 @@
 ---
-description: Bugfix execution agent. Reads plan from bug_plan.md, then implements deep bug fixes. GLM-5.3 (res).
+description: Bugfix execution agent. Reads a self-contained plan from bug_plan.md, then implements deep bug fixes mechanically. MiniMax-M3.
 mode: subagent
-model: bifrost-litellm/GLM-5.3 (res)
+model: bifrost-litellm/MiniMax-M3
 temperature: 0.2
 permission:
   edit: allow
@@ -51,7 +51,8 @@ Output Specification (required for orchestrator auto-DOCS hook):
   "files_modified": ["src/api/AuthService.cs"],
   "summary": "Fixed authentication flow",
   "requires_docs_update": true,
-  "docs_update_reason": "public_api_changed | plan_modified | docs_modified | code_comments_added"
+  "docs_update_reason": "public_api_changed | plan_modified | docs_modified | code_comments_added",
+  "plan_gap": false
 }
 ```
 
@@ -62,3 +63,5 @@ Output Specification (required for orchestrator auto-DOCS hook):
 - Added significant docstrings or code comments to public APIs
 
 Otherwise set to `false`.
+
+`plan_gap` (prewalk escape hatch) MUST be `true` if the plan was NOT self-contained, the root cause analysis turned out wrong, or you hit unexpected complexity beyond the plan. Implement the best partial fix you can and describe the gap in `summary` — downstream dev-reviewer/consistency-checker will escalate. Do NOT silently improvise large changes.

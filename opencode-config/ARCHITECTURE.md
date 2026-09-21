@@ -4,7 +4,7 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 
 ## 1. Routing Tables
 
-### orchestrator Whitelist (24 agents)
+### orchestrator Whitelist (25 agents)
 
 | # | Agent Name | Role |
 |---|------------|------|
@@ -32,6 +32,7 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 | 22 | generate-image | Image generation (Gemini) |
 | 23 | generate-image-gpt | Image generation (GPT/DALL-E) |
 | 24 | git-commit | Gated conventional git commits |
+| 25 | advisor | Step-boundary advisory reviewer (severity-tagged, read-only) |
 
 ### plankestrator Whitelist (10 agents)
 
@@ -52,15 +53,15 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 
 | Primary Agent | Whitelist Count | Total (primary + whitelist) |
 |---------------|-----------------|-----------------------------|
-| orchestrator | 24 | 25 (orchestrator + 24 subagents) |
+| orchestrator | 25 | 26 (orchestrator + 25 subagents) |
 | plankestrator | 10 | 11 (plankestrator + 10 subagents) |
-| **Grand Total** | **34** | **36** |
+| **Grand Total** | **35** | **37** |
 
-Note: 34 whitelist entries (view-image shared by both primaries) = 33 unique whitelisted subagents, PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 34 unique subagents + 2 primary agents = 36 unique agents total.
+Note: 35 whitelist entries (view-image shared by both primaries) = 34 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 35 unique subagents + 2 primary agents = 37 unique agents total.
 
 ### Shared Utility Agents
 
-view-image is a shared utility agent available to BOTH primary agents. It is listed in BOTH routing tables (orchestrator: position 20 of 24; plankestrator: position 10 of 10) and granted `task.view-image: allow` in both permission blocks in opencode.json. It is used for image analysis (screenshots, diagrams, error images) via the Task tool.
+view-image is a shared utility agent available to BOTH primary agents. It is listed in BOTH routing tables (orchestrator: position 20 of 25; plankestrator: position 10 of 10) and granted `task.view-image: allow` in both permission blocks in opencode.json. It is used for image analysis (screenshots, diagrams, error images) via the Task tool.
 
 ## Subagent Models
 
@@ -69,13 +70,14 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | worker | bifrost-litellm/MiniMax-M3 |
 | bugfix-triage | bifrost-litellm/GLM-5.3-Flash (res) |
 | bugfix | bifrost-litellm/QWEN3.7-plus |
-| plan-bug | bifrost-litellm/MiniMax-M3 |
-| execute-bug | bifrost-litellm/GLM-5.3 (res) |
+| plan-bug | bifrost-litellm/qwen3.8-max |
+| execute-bug | bifrost-litellm/MiniMax-M3 |
 | dev-planner | bifrost-litellm/qwen3.8-max |
 | dev-professor | bifrost-litellm/GLM-5.3 (res) |
 | dev-reviewer | bifrost-litellm/Kimi K3 |
 | rework | bifrost-litellm/Kimi K3 |
 | consistency-checker | bifrost-litellm/QWEN3.7-plus |
+| advisor | bifrost-litellm/Kimi K3 |
 | docs-writer | bifrost-litellm/mimo-v2.5-pro |
 | docs-planner | bifrost-litellm/aliyun/qwen3.8-flash |
 | utility | bifrost-litellm/MiniMax-M3 |
@@ -102,6 +104,34 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | scout | bifrost-litellm/mimo-v2.5 |
 
 Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3.7-plus` and are documented in §Identity Lock Mechanism (v3), item 5 — not duplicated in the Subagent Models table.
+
+## Model Roles (v5 — single source of truth, OMP model-roles analog)
+
+Роли централизуют назначение моделей 37 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Check 11), (3) документации. Квота-aware fallback-цепочки — платформенное требование (см. `PLAN_LLM_FALLBACK.md`; статус: НЕ реализовано, требует поддержки рантайма/proxy).
+
+| Role | Model | Tier | Agents |
+|------|-------|------|--------|
+| primary | bifrost-litellm/QWEN3.7-plus | mid | orchestrator, plankestrator |
+| probe | bifrost-litellm/QWEN3.7-plus | mid | orchestrator-identity-probe, plankestrator-identity-probe |
+| plan-strong | bifrost-litellm/qwen3.8-max | top | dev-planner, plan-bug, plan-writer-complex, devops-reviewer |
+| plan-lite | bifrost-litellm/QWEN3.7-plus | mid | plan-writer-simple |
+| review-strong | bifrost-litellm/Kimi K3 | top | dev-reviewer, rework, plan-reviewer-complex, research-writer-complex, advisor |
+| review-lite | bifrost-litellm/QWEN3.7-plus | mid | consistency-checker, bugfix |
+| review-flash | bifrost-litellm/GLM-5.3 (res) | mid | plan-reviewer-simple, research-reviewer |
+| triage-flash | bifrost-litellm/GLM-5.3-Flash (res) | low | bugfix-triage |
+| executor-strong | bifrost-litellm/GLM-5.3 (res) | mid | dev-professor |
+| executor-cheap | bifrost-litellm/MiniMax-M3 | low | worker, execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image |
+| docs | bifrost-litellm/mimo-v2.5-pro | low | docs-writer, research-writer-simple |
+| docs-plan | bifrost-litellm/aliyun/qwen3.8-flash | low | docs-planner |
+| micro | bifrost-litellm/mimo-v2.5 | low | git-commit, generate-image, generate-image-gpt, scout |
+
+Контроль суммы: 2 primary + 35 subagents = 37 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.
+
+**Правила:**
+1. **Prewalk-принцип (OMP):** в паре planner→executor роль planner'а ДОЛЖНА быть tier ≥ executor'а: plan-bug (plan-strong) → execute-bug (executor-cheap); dev-planner (plan-strong) → dev-professor (executor-strong); docs-planner (docs-plan) → docs-writer (docs). Инверсия запрещена.
+2. Смена модели агента = правка этой таблицы + frontmatter `agents/*.md` + Subagent Models + MCP_SETUP Models Distribution (4 места; все — через consistency-checker Check 11).
+3. Новые агенты получают роль из таблицы; новая роль добавляется только с обоснованием в CHANGELOG.
+4. Миграция frontmatter на role-алиасы (`model: "@review-strong"`) — ЗАБЛОКИРОВАНА до поддержки рантаймом opencode (задокументированное платформенное требование, аналогично quota-aware fallback).
 
 ### Permission Notes
 
@@ -301,17 +331,19 @@ bugfix-triage → worker → utility
 ### BUGFIX DEEP
 
 ```
-bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
+bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → advisor → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
 ```
 
 **Two-stage pipeline decision (mandatory):** the orchestrator NEVER guesses SIMPLE vs DEEP itself. For any BUGFIX it first sends `["bugfix-triage"]` with `complexity: null`. When triage returns its verdict, the orchestrator extends the pipeline ONCE:
 
 - `TRIAGE_RESULT: SIMPLE` → continue `["worker", "utility"]`
-- `TRIAGE_RESULT: DEEP` → continue `["plan-bug", "execute-bug", "dev-reviewer", "rework", "consistency-checker", "utility"]`
+- `TRIAGE_RESULT: DEEP` → continue `["plan-bug", "execute-bug", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"]`
 
 **Single source of truth for pipeline selection:** the PIPELINE TABLE in each primary agent's own `.md` file (`agents/orchestrator.md` for BUGFIX/DEVOPS/DEV/DOCS, `agents/plankestrator.md` for PLAN/RESEARCH/RESEARCH+PLAN). Each table must stay identical to the corresponding section in this file. (The inline `prompt` field formerly present in opencode.json was removed — markdown wins per the merge order documented above.)
 
 **Plan file:** `plan-bug` writes the bug fix plan to `bug_plan.md` in the project root. `execute-bug` reads this file before implementing. The orchestrator MUST include "Write the plan to bug_plan.md" in the plan-bug prompt and "Read bug_plan.md" in the execute-bug prompt.
+
+**Prewalk pattern (v5, OMP prewalk analog):** one-shot handoff expensive→cheap at the planning/implementation boundary. `plan-bug` runs on the STRONG planner model (`qwen3.8-max`, tier plan-strong) and writes a SELF-CONTAINED `bug_plan.md`; `execute-bug` runs on the CHEAP executor model (`MiniMax-M3`, tier executor-cheap) and mechanically applies the plan in a fresh context. Escape hatch: `execute-bug` sets `plan_gap: true` in its JSON when the plan turns out incomplete — downstream dev-reviewer/consistency-checker escalate (consistency-checker `escalate_to: "execute-bug"` remains available). Same philosophy in DEV COMPLEX: dev-planner (plan-strong) > dev-professor (executor-strong). Rationale and source: `RESEARCH_OMP_FEATURES.md` P0-2, OMP `docs/prewalk.md`.
 
 **Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes. Loop repeats up to 3 iterations. If consistency-checker passes → utility. If max iterations reached → failure report.
 
@@ -331,10 +363,12 @@ DEV SIMPLE has two variants depending on whether a plan exists:
 ### DEV COMPLEX
 
 ```
-dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
+dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
 ```
 
 **Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes, then consistency-checker validates again. Loop repeats up to 3 iterations.
+
+**Advisor step (v5, OMP Advisor Watchdog analog — step-boundary):** `advisor` (Kimi K3, strictly read-only: read/grep/glob + read-only serena) observes the implementation result between pipeline steps and returns severity-tagged notes (`nit|concern|blocker`, contract — §3 Reviewer Severity Field). Mid-turn intervention is NOT possible (our agents are atomic within a step) — advisor fires only at step boundaries. Safeguards: emission guard (max 4 non-blocker notes per run, session dedup, empty-phrase filter — plugin v5 + advisor prompt), immuneTurns analog (`NIT_ONLY_MODE` for 3 pipeline steps after a consumed blocker — concern/blocker notes downgrade to nit), separate cost accounting (advisor ≈ 1 extra model call per step; logged in plugin + orchestrator acks). Advisor never re-orders the pipeline; blocker → ⚠️ ack + notes to dev-reviewer/rework; persistence after 3rd rework iteration → failure report.
 
 ### DEV SUPERCOMPLEX
 
@@ -463,6 +497,7 @@ Implementation (research-writer-complex): wave results → rank by relevance/rel
 | `details` | array | array of check result objects |
 | `files_modified` | array | list of file paths |
 | `escalate_to` | string \| null | `"dev-reviewer"` \| `"rework"` \| `"worker"` \| `"execute-bug"` \| `null` |
+| `severity` | string | `"nit"` \| `"concern"` \| `"blocker"` (mandatory; PASS → `"nit"`) |
 
 ### escalate_to Field — Expanded Values
 
@@ -491,6 +526,22 @@ elif issues are bug-specific:
 else:
     escalate_to = "dev-reviewer"  # default fallback
 ```
+
+### Reviewer Severity Field (v5 — OMP emission-guard analog)
+
+Reviewer subagents (`dev-reviewer`, `consistency-checker`, `advisor` — см. §2 Advisor Step) tag their final JSON with a mandatory `severity` field. Source: `RESEARCH_OMP_FEATURES.md` P0-1 (OMP Advisor Watchdog severity semantics: nit = aside, concern = steer, blocker = triggered turn).
+
+| Severity | Канал (наш аналог) | Эффект в пайплайне |
+|----------|--------------------|--------------------|
+| `nit` | aside — логируется | НЕ триггерит rework; после dev-reviewer (все findings исправлены) шаг `rework` ПРОПУСКАЕТСЯ |
+| `concern` | steer — rework-loop | триггерит rework → consistency-checker (max 3 итерации) |
+| `blocker` | triggered turn | немедленный rework + `⚠️ BLOCKER` в ack orchestrator'а; персистенция после 3-й итерации → failure report пользователю |
+
+**Rules:**
+- Fail-closed: отсутствующее/невалидное `severity` трактуется orchestrator'ом как `concern`.
+- Emission guard (plugin v5, warn-only): дедупликация текстов замечаний между итерациями rework-loop (session-scoped, нормализация lowercase+NFKC+схлопывание не-алфанум); фильтр пустых фраз (`lgtm`, `no issues`, `nothing to add`, …); бюджет **max 4 non-blocker findings на update** (blocker освобождён от бюджета).
+- Плагин не блокирует вывод субагентов (enforcement в субсессиях подавлен при `activeTaskDepth > 0`) — severity-валидация логируется как warn/error; потребление — промпт-уровень orchestrator'а.
+- Поле НЕ входит в `REQUIRED_JSON_FIELDS` primary-агентов (валидация primary не затрагивается).
 
 ### File-Pointer Fields (optional, subagent JSON output)
 
@@ -573,7 +624,7 @@ All three Z.AI MCP servers (`zai_zread`, `zai_web_search`, `zai_web_reader`) are
 
 ## unity-mcp Permissions
 
-### ALL Agents Have unity-mcp Access
+### ALL Agents Have unity-mcp Access (exceptions: scout, advisor)
 
 unity-mcp is available for ALL agents, not just orchestrator and plankestrator.
 
@@ -587,6 +638,7 @@ unity-mcp is available for ALL agents, not just orchestrator and plankestrator.
 | MCP agents | `unity-mcp.*: allow` | mcp-github, mcp-read, mcp-search, summarizer read Unity content |
 | Planning agents | `unity-mcp.*: allow` | plan-writer-*, plan-reviewer-*, research-writer-*, research-reviewer plan Unity features |
 | Read-only agents | `unity-mcp.*: allow` | devops-readonly reads Unity DevOps info |
+| Advisory agent | ❌ deny | advisor is strictly read-only (read/grep/glob + read-only serena); unity-mcp tools are mutating — excluded like scout |
 
 ### unity-mcp Tools Available
 
@@ -709,6 +761,12 @@ Agents do NOT call each other — the user must manually switch between them.
 | Plugin Docs | `PLUGIN.md` (project root) |
 | Identity Probes | `identity_probe_section.md` (project root) |
 | MCP Setup | `MCP_SETUP.md` (project root) |
+
+- Reviewer context (per-audience, OMP WATCHDOG.md analog): `REVIEW_CONTEXT.md` — project root + user-level `~/.config/opencode/REVIEW_CONTEXT.md`; loaded ONLY by reviewer agents (dev-reviewer, consistency-checker, devops-reviewer, plan-reviewer-*, research-reviewer, advisor); plugin v5 injects a pointer into their Task prompts
+
+### Per-Audience Context Files (v5, OMP WATCHDOG.md analog)
+
+Конвенция: инструкции для конкретного класса агентов хранятся ОТДЕЛЬНО от общего AGENTS.md и подключаются только в промпты этого класса. Действующие файлы: `REVIEW_CONTEXT.md` (reviewer-агенты; два уровня — project root и user-level `~/.config/opencode/`). Будущие кандидаты: `PLAN_CONTEXT.md` (planner-агенты) — вне текущего объёма. Правило: «every loaded instruction consumes context» — файл ≤150 строк.
 
 ## 9. Plugin Hooks
 

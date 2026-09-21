@@ -1365,7 +1365,8 @@
           "docs-planner": "allow",
           "generate-image": "allow",
           "generate-image-gpt": "allow",
-          "git-commit": "allow"
+          "git-commit": "allow",
+          "advisor": "allow"
         }
       },
       "options": {}
@@ -1455,6 +1456,50 @@
         "task": {
           "*": "deny",
           "view-image": "allow"
+        }
+      },
+      "options": {}
+    },
+    "advisor": {
+      "mode": "subagent",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "webfetch": "deny",
+        "patch": "deny",
+        "todowrite": "deny",
+        "question": "deny",
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "serena_find_symbol": "allow",
+        "serena_find_referencing_symbols": "allow",
+        "serena_get_symbols_overview": "allow",
+        "serena_search_for_pattern": "allow",
+        "task": {
+          "*": "deny"
+        }
+      },
+      "options": {}
+    },
+    "scout": {
+      "mode": "subagent",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "webfetch": "deny",
+        "patch": "deny",
+        "todowrite": "deny",
+        "question": "deny",
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "task": {
+          "*": "deny"
         }
       },
       "options": {}

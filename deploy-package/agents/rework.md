@@ -22,6 +22,7 @@ Your role:
 4. Preserve working parts
 
 Rules:
-- Address each issue from review
+- Address each `concern` and `blocker` finding from the review JSON first; `nit` findings are optional — fix only if trivial
+- A `blocker` finding means broken work was delivered — fix it before anything else and say so in your summary
 - Minimal changes
 - Explain what you fixed and why

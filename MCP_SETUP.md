@@ -10,7 +10,7 @@
 2. [Prerequisites](#2-prerequisites)
 3. [Installation Steps](#3-installation-steps)
 4. [opencode.json — Full Configuration](#4-opencodejson--full-configuration)
-5. [Agent Definitions — All 36 Agents](#5-agent-definitions--all-36-agents)
+5. [Agent Definitions — All 37 Agents](#5-agent-definitions--all-37-agents)
 6. [Routing Tables](#6-routing-tables)
 7. [Pipelines](#7-pipelines)
 8. [ARCHITECTURE.md Integration](#8-architecturemd-integration)
@@ -40,19 +40,19 @@ OpenCode использует архитектуру с двумя primary-аг�
 | Category | Count |
 |----------|-------|
 | Primary agents | 2 |
-| Subagents | 34 |
-| **Total unique agents** | **36** |
+| Subagents | 35 |
+| **Total unique agents** | **37** |
 
 ### Models Distribution
 
 | Model | Provider | Agents Count | Agents |
 |-------|----------|--------------|-------|
 | `QWEN3.7-plus` | bifrost-litellm | 7 | orchestrator, plankestrator, orchestrator-identity-probe, plankestrator-identity-probe, bugfix, consistency-checker, plan-writer-simple |
-| `MiniMax-M3` | bifrost-litellm | 10 | worker, plan-bug, devops-agent, devops-readonly, view-image, utility, mcp-github, mcp-read, mcp-search, summarizer |
-| `GLM-5.3 (res)` | bifrost-litellm | 4 | execute-bug, dev-professor, plan-reviewer-simple, research-reviewer |
-| `Kimi K3` | bifrost-litellm | 4 | dev-reviewer, rework, plan-reviewer-complex, research-writer-complex |
+| `MiniMax-M3` | bifrost-litellm | 10 | worker, execute-bug, devops-agent, devops-readonly, view-image, utility, mcp-github, mcp-read, mcp-search, summarizer |
+| `GLM-5.3 (res)` | bifrost-litellm | 3 | dev-professor, plan-reviewer-simple, research-reviewer |
+| `Kimi K3` | bifrost-litellm | 5 | dev-reviewer, rework, plan-reviewer-complex, research-writer-complex, advisor |
 | `mimo-v2.5` | bifrost-litellm | 4 | generate-image, generate-image-gpt, git-commit, scout |
-| `qwen3.8-max` | bifrost-litellm | 3 | dev-planner, devops-reviewer, plan-writer-complex |
+| `qwen3.8-max` | bifrost-litellm | 4 | dev-planner, devops-reviewer, plan-writer-complex, plan-bug |
 | `mimo-v2.5-pro` | bifrost-litellm | 2 | docs-writer, research-writer-simple |
 | `GLM-5.3-Flash (res)` | bifrost-litellm | 1 | bugfix-triage |
 | `aliyun/qwen3.8-flash` | bifrost-litellm | 1 | docs-planner |
@@ -175,7 +175,7 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 ```
 
 Этот ключ используется для:
-- **Всех LLM моделей** (orchestrator, plankestrator, все 34 subagents)
+- **Всех LLM моделей** (orchestrator, plankestrator, все 35 subagents)
 - **Всех Z.AI MCP серверов** (zai_zread, zai_web_search, zai_web_reader) — проксируются через Bifrost
 
 ### Step 8: Copy Project Files
@@ -270,7 +270,7 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 
 ---
 
-## 5. Agent Definitions — All 36 Agents
+## 5. Agent Definitions — All 37 Agents
 
 ### Primary Agents
 
@@ -308,7 +308,7 @@ For image analysis tasks, ALWAYS use view-image agent FIRST:
 |-----------|-------------|----------|
 | DEV SIMPLE | false | worker → utility |
 | DEV SIMPLE | true | worker → consistency-checker → utility |
-| DEV COMPLEX | any | dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → rework → consistency-checker → utility |
+| DEV COMPLEX | any | dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → advisor → dev-reviewer → rework → consistency-checker → utility |
 | DEV SUPERCOMPLEX | large plan (>3 steps) | PER STEP: dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → consistency-checker → [rework loop] → utility |
 
 **Decision rules:**
@@ -367,8 +367,8 @@ DO NOT call execute-bug without this prefix. execute-bug MUST read bug_plan.md b
 | serena_* | allow | Все Serena инструменты |
 | task | { "*": "deny", ... } | Whitelist ниже |
 
-**Task Whitelist (24 agents):**
-orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bugfix, rework, mcp-read, utility, bugfix-triage, plan-bug, devops-agent, devops-reviewer, dev-planner, mcp-search, docs-writer, summarizer, execute-bug, consistency-checker, view-image, docs-planner, generate-image, generate-image-gpt, git-commit
+**Task Whitelist (25 agents):**
+orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bugfix, rework, mcp-read, utility, bugfix-triage, plan-bug, devops-agent, devops-reviewer, dev-planner, mcp-search, docs-writer, summarizer, execute-bug, consistency-checker, view-image, docs-planner, generate-image, generate-image-gpt, git-commit, advisor
 
 #### plankestrator
 
@@ -408,7 +408,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **rework** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | deny | view-image |
 | **research-writer-simple** | subagent | bifrost-litellm/mimo-v2.5-pro | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image, scout |
 | **plan-reviewer-simple** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **plan-bug** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | *.md | - | - | deny | view-image, scout | Writes bug plan to bug_plan.md |
+| **plan-bug** | subagent | bifrost-litellm/qwen3.8-max | 0.1 | *.md | - | - | deny | view-image, scout | Writes SELF-CONTAINED bug plan to bug_plan.md (prewalk: strong planner) |
 | **docs-writer** | subagent | bifrost-litellm/mimo-v2.5-pro | 0.3 | allow | - | - | deny | view-image |
 | **docs-planner** | subagent | bifrost-litellm/QWEN3.7-plus | 0.2 | *.md | - | allow | deny | view-image | Writes docs plan to docs_plan.md |
 | **dev-professor** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | deny | view-image | Reviews plan from dev_plan.md before implementing |
@@ -424,7 +424,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **dev-reviewer** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | - | deny | view-image |
 | **research-writer-complex** | subagent | bifrost-litellm/GLM-5.2 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image, scout |
 | **plan-writer-simple** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | allow | - | allow | deny | devops-readonly, view-image, scout |
-| **execute-bug** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | **allow** | view-image | Reads plan from bug_plan.md before implementing |
+| **execute-bug** | subagent | bifrost-litellm/MiniMax-M3 | 0.2 | allow | - | - | **allow** | view-image | Reads plan from bug_plan.md before implementing (prewalk: cheap executor; plan_gap escape hatch) |
 | **plan-reviewer-complex** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **consistency-checker** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
 | **view-image** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
@@ -432,6 +432,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **generate-image** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (default Gemini image model); git commit/push denied |
 | **generate-image-gpt** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (GPT/DALL-E path, on explicit user request only); git commit/push denied |
 | **scout** | subagent | bifrost-litellm/mimo-v2.5 | 0.1 | deny | deny | allow | deny | – | Local FS recon: read/glob/grep only; task: deny; no opencode.json section (frontmatter-only); never a pipeline step |
+| **advisor** | subagent | bifrost-litellm/Kimi K3 | 0.1 | deny | deny | allow | deny | – | Step-boundary advisory reviewer (DEV COMPLEX, BUGFIX DEEP); read-only (read/grep/glob + read-only serena); severity-tagged notes; unity-mcp deny |
 
 ### Primary Agent Permissions
 
@@ -543,7 +544,7 @@ view-image анализирует изображения **напрямую че
 
 ### unity-mcp Permissions — All Agents
 
-Все 36 агентов, кроме `scout`, имеют `"unity-mcp.*": "allow"` — полный доступ ко всем инструментам Unity MCP. Исключение: scout — локальный read-only FS-разведчик (read/glob/grep), определённый только frontmatter `agents/scout.md` (без секции в opencode.json).
+Все 37 агентов, кроме `scout` и `advisor`, имеют `"unity-mcp.*": "allow"` — полный доступ ко всем инструментам Unity MCP. Исключения: scout — локальный read-only FS-разведчик (read/glob/grep), определённый только frontmatter `agents/scout.md` (без секции в opencode.json); advisor — step-boundary reviewer, строго read-only, определён frontmatter + секцией opencode.json без unity-mcp.
 
 ### Key Agent Permissions Details
 
@@ -671,7 +672,7 @@ This configuration:
 
 ## 6. Routing Tables
 
-### orchestrator Whitelist (24 agents)
+### orchestrator Whitelist (25 agents)
 
 | Agent | Role |
 |-------|------|
@@ -699,6 +700,7 @@ This configuration:
 | generate-image | Image generation (Gemini) |
 | generate-image-gpt | Image generation (GPT/DALL-E) |
 | git-commit | Gated conventional git commits |
+| advisor | Step-boundary advisory reviewer (severity-tagged, read-only) |
 
 ### plankestrator Whitelist (10 agents)
 
@@ -734,7 +736,7 @@ plankestrator can only call these agents:
 | Pipeline | Flow |
 |----------|------|
 | **BUGFIX SIMPLE** | bugfix-triage → worker → utility |
-| **BUGFIX DEEP** | bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility |
+| **BUGFIX DEEP** | bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → advisor → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility |
 
 ### DEV Pipelines
 
@@ -742,7 +744,7 @@ plankestrator can only call these agents:
 |----------|------|-------------|
 | **DEV SIMPLE (без плана)** | worker → utility | Простые задачи без предварительного планирования |
 | **DEV SIMPLE (с планом)** | worker → consistency-checker → utility | Задачи с существующим планом — валидация против плана |
-| **DEV COMPLEX** | dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → rework → consistency-checker → utility | Сложные задачи с планированием — dev-planner пишет план в dev_plan.md, dev-professor читает и ревьюит план перед реализацией |
+| **DEV COMPLEX** | dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → advisor → dev-reviewer → rework → consistency-checker → utility | Сложные задачи с планированием — dev-planner пишет план в dev_plan.md, dev-professor читает и ревьюит план перед реализацией |
 | **DEV SUPERCOMPLEX** | PER PLAN STEP: dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility | Очень большие планы (>3 шагов) или огромный объём работ — на каждом шаге dev-planner пишет план в dev_plan.md, dev-professor читает и ревьюит план перед реализацией |
 
 **Decision rule:** Если `plan_exists=true` для DEV SIMPLE, добавить consistency-checker перед utility. Если `plan_exists=false`, пропустить consistency-checker.
@@ -887,10 +889,10 @@ JSON output должен включать поле `agent`:
 | Pipeline Key | Sequence |
 |---|---|
 | `BUGFIX_SIMPLE` | `bugfix-triage → worker → utility` |
-| `BUGFIX_DEEP` | `bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility` |
+| `BUGFIX_DEEP` | `bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → advisor → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility` |
 | `DEV_SIMPLE_NO_PLAN` | `worker → utility` |
 | `DEV_SIMPLE_WITH_PLAN` | `worker → consistency-checker → utility` |
-| `DEV_COMPLEX` | `dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → rework → consistency-checker → utility` |
+| `DEV_COMPLEX` | `dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → advisor → dev-reviewer → rework → consistency-checker → utility` |
 | `DEV_SUPERCOMPLEX` | `PER PLAN STEP: dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility` |
 | `DEVOPS` | `devops-agent → devops-reviewer` |
 | `DOCS` | `docs-writer → utility` |
@@ -919,7 +921,8 @@ const ROUTING_TABLES = {
     "bugfix-triage", "plan-bug", "devops-agent", "devops-reviewer",
     "dev-planner", "mcp-search", "docs-writer", "summarizer",
     "execute-bug", "consistency-checker", "view-image", "docs-planner",
-    "generate-image", "generate-image-gpt", "git-commit"
+    "generate-image", "generate-image-gpt", "git-commit",
+    "advisor"
   ],
   plankestrator: [
     "plankestrator-identity-probe", "plan-writer-simple", "plan-writer-complex",
@@ -1096,7 +1099,7 @@ All commands are `subtask: true` — they run as subagent tasks.
 | dev_plan.md | Project root | Implementation plan (written by dev-planner) |
 | bug_plan.md | Project root | Bug fix plan (written by plan-bug, read by execute-bug) |
 
-### Agent Files List (36 files)
+### Agent Files List (37 files)
 
 ```
 ~/.config/opencode/agents/
@@ -1104,6 +1107,7 @@ All commands are `subtask: true` — they run as subagent tasks.
 ├── plankestrator.md                   # Primary agent
 ├── orchestrator-identity-probe.md
 ├── plankestrator-identity-probe.md
+├── advisor.md
 ├── worker.md
 ├── bugfix.md
 ├── bugfix-triage.md
@@ -1261,7 +1265,7 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 
 - [ ] opencode.json скопирован в `~/.config/opencode/`
 - [ ] Plugin скопирован в `~/.config/opencode/plugins/`
-- [ ] Все 36 agent файлов скопированы в `~/.config/opencode/agents/`
+- [ ] Все 37 agent файлов скопированы в `~/.config/opencode/agents/`
 - [ ] `LITELLM_API_KEY` env var настроен
 - [ ] Bifrost MCP URLs доступны (`hcbifrost.herocraft.com/litellm/`)
 - [ ] Routing tables в плагине совпадают с opencode.json
@@ -1280,13 +1284,14 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 - [ ] view-image может анализировать изображения напрямую
 - [ ] worker может выполнять bash команды
 
-### Agent Files (36 total)
+### Agent Files (37 total)
 
 **Primary agents (2):**
 - orchestrator.md
 - plankestrator.md
 
-**Subagents (34):**
+**Subagents (35):**
+- advisor.md
 - bugfix.md
 - bugfix-triage.md
 - consistency-checker.md

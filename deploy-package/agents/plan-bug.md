@@ -1,7 +1,7 @@
 ---
-description: Bugfix planning agent. Creates detailed plan for deep bug fixes with investigation steps. Qwen3.7 Plus.
+description: Bugfix planning agent. Creates a detailed SELF-CONTAINED plan for deep bug fixes with investigation steps. Qwen3.8 Max.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/qwen3.8-max
 temperature: 0.1
 permission:
   edit:
@@ -30,3 +30,8 @@ FIX_PLAN:
 FILES_TO_MODIFY: [list]
 RISK_LEVEL: LOW | MEDIUM | HIGH
 ```
+
+Prewalk contract (v5, OMP prewalk analog):
+- You are the EXPENSIVE planner; execute-bug is the CHEAP executor on a fresh context.
+- The plan you write to `bug_plan.md` MUST be SELF-CONTAINED: exact file paths, line anchors, Old→New values or full code snippets, verify commands, edge cases. The executor sees ONLY the plan file — never your investigation transcript.
+- "Pointer, not transcript": reference files by path:line, include only the snippets needed to apply the fix blindly.

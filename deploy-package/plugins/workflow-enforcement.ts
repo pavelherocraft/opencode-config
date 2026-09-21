@@ -28,7 +28,8 @@ const ROUTING_TABLES = {
     "docs-planner",
     "generate-image",
     "generate-image-gpt",
-    "git-commit"
+    "git-commit",
+    "advisor"
   ],
   plankestrator: [
     "plankestrator-identity-probe",
@@ -70,6 +71,38 @@ const IDENTITY_PROBE_AGENTS = [
   "orchestrator-identity-probe",
   "plankestrator-identity-probe"
 ]
+
+// ============================================================
+// v5 (OMP P0-1) — Reviewer severity taxonomy (Emission-Guard-аналог).
+// Источник: RESEARCH_OMP_FEATURES.md, Recommendation P0-1.
+// nit → логируется, НЕ триггерит rework; concern → rework-loop;
+// blocker → triggered turn (немедленный rework + эскалация).
+// Fail-closed: отсутствие severity orchestrator трактует как concern.
+// ============================================================
+const SEVERITY_AGENTS = ["dev-reviewer", "consistency-checker", "advisor"]
+const VALID_SEVERITIES = ["nit", "concern", "blocker"]
+// Фильтр пустых фраз (OMP emission-guard, п.2): шумовые «замечания» не считаются findings
+const EMPTY_FINDING_PHRASES = [
+  "stop", "done", "lgtm", "no issues", "nothing to add",
+  "looks good", "ok", "fine", "no problems", "all good"
+]
+// Бюджет на update (OMP emission-guard, п.4): max 4 non-blocker; blocker освобождён
+const MAX_NON_BLOCKER_FINDINGS_PER_UPDATE = 4
+// Session-scoped дедупликация точного текста (OMP emission-guard, п.3):
+// agent → набор нормализованных текстов замечаний; сброс на session.created top-level
+let seenFindings: Map<string, Set<string>> = new Map()
+
+// ============================================================
+// v5 (OMP P0-3) — Per-audience context files (WATCHDOG.md-аналог).
+// Reviewer-агенты читают REVIEW_CONTEXT.md (project root → user level);
+// плагин дополнительно инжектит указатель в Task-prompt (belt-and-braces).
+// ============================================================
+const CONTEXT_FILE_AGENTS = [
+  "dev-reviewer", "consistency-checker", "devops-reviewer",
+  "plan-reviewer-simple", "plan-reviewer-complex", "research-reviewer",
+  "advisor"
+]
+const REVIEW_CONTEXT_FILE = "REVIEW_CONTEXT.md"
 
 // ============================================================
 // Plugin State (per-process, reset on session.created)
@@ -198,6 +231,7 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         hasOutputtedJSON = new Map()
         selfWorkDetected = false
         activeTaskDepth = 0
+        seenFindings = new Map()  // v5: сброс дедуп-журнала замечаний
 
         // Try to detect agent from event data
         const sessionData = (event as any).properties?.session
@@ -311,7 +345,59 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         // v4: сообщения, созданные ПОКА выполняется Task-субагент, принадлежат
         // субагенту (writer легально пишет "## Findings" и свой JSON) —
         // enforcement атрибутирован родителю, пропускаем.
-        if (activeTaskDepth > 0) return
+        if (activeTaskDepth > 0) {
+          // v5 (OMP P0-1): сообщения субагентов не проходят primary-валидацию,
+          // НО JSON reviewer-агентов проверяется на severity (warn-only: плагин
+          // не может блокировать вывод субагента; fail-closed потребление —
+          // в промпте orchestrator'а: missing severity = concern).
+          const subMessage = (event as any).properties?.message || (event as any).message
+          const subJson = subMessage ? extractJSONFromMessage(subMessage) : null
+          const subAgent = subJson?.agent ? String(subJson.agent) : null
+          if (subJson && subAgent && SEVERITY_AGENTS.includes(subAgent)) {
+            // 1. Присутствие и валидность severity
+            if (!subJson.severity) {
+              await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
+                message: `REVIEWER SEVERITY MISSING — ${subAgent} JSON без severity; orchestrator MUST treat as "concern" (fail-closed)`,
+                extra: { agent: subAgent } } })
+            } else if (!VALID_SEVERITIES.includes(String(subJson.severity))) {
+              await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
+                message: `REVIEWER SEVERITY INVALID — ${subAgent}: "${subJson.severity}", expected: ${VALID_SEVERITIES.join("|")}`,
+                extra: { agent: subAgent, severity: String(subJson.severity) } } })
+            }
+            // 2. blocker → error-level (triggered turn: немедленный rework + эскалация)
+            if (String(subJson.severity) === "blocker") {
+              await client.app.log({ body: { service: "workflow-enforcement", level: "error",
+                message: `BLOCKER FINDING — ${subAgent} вернул severity=blocker; orchestrator: немедленный rework + ⚠️ BLOCKER ack + эскалация пользователю при персистировании`,
+                extra: { agent: subAgent } } })
+            }
+            // 3. Дедуп + фильтр пустых фраз + бюджет (emission-guard)
+            const seen = seenFindings.get(subAgent) ?? new Set<string>()
+            let nonBlockerCount = 0
+            for (const f of collectFindings(subJson)) {
+              const norm = normalizeFinding(f.text)
+              if (!norm || EMPTY_FINDING_PHRASES.includes(norm)) {
+                await client.app.log({ body: { service: "workflow-enforcement", level: "info",
+                  message: `EMPTY FINDING FILTERED — ${subAgent}: "${f.text.slice(0, 80)}"`, extra: { agent: subAgent } } })
+                continue
+              }
+              if (seen.has(norm)) {
+                await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
+                  message: `DUPLICATE FINDING SUPPRESSED — ${subAgent} повторно вернул замечание (между итерациями rework-loop)`,
+                  extra: { agent: subAgent, finding: norm.slice(0, 120) } } })
+                continue
+              }
+              seen.add(norm)
+              if (f.severity !== "blocker") nonBlockerCount++
+            }
+            seenFindings.set(subAgent, seen)
+            if (nonBlockerCount > MAX_NON_BLOCKER_FINDINGS_PER_UPDATE) {
+              await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
+                message: `FINDING BUDGET EXCEEDED — ${subAgent}: ${nonBlockerCount} non-blocker findings (max ${MAX_NON_BLOCKER_FINDINGS_PER_UPDATE}); избыток — шум`,
+                extra: { agent: subAgent, count: nonBlockerCount, budget: MAX_NON_BLOCKER_FINDINGS_PER_UPDATE } } })
+            }
+          }
+          return
+        }
 
         const message = (event as any).properties?.message
           || (event as any).message
@@ -927,6 +1013,24 @@ Plankestrator handles: PLAN, RESEARCH, RESEARCH+PLAN
         }
       }
 
+      // v5 (OMP P0-3): инъекция указателя контекстного файла в Task-prompt
+      // reviewer-агентам. Если мутация output.args не поддержана рантаймом —
+      // не страшно: промпты reviewer'ов содержат самостоятельное чтение файла.
+      if (targetAgent && CONTEXT_FILE_AGENTS.includes(targetAgent)) {
+        const taskArgs = (output as any)?.args
+        if (taskArgs && typeof taskArgs.prompt === "string" && !taskArgs.prompt.includes(REVIEW_CONTEXT_FILE)) {
+          taskArgs.prompt = `[CONTEXT FILE] Before starting, read ${REVIEW_CONTEXT_FILE} in the project root (if absent — ~/.config/opencode/${REVIEW_CONTEXT_FILE}). It contains reviewer-specific priorities, known traps and the severity taxonomy. Then proceed with the task below.\n\n` + taskArgs.prompt
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "info",
+              message: `Context file pointer injected into Task prompt for ${targetAgent} (${REVIEW_CONTEXT_FILE})`,
+              extra: { targetAgent, contextFile: REVIEW_CONTEXT_FILE }
+            }
+          })
+        }
+      }
+
       // v4: родительский Task-вызов прошёл routing — сейчас запустится субагент.
       // Пока activeTaskDepth > 0, все tool-вызовы и сообщения принадлежат СУБАГЕНТУ
       // (родитель приостановлен) → enforcement для них подавляется (см. depth-guard).
@@ -1282,4 +1386,33 @@ function validateJSONOutput(json: any, agent: string): {valid: boolean, errors: 
     errors,
     missingFields
   }
+}
+
+// ============================================================
+// v5 (OMP P0-1) — Severity helpers
+// ============================================================
+
+/** Нормализация текста замечания для дедупликации (OMP emission-guard, п.1:
+ *  lowercase, NFKC, схлопывание не-алфанум). */
+function normalizeFinding(text: string): string {
+  return text.normalize("NFKC").toLowerCase().replace(/[^a-zа-яё0-9]+/gi, " ").trim()
+}
+
+/** Сбор текстов замечаний из JSON reviewer-агента:
+ *  findings[] (dev-reviewer), notes[] (advisor) и details[] (consistency-checker). */
+function collectFindings(json: any): Array<{ text: string, severity: string | null }> {
+  const out: Array<{ text: string, severity: string | null }> = []
+  for (const f of Array.isArray(json?.findings) ? json.findings : []) {
+    const text = String(f?.description || f?.note || "")
+    if (text) out.push({ text, severity: f?.severity != null ? String(f.severity) : null })
+  }
+  for (const n of Array.isArray(json?.notes) ? json.notes : []) {
+    const text = String(n?.note || n?.description || "")
+    if (text) out.push({ text, severity: n?.severity != null ? String(n.severity) : null })
+  }
+  for (const d of Array.isArray(json?.details) ? json.details : []) {
+    const text = String(d?.description || "")
+    if (text) out.push({ text, severity: d?.severity != null ? String(d.severity) : (json?.severity != null ? String(json.severity) : null) })
+  }
+  return out
 }

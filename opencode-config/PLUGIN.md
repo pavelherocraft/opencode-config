@@ -123,7 +123,7 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 
 ## 4. Routing Tables
 
-### orchestrator Whitelist (24 agents)
+### orchestrator Whitelist (25 agents)
 
 orchestrator can only call these agents:
 
@@ -153,6 +153,7 @@ orchestrator can only call these agents:
 | generate-image | Image generation (Gemini) |
 | generate-image-gpt | Image generation (GPT/DALL-E) |
 | git-commit | Gated conventional git commits |
+| advisor | Step-boundary advisory reviewer (severity-tagged, read-only) |
 
 ### plankestrator Whitelist (10 agents)
 
@@ -196,7 +197,11 @@ const ROUTING_TABLES = {
     'execute-bug',
     'consistency-checker',
     'view-image',
-    'docs-planner'
+    'docs-planner',
+    'generate-image',
+    'generate-image-gpt',
+    'git-commit',
+    'advisor'
   ],
   plankestrator: [
     'plankestrator-identity-probe',
@@ -212,6 +217,18 @@ const ROUTING_TABLES = {
   ]
 };
 ```
+
+### Reviewer Severity Validation (v5)
+
+Plugin constants: `SEVERITY_AGENTS = ["dev-reviewer", "consistency-checker", "advisor"(с Phase 4)]`, `VALID_SEVERITIES = ["nit","concern","blocker"]`, `EMPTY_FINDING_PHRASES`, `MAX_NON_BLOCKER_FINDINGS_PER_UPDATE = 4`, `seenFindings` (session-scoped дедуп, сброс на top-level session.created).
+
+В `message.updated` при `activeTaskDepth > 0` JSON субагента из SEVERITY_AGENTS проходит warn-only проверки: SEVERITY MISSING (fail-closed → concern), SEVERITY INVALID, BLOCKER FINDING (error-level), EMPTY FINDING FILTERED, DUPLICATE FINDING SUPPRESSED, FINDING BUDGET EXCEEDED. Primary-валидация не изменена.
+
+### Context File Injection (v5)
+
+Plugin constants: `CONTEXT_FILE_AGENTS = ["dev-reviewer", "consistency-checker", "devops-reviewer", "plan-reviewer-simple", "plan-reviewer-complex", "research-reviewer"(, "advisor" с Phase 4)]`, `REVIEW_CONTEXT_FILE = "REVIEW_CONTEXT.md"`. В `tool.execute.before` (после прохождения routing-проверки) плагин добавляет префикс `[CONTEXT FILE] ...` в Task-prompt reviewer-агентов (warn-only: если мутация `output.args` не поддержана рантаймом — механика промпт-уровня остаётся основной: reviewer-промпты содержат самостоятельную инструкцию чтения файла).
+
+Model roles (ARCHITECTURE §Model Roles) — documentation-level; плагин роли НЕ резолвит и НЕ валидирует (валидация — consistency-checker Check 11).
 
 ---
 
@@ -851,7 +868,11 @@ const ROUTING_TABLES = {
     'execute-bug',
     'consistency-checker',
     'view-image',
-    'docs-planner'
+    'docs-planner',
+    'generate-image',
+    'generate-image-gpt',
+    'git-commit',
+    'advisor'
   ],
   plankestrator: [
     'plankestrator-identity-probe',
