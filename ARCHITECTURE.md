@@ -54,9 +54,9 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 |---------------|-----------------|-----------------------------|
 | orchestrator | 24 | 25 (orchestrator + 24 subagents) |
 | plankestrator | 10 | 11 (plankestrator + 10 subagents) |
-| **Grand Total** | **34** | **35** |
+| **Grand Total** | **34** | **36** |
 
-Note: 34 whitelist entries (view-image shared by both primaries), 33 unique subagents + 2 primary agents = 35 unique agents total.
+Note: 34 whitelist entries (view-image shared by both primaries) = 33 unique whitelisted subagents, PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 34 unique subagents + 2 primary agents = 36 unique agents total.
 
 ### Shared Utility Agents
 
@@ -98,7 +98,8 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | git-commit | bifrost-litellm/mimo-v2.5 |
 | generate-image | bifrost-litellm/mimo-v2.5 |
 | generate-image-gpt | bifrost-litellm/mimo-v2.5 |
-| view-image | bifrost-litellm/Kimi K2.6 |
+| view-image | bifrost-litellm/MiniMax-M3 |
+| scout | bifrost-litellm/MiniMax-M2.7 |
 
 Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3.7-plus` and are documented in §Identity Lock Mechanism (v3), item 5 — not duplicated in the Subagent Models table.
 
@@ -213,6 +214,32 @@ Both `orchestrator` and `plankestrator` are locked down to prevent them from doi
 - User request: ONLY when user explicitly asks to write/save
 - Forbidden: Any non-.md files (code, config, etc.)
 
+### Subagent Depth (`subagent_depth`)
+
+`subagent_depth` — параметр opencode-core (top-level поле в `opencode.json`), ограничивающий максимальную глубину вложенности вызовов субагентов через Task tool. При превышении лимита ядро отклоняет попытку создать следующего субагента.
+
+**Текущее значение:** `3` (задаётся в `~/.config/opencode/opencode.json`, строка 3, сразу после `$schema`; продублировано в `deploy-package/opencode.json`). Документация: <https://opencode.ai/docs/config>.
+
+**Отличие от `activeTaskDepth` (плагин):**
+
+| Механизм | Источник | Назначение |
+|----------|----------|------------|
+| `subagent_depth` | opencode-core | Жёсткий лимит вложенности: при `depth >= subagent_depth` Task tool отказывается создавать субагента |
+| `activeTaskDepth` | `workflow-enforcement.ts` (плагин, v4) | Подавление enforcement: пока выполняется субагент (`activeTaskDepth > 0`), плагин пропускает tool calls — иначе Gate A блокировал бы `edit`/`write` у writer-агентов |
+
+Плагин НЕ управляет лимитом вложенности — это ответственность ядра. Плагин лишь не вмешивается в работу субагентов, чтобы не нарушать их контракт.
+
+**Цепочка вызовов (пример с depth-счётом):**
+
+```
+Уровень 0 (depth 0): primary — orchestrator / plankestrator
+Уровень 1 (depth 1): research-writer-complex / plan-writer-complex / worker / bugfix / ...
+Уровень 2 (depth 2): scout / mcp-search / mcp-read / mcp-github / devops-readonly
+Уровень 3 (depth 3): (резерв; потолок — следующий Task будет отклонён ядром)
+```
+
+При `subagent_depth: 3` цепочка `primary → research-writer-complex → scout` помещается в лимит с запасом в один уровень. Любая попытка вызвать субагента на depth = 3 будет отклонена ядром opencode до старта сессии.
+
 ### Direct Write Instruction
 
 All writer agents have a "Direct Write Instruction" section in their prompts:
@@ -243,6 +270,27 @@ plankestrator is a pure orchestrator — it MUST ALWAYS delegate to subagents:
 **Inspection limits (v4):** plankestrator may call `read`/`grep`/`glob` ONLY on Turn 1 and ONLY to classify (prompt limit: max 2 calls; plugin hard limit: `INSPECTION_BUDGET = 3`). After the first pipeline Task call, any inspection throws. Type and complexity are classified from the REQUEST TEXT (keywords; number of questions/topics/objects), not from files. RESEARCH+PLAN is always COMPLEX. Context-heavy investigation is delegated to `devops-readonly` via Task. Plan/research CONTENT in plankestrator's own message (headings like `## Findings`, `## Analysis`) is detected by the plugin and blocks further inspection.
 
 ## 2. Pipelines
+
+### Pipeline Notation
+
+Pipelines are dependency graphs (DAG); a linear chain is the special case. Notation:
+
+| Element | Syntax | Semantics |
+|---------|--------|-----------|
+| Sequential step | `a → b` | b starts after a completes |
+| Parallel wave | `[a ∥ b ∥ c]` | a, b, c launch simultaneously (multiple Task calls in ONE message); branches MUST be mutually independent |
+| Barrier | `→ barrier →` | synchronization point: the next stage starts only after ALL wave results have arrived |
+| Rework loop | `[rework loop, max 3]` | conditional repetition of a stage (max iterations stated) |
+
+**Scope rule:** top-level pipelines (PIPELINE TABLE in `agents/orchestrator.md` / `agents/plankestrator.md`; the `pipeline` JSON field) remain LINEAR `string[]` — one element = one Task call by the primary agent. Parallel waves exist ONLY INSIDE a pipeline element: a subagent's own Task fan-out (e.g. research-writer-complex scout wave). Every wave branch must come from the SUBAGENT's own `permission.task` allowlist (frontmatter + opencode.json), not from the primary's routing table.
+
+Full-graph example (RESEARCH COMPLEX):
+
+```
+plankestrator → research-writer-complex → research-reviewer
+                │ (internal DAG)
+                └─ decompose → [mcp-search ∥ mcp-read ∥ mcp-github] → barrier (rank + brief) → synthesis → RESEARCH.md
+```
 
 ### BUGFIX (SIMPLE)
 
@@ -359,6 +407,23 @@ plan-writer-* → plan-reviewer-*
 research-writer-* → research-reviewer
 ```
 
+**Internal fan-out (research-writer-complex):** the top-level pipeline stays linear, but research-writer-complex fans out INTERNALLY — independent sub-questions are dispatched as ONE parallel Task wave to scout agents (mcp-search / mcp-read / mcp-github / devops-readonly / scout — all on cheap models); dependent sub-questions form follow-up waves:
+
+```
+research-writer-complex (internal DAG):
+  decompose → [mcp-search ∥ mcp-read ∥ mcp-github ∥ devops-readonly ∥ scout] → barrier (rank + brief) → synthesis (Kimi K3) → RESEARCH.md
+```
+
+The wave and the barrier are prompt-level behavior of the writer agent. The plugin and plankestrator's PIPELINE TABLE are NOT affected: enforcement is suppressed inside subagent sessions (`activeTaskDepth > 0`), and task-permissions for all scouts are already granted in opencode.json + frontmatter (verified 2026-09-19).
+
+### Wave → Barrier → Synthesis Pattern
+
+A **barrier** is a synchronization point: the next stage starts only after ALL results of a parallel wave have arrived. In this architecture the barrier is NOT a separate agent — it is a structural property of the Task tool (all parallel Task calls issued in one message return before the agent's next turn) plus an explicit prompt-level step of the writer agent.
+
+Implementation (research-writer-complex): wave results → rank by relevance/reliability → internal brief (key facts, contradictions, gaps) → synthesis from the brief on the strong model. "Pointer, not transcript": the report references sources and the output file, raw scout transcripts never leave the writer's context.
+
+**Decision record (2026-09-19):** a separate `summarizer` barrier agent (Option A) was DEFERRED — parallel Task calls already provide a free structural barrier, a summarizer hop would require passing raw wave transcripts in its prompt (violates pointer-not-transcript), and ranking is inseparable from synthesis, which must run on the strong model. Escalation path if pilots show context overflow: grant `"summarizer": "allow"` in research-writer-complex task permissions and pass waves via a file pointer.
+
 ## 3. JSON Validation Fields
 
 ### orchestrator Required Fields
@@ -372,7 +437,7 @@ research-writer-* → research-reviewer
 | `plan_source` | string \| null | description or `null` |
 | `goal` | string | one sentence description |
 | `next_agent` | string \| null | agent name from whitelist or `null` |
-| `pipeline` | string[] | array of agent names or `[]` |
+| `pipeline` | string[] | array of agent names (each from the primary's whitelist — see §2 Pipeline Notation) or `[]` |
 
 ### plankestrator Required Fields
 
@@ -384,7 +449,7 @@ research-writer-* → research-reviewer
 | `complexity` | string \| null | `"SIMPLE"`, `"COMPLEX"`, `null` |
 | `goal` | string | one sentence description |
 | `next_agent` | string \| null | agent name from whitelist or `null` |
-| `pipeline` | string[] | array of agent names or `[]` |
+| `pipeline` | string[] | array of agent names (each from the primary's whitelist — see §2 Pipeline Notation) or `[]` |
 
 ### consistency-checker Required Fields
 
@@ -426,6 +491,21 @@ elif issues are bug-specific:
 else:
     escalate_to = "dev-reviewer"  # default fallback
 ```
+
+### File-Pointer Fields (optional, subagent JSON output)
+
+Writer subagents that write their work product to a file MUST report a file pointer in their final JSON output ("pointer, not transcript" pattern — the same protection Anthropic describes against game-of-telephone). Reviewer subagents MUST check for the pointer and read the file instead of relying on conversation context.
+
+| Field | Type | Emitted by | Consumed by | Companion fields |
+|-------|------|-----------|-------------|------------------|
+| `plan_file` | string \| null | plan-writer-simple, plan-writer-complex | plan-reviewer-simple, plan-reviewer-complex | `plan_written: boolean`, `next_action: string` |
+| `research_file` | string \| null | research-writer-simple, research-writer-complex | research-reviewer | `research_written: boolean`, `next_action: string` |
+
+**Rules:**
+- Fields are OPTIONAL — emitted only when the user requested file output. Absent/null means "the work product is in the response body".
+- They are NOT part of `REQUIRED_JSON_FIELDS` for primary agents — the plugin validates primary-agent JSON only (subagent messages are skipped while `activeTaskDepth > 0`). File-pointer fields are enforced at the PROMPT level: writer emits, reviewer consumes.
+- The pointer value is a path string only — never paste plan/research content into the JSON.
+- Same-pattern fixed-name file pointers in orchestrator pipelines (passed via Task prompts, not JSON fields): `bug_plan.md` (plan-bug → execute-bug), `dev_plan.md` (dev-planner → dev-professor), `docs_plan.md` (docs-planner → docs-writer).
 
 ## 4. MCP Servers
 

@@ -42,7 +42,7 @@ Task tool:
 - prompt: "Analyze this image: [describe what you need]"
 ```
 
-**view-image uses `bifrost-litellm/Kimi K2.6` with direct vision capabilities.**
+**view-image uses `bifrost-litellm/MiniMax-M3` with direct vision capabilities.**
 
 **DO NOT use any MCP server for image analysis — delegate to view-image agent.**
 
@@ -290,9 +290,15 @@ All build agents have `task.view-image: allow` to delegate image analysis:
 | execute-bug | `view-image: allow` | Visual verification of bug fixes |
 | rework | `view-image: allow` | Compare before/after UI changes |
 
-**Usage pattern:** Call via Task tool with `subagent_type: "view-image"`. view-image uses `bifrost-litellm/Kimi K2.6` with direct vision capabilities.
+**Usage pattern:** Call via Task tool with `subagent_type: "view-image"`. view-image uses `bifrost-litellm/MiniMax-M3` with direct vision capabilities.
 
 ## Pipelines
+
+### Pipeline Notation
+
+Pipelines are dependency graphs (DAG); a linear chain is the special case. `a → b` — sequential; `[a ∥ b ∥ c]` — parallel wave (multiple Task calls in ONE message, independent branches); `→ barrier →` — synchronization point (next stage starts only after ALL wave results arrive); `[rework loop, max 3]` — conditional repetition.
+
+**Scope rule:** top-level pipelines (PIPELINE TABLE, `pipeline` JSON field) remain LINEAR `string[]`. Parallel waves exist ONLY INSIDE a pipeline element — a subagent's own Task fan-out, with branches from the SUBAGENT's `permission.task` allowlist. Full grammar and example: ARCHITECTURE.md §2 "Pipeline Notation".
 
 ### BUGFIX (SIMPLE)
 
@@ -368,6 +374,14 @@ Planning workflows include writing and review, with specialized agents per plan 
 research-writer-* -> research-reviewer
 
 Research workflows include writing and review.
+
+**Parallel recon (research-writer-complex):** top-level pipeline is linear; the writer fans out internally — independent sub-questions go as ONE parallel Task wave (mcp-search / mcp-read / mcp-github / devops-readonly / scout, cheap models), then barrier (all results in, ranked into a brief), then synthesis on the strong model:
+
+`decompose → [mcp-search ∥ mcp-read ∥ mcp-github ∥ scout] → barrier (rank + brief) → synthesis → RESEARCH.md`
+
+Waves/barrier are prompt-level behavior of the writer; plugin and PIPELINE TABLE are unchanged (enforcement suppressed in subsessions; task-permissions already granted).
+
+**Barrier:** synchronization point — synthesis starts only after ALL wave results arrive; the writer ranks findings into an internal brief and synthesizes from the brief ("pointer, not transcript"). The barrier is NOT a separate agent: parallel Task calls in one message return together (structural barrier). Separate summarizer-barrier deferred (Decision record — ARCHITECTURE.md §2).
 
 ## Identity Verification
 

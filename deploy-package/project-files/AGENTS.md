@@ -42,7 +42,7 @@ Task tool:
 - prompt: "Analyze this image: [describe what you need]"
 ```
 
-**view-image uses `bifrost-litellm/Kimi K2.6` with direct vision capabilities.**
+**view-image uses `bifrost-litellm/MiniMax-M3` with direct vision capabilities.**
 
 **DO NOT use any MCP server for image analysis — delegate to view-image agent.**
 
@@ -200,6 +200,8 @@ Handles planning and research tasks:
 
 **plankestrator is a router, not a writer.** It MUST classify each request (PLAN / RESEARCH / RESEARCH+PLAN / OUT OF SCOPE), determine complexity (SIMPLE / COMPLEX), resolve the matching pipeline from its routing table, and then call the **first** agent via the `task` tool. After each agent in the pipeline returns, plankestrator advances the state machine (CLASSIFY → EXECUTE → REVIEW → COMPLETE) and calls the **next** agent. It NEVER writes the plan or research content itself — that is `plan-writer-*` / `research-writer-*` work, delegated through the pipeline.
 
+**Inspection limits (v4):** plankestrator may use `read`/`grep`/`glob` ONLY on Turn 1 to classify (prompt: max 2 calls; plugin hard limit: 3). After the first pipeline Task call any inspection throws ⛔. Complexity is classified from the request text, not from files; RESEARCH+PLAN is always COMPLEX. Self-work content markers (`## Findings`, `## Analysis`, `Executive Summary`, ...) in plankestrator's own message are detected by the plugin and block further inspection.
+
 **Tool allowance for primary agents** (enforced by `plugins/workflow-enforcement.ts`):
 
 | Allowed | Forbidden |
@@ -288,9 +290,15 @@ All build agents have `task.view-image: allow` to delegate image analysis:
 | execute-bug | `view-image: allow` | Visual verification of bug fixes |
 | rework | `view-image: allow` | Compare before/after UI changes |
 
-**Usage pattern:** Call via Task tool with `subagent_type: "view-image"`. view-image uses `bifrost-litellm/Kimi K2.6` with direct vision capabilities.
+**Usage pattern:** Call via Task tool with `subagent_type: "view-image"`. view-image uses `bifrost-litellm/MiniMax-M3` with direct vision capabilities.
 
 ## Pipelines
+
+### Pipeline Notation
+
+Pipelines are dependency graphs (DAG); a linear chain is the special case. `a → b` — sequential; `[a ∥ b ∥ c]` — parallel wave (multiple Task calls in ONE message, independent branches); `→ barrier →` — synchronization point (next stage starts only after ALL wave results arrive); `[rework loop, max 3]` — conditional repetition.
+
+**Scope rule:** top-level pipelines (PIPELINE TABLE, `pipeline` JSON field) remain LINEAR `string[]`. Parallel waves exist ONLY INSIDE a pipeline element — a subagent's own Task fan-out, with branches from the SUBAGENT's `permission.task` allowlist. Full grammar and example: ARCHITECTURE.md §2 "Pipeline Notation".
 
 ### BUGFIX (SIMPLE)
 
@@ -367,6 +375,14 @@ research-writer-* -> research-reviewer
 
 Research workflows include writing and review.
 
+**Parallel recon (research-writer-complex):** top-level pipeline is linear; the writer fans out internally — independent sub-questions go as ONE parallel Task wave (mcp-search / mcp-read / mcp-github / devops-readonly / scout, cheap models), then barrier (all results in, ranked into a brief), then synthesis on the strong model:
+
+`decompose → [mcp-search ∥ mcp-read ∥ mcp-github ∥ scout] → barrier (rank + brief) → synthesis → RESEARCH.md`
+
+Waves/barrier are prompt-level behavior of the writer; plugin and PIPELINE TABLE are unchanged (enforcement suppressed in subsessions; task-permissions already granted).
+
+**Barrier:** synchronization point — synthesis starts only after ALL wave results arrive; the writer ranks findings into an internal brief and synthesizes from the brief ("pointer, not transcript"). The barrier is NOT a separate agent: parallel Task calls in one message return together (structural barrier). Separate summarizer-barrier deferred (Decision record — ARCHITECTURE.md §2).
+
 ## Identity Verification
 
 Both primary agents output identity verification to prevent drift:
@@ -419,6 +435,9 @@ Avoid generic names like `New session` or `Untitled`. They prevent the plugin fr
 - Validates JSON output format includes required fields
 - Detects and prevents identity drift
 - Ensures agents stay within their whitelisted agent set
+- Inspection budget & post-pipeline inspection ban for plankestrator (v4)
+- Self-work content marker detection in primary-agent messages (v4)
+- Parent/child session attribution: subagent sessions preserve the parent's identity lock; enforcement suppressed while a Task subagent runs (v4)
 
 ### Detailed Documentation
 

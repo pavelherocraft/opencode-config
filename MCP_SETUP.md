@@ -10,7 +10,7 @@
 2. [Prerequisites](#2-prerequisites)
 3. [Installation Steps](#3-installation-steps)
 4. [opencode.json — Full Configuration](#4-opencodejson--full-configuration)
-5. [Agent Definitions — All 35 Agents](#5-agent-definitions--all-35-agents)
+5. [Agent Definitions — All 36 Agents](#5-agent-definitions--all-36-agents)
 6. [Routing Tables](#6-routing-tables)
 7. [Pipelines](#7-pipelines)
 8. [ARCHITECTURE.md Integration](#8-architecturemd-integration)
@@ -40,16 +40,16 @@ OpenCode использует архитектуру с двумя primary-аг�
 | Category | Count |
 |----------|-------|
 | Primary agents | 2 |
-| Subagents | 33 |
-| **Total unique agents** | **35** |
+| Subagents | 34 |
+| **Total unique agents** | **36** |
 
 ### Models Distribution
 
 | Model | Provider | Agents Count | Agents |
 |-------|----------|--------------|-------|
 | `QWEN3.7-plus` | bifrost-litellm | 7 | orchestrator, plankestrator, orchestrator-identity-probe, plankestrator-identity-probe, bugfix, consistency-checker, plan-writer-simple |
-| `MiniMax-M2.7` | bifrost-litellm | 5 | utility, mcp-github, mcp-read, mcp-search, summarizer |
-| `MiniMax-M3` | bifrost-litellm | 4 | worker, plan-bug, devops-agent, devops-readonly |
+| `MiniMax-M2.7` | bifrost-litellm | 6 | utility, mcp-github, mcp-read, mcp-search, summarizer, scout |
+| `MiniMax-M3` | bifrost-litellm | 5 | worker, plan-bug, devops-agent, devops-readonly, view-image |
 | `GLM-5.3 (res)` | bifrost-litellm | 4 | execute-bug, dev-professor, plan-reviewer-simple, research-reviewer |
 | `Kimi K3` | bifrost-litellm | 4 | dev-reviewer, rework, plan-reviewer-complex, research-writer-complex |
 | `mimo-v2.5` | bifrost-litellm | 3 | generate-image, generate-image-gpt, git-commit |
@@ -57,7 +57,6 @@ OpenCode использует архитектуру с двумя primary-аг�
 | `mimo-v2.5-pro` | bifrost-litellm | 2 | docs-writer, research-writer-simple |
 | `GLM-5.3-Flash (res)` | bifrost-litellm | 1 | bugfix-triage |
 | `aliyun/qwen3.8-flash` | bifrost-litellm | 1 | docs-planner |
-| `Kimi K2.6` | bifrost-litellm | 1 | view-image |
 
 ### MCP Servers
 
@@ -177,7 +176,7 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 ```
 
 Этот ключ используется для:
-- **Всех LLM моделей** (orchestrator, plankestrator, все 33 subagents)
+- **Всех LLM моделей** (orchestrator, plankestrator, все 34 subagents)
 - **Всех Z.AI MCP серверов** (zai_zread, zai_web_search, zai_web_reader) — проксируются через Bifrost
 
 ### Step 8: Copy Project Files
@@ -273,7 +272,7 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 
 ---
 
-## 5. Agent Definitions — All 35 Agents
+## 5. Agent Definitions — All 36 Agents
 
 ### Primary Agents
 
@@ -303,7 +302,7 @@ Use built-in tools (grep, read, edit) as FALLBACK when Serena fails or for non-s
 ## Image Analysis Priority
 For image analysis tasks, ALWAYS use view-image agent FIRST:
 - Call Task tool with view-image subagent
-- view-image has direct vision capabilities via bifrost-litellm/Kimi K2.6
+- view-image has direct vision capabilities via bifrost-litellm/MiniMax-M3
 - No MCP fallback — disable image tasks if view-image is unavailable
 
 ## Pipeline Logic
@@ -402,16 +401,16 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | Agent | Mode | Model | Temperature | edit | write | read | bash | task whitelist extras |
 |-------|------|-------|-------------|------|-------|------|------|----------------------|
 | **mcp-github** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
-| **dev-planner** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | *.md | - | deny | view-image |
+| **dev-planner** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | *.md | - | deny | view-image, scout |
 | **bugfix** | subagent | bifrost-litellm/QWEN3.7-plus | 0.2 | allow | - | - | deny | view-image |
 | **mcp-read** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
-| **plan-writer-complex** | subagent | bifrost-litellm/GLM-5.2 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
+| **plan-writer-complex** | subagent | bifrost-litellm/GLM-5.2 | 0.1 | allow | - | allow | deny | devops-readonly, view-image, scout |
 | **worker** | subagent | bifrost-litellm/MiniMax-M3 | 0.2 | allow | - | - | **allow** | view-image |
 | **utility** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | - | **allow** | view-image |
 | **rework** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | deny | view-image |
-| **research-writer-simple** | subagent | bifrost-litellm/mimo-v2.5-pro | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
+| **research-writer-simple** | subagent | bifrost-litellm/mimo-v2.5-pro | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image, scout |
 | **plan-reviewer-simple** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **plan-bug** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | *.md | - | - | deny | view-image | Writes bug plan to bug_plan.md |
+| **plan-bug** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | *.md | - | - | deny | view-image, scout | Writes bug plan to bug_plan.md |
 | **docs-writer** | subagent | bifrost-litellm/mimo-v2.5-pro | 0.3 | allow | - | - | deny | view-image |
 | **docs-planner** | subagent | bifrost-litellm/QWEN3.7-plus | 0.2 | *.md | - | allow | deny | view-image | Writes docs plan to docs_plan.md |
 | **dev-professor** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | deny | view-image | Reviews plan from dev_plan.md before implementing |
@@ -422,18 +421,19 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **plankestrator-identity-probe** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | - | deny | view-image |
 | **mcp-search** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
 | **summarizer** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | view-image |
-| **bugfix-triage** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | - | deny | view-image |
+| **bugfix-triage** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | deny | deny | - | deny | view-image, scout |
 | **research-reviewer** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | view-image |
 | **dev-reviewer** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | - | deny | view-image |
-| **research-writer-complex** | subagent | bifrost-litellm/GLM-5.2 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image |
-| **plan-writer-simple** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
+| **research-writer-complex** | subagent | bifrost-litellm/GLM-5.2 | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image, scout |
+| **plan-writer-simple** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | allow | - | allow | deny | devops-readonly, view-image, scout |
 | **execute-bug** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | **allow** | view-image | Reads plan from bug_plan.md before implementing |
 | **plan-reviewer-complex** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **consistency-checker** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
-| **view-image** | subagent | bifrost-litellm/Kimi K2.6 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
+| **view-image** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
 | **git-commit** | subagent | bifrost-litellm/mimo-v2.5 | 0.1 | deny | deny | allow | **allow** | - | Only agent allowed to run git commit/push (gated via git-commit skill) |
 | **generate-image** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (default Gemini image model); git commit/push denied |
 | **generate-image-gpt** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (GPT/DALL-E path, on explicit user request only); git commit/push denied |
+| **scout** | subagent | bifrost-litellm/MiniMax-M2.7 | 0.1 | deny | deny | allow | deny | – | Local FS recon: read/glob/grep only; task: deny; no opencode.json section (frontmatter-only); never a pipeline step |
 
 ### Primary Agent Permissions
 
@@ -527,7 +527,7 @@ You are an image analysis agent. Analyze images and describe what you see. You h
 | serena.* | **deny** |
 | unity-mcp.* | **deny** |
 
-view-image анализирует изображения **напрямую через модель** (`bifrost-litellm/Kimi K2.6` с vision capabilities). Все MCP серверы запрещены.
+view-image анализирует изображения **напрямую через модель** (`bifrost-litellm/MiniMax-M3` с vision capabilities). Все MCP серверы запрещены.
 
 ### Serena Permissions — All Agents (кроме view-image)
 
@@ -545,7 +545,7 @@ view-image анализирует изображения **напрямую че
 
 ### unity-mcp Permissions — All Agents
 
-Все 35 агентов имеют `"unity-mcp.*": "allow"` — полный доступ ко всем инструментам Unity MCP.
+Все 36 агентов, кроме `scout`, имеют `"unity-mcp.*": "allow"` — полный доступ ко всем инструментам Unity MCP. Исключение: scout — локальный read-only FS-разведчик (read/glob/grep), определённый только frontmatter `agents/scout.md` (без секции в opencode.json).
 
 ### Key Agent Permissions Details
 
@@ -819,7 +819,7 @@ plankestrator can only call these agents:
 #### Image Analysis Rules
 
 - **PRIMARY**: view-image agent via Task tool
-- view-image uses `bifrost-litellm/Kimi K2.6` with direct vision capabilities
+- view-image uses `bifrost-litellm/MiniMax-M3` with direct vision capabilities
 - No fallback MCP — disable image tasks or restore view-image if unavailable
 
 #### Serena MCP Rules
@@ -1045,7 +1045,7 @@ const REQUIRED_JSON_FIELDS = {
 
 ### Image Analysis
 
-Image analysis is handled by the dedicated `view-image` agent (model `bifrost-litellm/Kimi K2.6`), which uses direct vision capabilities — no MCP server needed.
+Image analysis is handled by the dedicated `view-image` agent (model `bifrost-litellm/MiniMax-M3`), which uses direct vision capabilities — no MCP server needed.
 
 If `view-image` is unavailable, no fallback MCP is configured. Disable image analysis tasks or restore the `view-image` agent.
 
@@ -1075,7 +1075,7 @@ All commands are `subtask: true` — they run as subagent tasks.
 |------|----------|---------|
 | opencode.json | `~/.config/opencode/opencode.json` | Main configuration (providers, MCP, agents, commands) |
 | workflow-enforcement.ts | `~/.config/opencode/plugins/workflow-enforcement.ts` | Workflow enforcement plugin |
-| [agent].md | `~/.config/opencode/agents/[name].md` | Individual agent definitions (35 files) |
+| [agent].md | `~/.config/opencode/agents/[name].md` | Individual agent definitions (36 files) |
 
 ### Data Storage
 
@@ -1098,7 +1098,7 @@ All commands are `subtask: true` — they run as subagent tasks.
 | dev_plan.md | Project root | Implementation plan (written by dev-planner) |
 | bug_plan.md | Project root | Bug fix plan (written by plan-bug, read by execute-bug) |
 
-### Agent Files List (35 files)
+### Agent Files List (36 files)
 
 ```
 ~/.config/opencode/agents/
@@ -1132,6 +1132,7 @@ All commands are `subtask: true` — they run as subagent tasks.
 ├── research-writer-simple.md
 ├── research-writer-complex.md
 ├── research-reviewer.md
+├── scout.md
 ├── view-image.md
 ├── generate-image.md
 ├── generate-image-gpt.md
@@ -1262,7 +1263,7 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 
 - [ ] opencode.json скопирован в `~/.config/opencode/`
 - [ ] Plugin скопирован в `~/.config/opencode/plugins/`
-- [ ] Все 35 agent файлов скопированы в `~/.config/opencode/agents/`
+- [ ] Все 36 agent файлов скопированы в `~/.config/opencode/agents/`
 - [ ] `LITELLM_API_KEY` env var настроен
 - [ ] Bifrost MCP URLs доступны (`hcbifrost.herocraft.com/litellm/`)
 - [ ] Routing tables в плагине совпадают с opencode.json
@@ -1281,13 +1282,13 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 - [ ] view-image может анализировать изображения напрямую
 - [ ] worker может выполнять bash команды
 
-### Agent Files (35 total)
+### Agent Files (36 total)
 
 **Primary agents (2):**
 - orchestrator.md
 - plankestrator.md
 
-**Subagents (33):**
+**Subagents (34):**
 - bugfix.md
 - bugfix-triage.md
 - consistency-checker.md
@@ -1317,6 +1318,7 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 - research-writer-complex.md
 - research-writer-simple.md
 - rework.md
+- scout.md
 - summarizer.md
 - utility.md
 - view-image.md
@@ -1354,13 +1356,13 @@ opencode --agent plankestrator
 | Component | Count | Location |
 |-----------|-------|----------|
 | Primary agents | 2 | `~/.config/opencode/agents/` |
-| Subagents | 33 | `~/.config/opencode/agents/` |
+| Subagents | 34 | `~/.config/opencode/agents/` |
 | MCP servers | 5 | zai_zread, zai_web_search, zai_web_reader, serena, unity-mcp |
 | Plugin hooks | 3 | workflow-enforcement.ts |
 | Routing tables | 2 | orchestrator (24), plankestrator (10) |
 | Pipelines | 13 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 | Custom commands | 5 | opencode.json |
-| Models | 11 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, MiniMax-M2.7, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, mimo-v2.5-pro, GLM-5.3-Flash (res), aliyun/qwen3.8-flash, Kimi K2.6) |
+| Models | 10 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, MiniMax-M2.7, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, mimo-v2.5-pro, GLM-5.3-Flash (res), aliyun/qwen3.8-flash) |
 
 ### Quick Reference
 

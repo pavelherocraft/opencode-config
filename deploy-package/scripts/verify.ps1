@@ -105,12 +105,12 @@ Write-Host ""
 Write-Host "[Агенты]" -ForegroundColor Yellow
 $agentFiles = Get-ChildItem "$configDir\agents\*.md" -ErrorAction SilentlyContinue
 $agentCount = if ($agentFiles) { $agentFiles.Count } else { 0 }
-Test-Check "Агенты: $agentCount/35 файлов" ($agentCount -ge 35) "Ожидается 35 файлов агентов"
+Test-Check "Агенты: $agentCount/36 файлов" ($agentCount -ge 36) "Ожидается 36 файлов агентов"
 
 $requiredAgents = @(
     "orchestrator", "plankestrator", "worker", "bugfix", "utility",
     "dev-planner", "dev-professor", "dev-reviewer", "execute-bug",
-    "consistency-checker", "view-image"
+    "consistency-checker", "view-image", "scout"
 )
 foreach ($agent in $requiredAgents) {
     $exists = Test-Path "$configDir\agents\$agent.md"

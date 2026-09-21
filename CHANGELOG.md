@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`subagent_depth: 3`** в `opencode.json` — разрешение вложенных вызовов субагентов (primary → research-writer-complex → scout). Документация: https://opencode.ai/docs/config
+- **Phase 5 (OMP plan Rev 2, 2026-09-20) — new subagent `scout` (local FS
+  reconnaissance)** (source: `RESEARCH_OMP_ORCHESTRATION.md` — omp's dedicated
+  cheap-model scout replacing builtin explore; plan:
+  `PLAN_OMP_IMPLEMENTATION.md` Phase 5; user decision: Variant C — scout +
+  task permissions for BOTH primaries' branches; backup:
+  `backup/2026-09-19_omp_p0p1p2/phase5/`):
+  - **New agent** `agents/scout.md`: mode subagent, model
+    `bifrost-litellm/MiniMax-M2.7`, temperature 0.1, strictly read-only
+    (read/glob/grep allow; edit/write/bash/webfetch/patch/todowrite/question/
+    task deny). Response contract: "pointer, not transcript" (file:line +
+    ≤3-line excerpt + relevance); analysis/synthesis/recommendations
+    PROHIBITED — the calling agent (strong model) synthesizes. No
+    `opencode.json` section by design: the frontmatter is the sole
+    authoritative permission source (Permission Authority).
+  - **Task permissions**: `"scout": "allow"` granted to 7 caller agents —
+    plankestrator branch (research-writer-simple, research-writer-complex,
+    plan-writer-simple, plan-writer-complex) and orchestrator branch
+    (dev-planner, bugfix-triage, plan-bug) — in live `opencode.json` and its
+    `deploy-package/opencode.json` mirror; frontmatter task-blocks updated
+    only for research-writer-simple/complex (the other five define task
+    permissions in JSON only).
+  - **Agent accounting 35→36**: `ARCHITECTURE.md` ×3 copies (Grand Total
+    `**34** | **36**`, Note documenting scout as out-of-routing, Subagent
+    Models +`scout` = 34 rows), root `MCP_SETUP.md` (Subagents 34, Total 36,
+    MiniMax-M2.7 distribution 5→6, Subagents Full Table +scout row and
+    +scout in task-extras of the 7 caller rows, file lists 36),
+    `deploy-package` (README, DEPLOYMENT_GUIDE, verify.ps1 → 36 + scout in
+    `$requiredAgents`, `agents/scout.md` snapshot).
+  - **Routing tables NOT changed** (orchestrator 24, plankestrator 10, sum 34;
+    `workflow-enforcement.ts` untouched): scout is never a pipeline step —
+    only internal Task calls from whitelisted subagents.
+  - **Restart required**: the agent and permissions take effect only in a new
+    session.
+
 - **v4 — plankestrator self-work prevention** (source:
   `RESEARCH_PLANKESTRATOR_ISSUE.md`, plan: `PLANKESTRATOR_FIX_PLAN.md`;
   backup: `backup/2026-09-07_plankestrator_selfwork_fix/` + HASHES.txt).

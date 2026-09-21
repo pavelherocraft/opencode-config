@@ -54,9 +54,13 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 |---------------|-----------------|-----------------------------|
 | orchestrator | 24 | 25 (orchestrator + 24 subagents) |
 | plankestrator | 10 | 11 (plankestrator + 10 subagents) |
-| **Grand Total** | **34** | **35** |
+| **Grand Total** | **34** | **36** |
 
-Note: 34 whitelist entries (view-image shared by both primaries), 33 unique subagents + 2 primary agents = 35 unique agents total.
+Note: 34 whitelist entries (view-image shared by both primaries) = 33 unique whitelisted subagents, PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 34 unique subagents + 2 primary agents = 36 unique agents total.
+
+### Shared Utility Agents
+
+view-image is a shared utility agent available to BOTH primary agents. It is listed in BOTH routing tables (orchestrator: position 20 of 24; plankestrator: position 10 of 10) and granted `task.view-image: allow` in both permission blocks in opencode.json. It is used for image analysis (screenshots, diagrams, error images) via the Task tool.
 
 ## Subagent Models
 
@@ -94,7 +98,8 @@ Note: 34 whitelist entries (view-image shared by both primaries), 33 unique suba
 | git-commit | bifrost-litellm/mimo-v2.5 |
 | generate-image | bifrost-litellm/mimo-v2.5 |
 | generate-image-gpt | bifrost-litellm/mimo-v2.5 |
-| view-image | bifrost-litellm/Kimi K2.6 |
+| view-image | bifrost-litellm/MiniMax-M3 |
+| scout | bifrost-litellm/MiniMax-M2.7 |
 
 Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3.7-plus` and are documented in §Identity Lock Mechanism (v3), item 5 — not duplicated in the Subagent Models table.
 
@@ -107,6 +112,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | execute-bug | `bash: allow` | Bug fix implementation — needs bash for running tests, executing commands |
 | rework | `bash: allow` | Rework agent — needs bash for running tests, git operations |
 | plan-bug | `edit: allow` (`.md` only) | Bug fix planning — writes plan to `bug_plan.md` for execute-bug to read |
+| docs-planner | `edit: allow` (`.md` only) | Documentation planning — writes plan to `docs_plan.md` for docs-writer to read |
 | devops-reviewer | `read: allow` in addition to `bash: allow` | DevOps review — needs bash for running commands, read for checking files |
 | devops-agent | `bash: allow` only | DevOps operations — needs bash for npm, docker, deployment commands |
 
@@ -128,7 +134,7 @@ Worker is the implementation agent — it MUST have `bash: allow` to execute com
 
 ### Edit Permissions (plankestrator subagents)
 
-**Important:** `write` is a TOOL NAME, not a permission key. The `edit` permission key controls the `edit`, `write`, `patch`, and `multiedit` tools. To restrict writer agents to `.md` files only, use `edit: { "*.md": "allow", "*": "deny" }`.
+**Important:** `write` is a TOOL NAME, not a permission key. The `edit` permission key controls the `edit`, `write`, `patch`, and `multiedit` tools. However, `"*": "deny"` does NOT just restrict to other file types — it REMOVES the `edit`/`write`/`patch`/`multiedit` tools entirely from the agent's toolset. Use `"*": "ask"` to restrict by glob while keeping tools available, paired with explicit `"*.md": "allow"` (or similar) to whitelist intended targets.
 
 | Agent | Permission | Restriction |
 |-------|------------|-------------|
@@ -144,35 +150,33 @@ Worker is the implementation agent — it MUST have `bash: allow` to execute com
 
 ### Permission Authority
 
-⚠️ IMPORTANT: opencode.json is the authoritative source for agent permissions
+⚠️ IMPORTANT: `agents/*.md` is the authoritative source for agent definitions
 
-**Frontmatter permissions in agent .md files are documentation only.**
-They are **overridden by opencode.json** configuration.
+**Markdown frontmatter is merged AFTER opencode.json and WINS on shared keys.**
 
-**Rule:** Always ensure opencode.json matches the intended permissions defined in ARCHITECTURE.md.
+Verified against opencode source (`packages/opencode/src/config/config.ts`):
 
-**Warning:** If frontmatter says `edit: allow` but opencode.json says `"edit": "deny"`, the agent will NOT have write access. The `write`, `edit`, `patch`, and `multiedit` tools will NOT be injected.
-
-**Example:**
-```yaml
-# agent.md frontmatter (documentation only)
-permission:
-  edit:
-    "*.md": "allow"
-    "*": "deny"
+```js
+// 1. JSON config files load first:
+yield* merge(Global.Path.config, global, "global")
+// 2. Markdown agents load after, overwriting shared keys:
+result.agent = mergeDeep(result.agent ?? {}, ConfigAgent.load(dir))
 ```
 
-```json
-// opencode.json (authoritative)
-"permission": {
-  "edit": {
-    "*.md": "allow",
-    "*": "deny"
-  }
-}
-```
+`mergeDeep` (remeda) — deep merge where source (markdown) overwrites target (JSON) on shared keys. Non-shared keys survive.
 
-**Both must match for the agent to work correctly.**
+**Consequences:**
+
+| Field | Authoritative location | Reason |
+|-------|----------------------|--------|
+| `model` | `agents/*.md` frontmatter | Overwrites JSON; `agent.*.model` removed from opencode.json |
+| `prompt` | `agents/*.md` body | Overwrites JSON; `agent.*.prompt` removed from opencode.json |
+| `permission` | Deep merge of JSON + frontmatter | JSON keeps `task` allowlist / serena / unity-mcp keys; frontmatter wins on shared keys (edit/write/bash) |
+| `mode`, `temperature` | Frontmatter wins if present | Keep values in sync |
+
+**Rule:** Never define `model` or `prompt` for an agent in opencode.json if that agent has a `.md` file — the JSON value is dead config and misleads.
+
+**Example of the failure mode this prevents:** bugfix-triage once kept running QWEN3.7-plus after opencode.json was changed to GLM-5.3-Flash (res) — because the stale frontmatter `model:` silently won.
 
 **Note:** `write` is NOT a permission key — it is a tool name. To allow/deny the `write` tool, use the `edit` permission key. `write: "*.md"` as a permission key is a DEAD KEY — it is silently ignored by opencode.
 
@@ -180,7 +184,7 @@ permission:
 
 ### Primary Agent Tool Lockdown (v3)
 
-Both `orchestrator` and `plankestrator` are locked down in `opencode.json` to prevent them from doing work themselves. This is the **authoritative source** — frontmatter and plugin runtime checks are belt-and-suspenders, but opencode.json is what actually controls tool injection.
+Both `orchestrator` and `plankestrator` are locked down to prevent them from doing work themselves. The effective permissions are a **deep merge of opencode.json + `agents/*.md` frontmatter** (frontmatter wins on shared keys — see Permission Authority). Both sources must agree on the deny rules below; the plugin runtime checks are belt-and-suspenders.
 
 | Tool | orchestrator | plankestrator | Reason |
 |------|:---:|:---:|--------|
@@ -196,11 +200,12 @@ Both `orchestrator` and `plankestrator` are locked down in `opencode.json` to pr
 | `question` | ❌ deny | ❌ deny | Primary agents don't ask the user |
 | `todowrite` | ❌ deny | ❌ deny | Primary agents don't manage todos |
 
-**Defense in depth — this lock is enforced by 3 layers:**
+**Defense in depth — this lock is enforced by 4 layers:**
 
-1. **`opencode.json` permission block** (authoritative) — the runtime refuses to inject denied tools into the agent's toolset
+1. **Merged permission ruleset** (opencode.json deep-merged with `agents/*.md` frontmatter) — the runtime refuses to inject denied tools into the agent's toolset
 2. **Plugin runtime gate** (`workflow-enforcement.ts` → `PRIMARY_AGENT_ALLOWED_TOOLS`) — throws `⛔ PRIMARY AGENT FORBIDDEN ACTION TOOL` exception if anything bypasses the config
 3. **Identity-lock v3** — if the agent outputs wrong identity in JSON, the locked routing table is still enforced
+4. **Inspection gate v4 (plankestrator)** — plugin hard-blocks `read`/`grep`/`glob`: (a) after the first pipeline Task call (`⛔ INSPECTION AFTER PIPELINE START`), (b) beyond the inspection budget of 3 calls per session (`⛔ INSPECTION BUDGET EXHAUSTED`; the prompt tells the model max 2), (c) after self-work content markers (`## Findings`, `## Analysis`, `Executive Summary`, ...) were detected in plankestrator's own message. view-image and identity-probe Task calls are auxiliary — they do NOT count as pipeline start. Child (subagent) sessions do not reset the parent's lock (parentID guard); subagent tool calls are excluded from enforcement via `activeTaskDepth`.
 
 **Why this exists:** orchestrator and plankestrator kept "doing things themselves" because the old config had `edit: "ask"`, `todowrite: "allow"`, `question: "allow"` for orchestrator, and `edit: { "*.md": "allow" }` for plankestrator — the model had action tools available and used them. v3 lockdown removes those tools from the model's toolset entirely.
 
@@ -208,6 +213,32 @@ Both `orchestrator` and `plankestrator` are locked down in `opencode.json` to pr
 - File type: ONLY `.md` (Markdown) files
 - User request: ONLY when user explicitly asks to write/save
 - Forbidden: Any non-.md files (code, config, etc.)
+
+### Subagent Depth (`subagent_depth`)
+
+`subagent_depth` — параметр opencode-core (top-level поле в `opencode.json`), ограничивающий максимальную глубину вложенности вызовов субагентов через Task tool. При превышении лимита ядро отклоняет попытку создать следующего субагента.
+
+**Текущее значение:** `3` (задаётся в `~/.config/opencode/opencode.json`, строка 3, сразу после `$schema`; продублировано в `deploy-package/opencode.json`). Документация: <https://opencode.ai/docs/config>.
+
+**Отличие от `activeTaskDepth` (плагин):**
+
+| Механизм | Источник | Назначение |
+|----------|----------|------------|
+| `subagent_depth` | opencode-core | Жёсткий лимит вложенности: при `depth >= subagent_depth` Task tool отказывается создавать субагента |
+| `activeTaskDepth` | `workflow-enforcement.ts` (плагин, v4) | Подавление enforcement: пока выполняется субагент (`activeTaskDepth > 0`), плагин пропускает tool calls — иначе Gate A блокировал бы `edit`/`write` у writer-агентов |
+
+Плагин НЕ управляет лимитом вложенности — это ответственность ядра. Плагин лишь не вмешивается в работу субагентов, чтобы не нарушать их контракт.
+
+**Цепочка вызовов (пример с depth-счётом):**
+
+```
+Уровень 0 (depth 0): primary — orchestrator / plankestrator
+Уровень 1 (depth 1): research-writer-complex / plan-writer-complex / worker / bugfix / ...
+Уровень 2 (depth 2): scout / mcp-search / mcp-read / mcp-github / devops-readonly
+Уровень 3 (depth 3): (резерв; потолок — следующий Task будет отклонён ядром)
+```
+
+При `subagent_depth: 3` цепочка `primary → research-writer-complex → scout` помещается в лимит с запасом в один уровень. Любая попытка вызвать субагента на depth = 3 будет отклонена ядром opencode до старта сессии.
 
 ### Direct Write Instruction
 
@@ -236,7 +267,30 @@ plankestrator is a pure orchestrator — it MUST ALWAYS delegate to subagents:
 - Subagent (with `edit: allow` for .md) handles the actual file writing
 - plankestrator NEVER writes files directly
 
+**Inspection limits (v4):** plankestrator may call `read`/`grep`/`glob` ONLY on Turn 1 and ONLY to classify (prompt limit: max 2 calls; plugin hard limit: `INSPECTION_BUDGET = 3`). After the first pipeline Task call, any inspection throws. Type and complexity are classified from the REQUEST TEXT (keywords; number of questions/topics/objects), not from files. RESEARCH+PLAN is always COMPLEX. Context-heavy investigation is delegated to `devops-readonly` via Task. Plan/research CONTENT in plankestrator's own message (headings like `## Findings`, `## Analysis`) is detected by the plugin and blocks further inspection.
+
 ## 2. Pipelines
+
+### Pipeline Notation
+
+Pipelines are dependency graphs (DAG); a linear chain is the special case. Notation:
+
+| Element | Syntax | Semantics |
+|---------|--------|-----------|
+| Sequential step | `a → b` | b starts after a completes |
+| Parallel wave | `[a ∥ b ∥ c]` | a, b, c launch simultaneously (multiple Task calls in ONE message); branches MUST be mutually independent |
+| Barrier | `→ barrier →` | synchronization point: the next stage starts only after ALL wave results have arrived |
+| Rework loop | `[rework loop, max 3]` | conditional repetition of a stage (max iterations stated) |
+
+**Scope rule:** top-level pipelines (PIPELINE TABLE in `agents/orchestrator.md` / `agents/plankestrator.md`; the `pipeline` JSON field) remain LINEAR `string[]` — one element = one Task call by the primary agent. Parallel waves exist ONLY INSIDE a pipeline element: a subagent's own Task fan-out (e.g. research-writer-complex scout wave). Every wave branch must come from the SUBAGENT's own `permission.task` allowlist (frontmatter + opencode.json), not from the primary's routing table.
+
+Full-graph example (RESEARCH COMPLEX):
+
+```
+plankestrator → research-writer-complex → research-reviewer
+                │ (internal DAG)
+                └─ decompose → [mcp-search ∥ mcp-read ∥ mcp-github] → barrier (rank + brief) → synthesis → RESEARCH.md
+```
 
 ### BUGFIX (SIMPLE)
 
@@ -249,6 +303,13 @@ bugfix-triage → worker → utility
 ```
 bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility
 ```
+
+**Two-stage pipeline decision (mandatory):** the orchestrator NEVER guesses SIMPLE vs DEEP itself. For any BUGFIX it first sends `["bugfix-triage"]` with `complexity: null`. When triage returns its verdict, the orchestrator extends the pipeline ONCE:
+
+- `TRIAGE_RESULT: SIMPLE` → continue `["worker", "utility"]`
+- `TRIAGE_RESULT: DEEP` → continue `["plan-bug", "execute-bug", "dev-reviewer", "rework", "consistency-checker", "utility"]`
+
+**Single source of truth for pipeline selection:** the PIPELINE TABLE in each primary agent's own `.md` file (`agents/orchestrator.md` for BUGFIX/DEVOPS/DEV/DOCS, `agents/plankestrator.md` for PLAN/RESEARCH/RESEARCH+PLAN). Each table must stay identical to the corresponding section in this file. (The inline `prompt` field formerly present in opencode.json was removed — markdown wins per the merge order documented above.)
 
 **Plan file:** `plan-bug` writes the bug fix plan to `bug_plan.md` in the project root. `execute-bug` reads this file before implementing. The orchestrator MUST include "Write the plan to bug_plan.md" in the plan-bug prompt and "Read bug_plan.md" in the execute-bug prompt.
 
@@ -303,8 +364,36 @@ devops-agent → devops-reviewer
 ### DOCS
 
 ```
-docs-writer → utility
+DOCS SIMPLE: docs-writer → utility
+DOCS DEEP:   docs-planner (writes docs_plan.md)
+           → docs-writer (reads docs_plan.md)
+           → dev-reviewer
+           → rework
+           → consistency-checker
+           → [rework loop, max 3]
+           → utility
 ```
+
+### Auto-DOCS Hook (BUGFIX / DEV pipelines)
+
+After the final `utility` step of BUGFIX/DEV pipelines, check the JSON output of the implementation agent (execute-bug, dev-professor, worker).
+
+**Trigger:** call `docs-writer → utility` if implementation agent's JSON output has `requires_docs_update: true`.
+
+Set `requires_docs_update: true` if ANY of these were modified:
+- `bug_plan.md` or `dev_plan.md` files
+- Any `*.md` file (README, ARCHITECTURE, docs/, CHANGELOG)
+- Public API (heuristic: public class/method/interface, signature changes)
+- Significant docstrings or code comments on public APIs
+
+**Pipelines WITH hook** (final utility → if hook → docs-writer → utility):
+- BUGFIX SIMPLE / DEEP
+- DEV SIMPLE / COMPLEX / SUPERCOMPLEX
+
+**Pipelines WITHOUT hook** (no docs trigger):
+- DEVOPS (deployments don't affect docs)
+- DOCS (recursive — would loop forever)
+- PLAN, RESEARCH (out of orchestrator's scope)
 
 ### PLAN
 
@@ -317,6 +406,23 @@ plan-writer-* → plan-reviewer-*
 ```
 research-writer-* → research-reviewer
 ```
+
+**Internal fan-out (research-writer-complex):** the top-level pipeline stays linear, but research-writer-complex fans out INTERNALLY — independent sub-questions are dispatched as ONE parallel Task wave to scout agents (mcp-search / mcp-read / mcp-github / devops-readonly / scout — all on cheap models); dependent sub-questions form follow-up waves:
+
+```
+research-writer-complex (internal DAG):
+  decompose → [mcp-search ∥ mcp-read ∥ mcp-github ∥ devops-readonly ∥ scout] → barrier (rank + brief) → synthesis (Kimi K3) → RESEARCH.md
+```
+
+The wave and the barrier are prompt-level behavior of the writer agent. The plugin and plankestrator's PIPELINE TABLE are NOT affected: enforcement is suppressed inside subagent sessions (`activeTaskDepth > 0`), and task-permissions for all scouts are already granted in opencode.json + frontmatter (verified 2026-09-19).
+
+### Wave → Barrier → Synthesis Pattern
+
+A **barrier** is a synchronization point: the next stage starts only after ALL results of a parallel wave have arrived. In this architecture the barrier is NOT a separate agent — it is a structural property of the Task tool (all parallel Task calls issued in one message return before the agent's next turn) plus an explicit prompt-level step of the writer agent.
+
+Implementation (research-writer-complex): wave results → rank by relevance/reliability → internal brief (key facts, contradictions, gaps) → synthesis from the brief on the strong model. "Pointer, not transcript": the report references sources and the output file, raw scout transcripts never leave the writer's context.
+
+**Decision record (2026-09-19):** a separate `summarizer` barrier agent (Option A) was DEFERRED — parallel Task calls already provide a free structural barrier, a summarizer hop would require passing raw wave transcripts in its prompt (violates pointer-not-transcript), and ranking is inseparable from synthesis, which must run on the strong model. Escalation path if pilots show context overflow: grant `"summarizer": "allow"` in research-writer-complex task permissions and pass waves via a file pointer.
 
 ## 3. JSON Validation Fields
 
@@ -331,7 +437,7 @@ research-writer-* → research-reviewer
 | `plan_source` | string \| null | description or `null` |
 | `goal` | string | one sentence description |
 | `next_agent` | string \| null | agent name from whitelist or `null` |
-| `pipeline` | string[] | array of agent names or `[]` |
+| `pipeline` | string[] | array of agent names (each from the primary's whitelist — see §2 Pipeline Notation) or `[]` |
 
 ### plankestrator Required Fields
 
@@ -343,7 +449,7 @@ research-writer-* → research-reviewer
 | `complexity` | string \| null | `"SIMPLE"`, `"COMPLEX"`, `null` |
 | `goal` | string | one sentence description |
 | `next_agent` | string \| null | agent name from whitelist or `null` |
-| `pipeline` | string[] | array of agent names or `[]` |
+| `pipeline` | string[] | array of agent names (each from the primary's whitelist — see §2 Pipeline Notation) or `[]` |
 
 ### consistency-checker Required Fields
 
@@ -385,6 +491,21 @@ elif issues are bug-specific:
 else:
     escalate_to = "dev-reviewer"  # default fallback
 ```
+
+### File-Pointer Fields (optional, subagent JSON output)
+
+Writer subagents that write their work product to a file MUST report a file pointer in their final JSON output ("pointer, not transcript" pattern — the same protection Anthropic describes against game-of-telephone). Reviewer subagents MUST check for the pointer and read the file instead of relying on conversation context.
+
+| Field | Type | Emitted by | Consumed by | Companion fields |
+|-------|------|-----------|-------------|------------------|
+| `plan_file` | string \| null | plan-writer-simple, plan-writer-complex | plan-reviewer-simple, plan-reviewer-complex | `plan_written: boolean`, `next_action: string` |
+| `research_file` | string \| null | research-writer-simple, research-writer-complex | research-reviewer | `research_written: boolean`, `next_action: string` |
+
+**Rules:**
+- Fields are OPTIONAL — emitted only when the user requested file output. Absent/null means "the work product is in the response body".
+- They are NOT part of `REQUIRED_JSON_FIELDS` for primary agents — the plugin validates primary-agent JSON only (subagent messages are skipped while `activeTaskDepth > 0`). File-pointer fields are enforced at the PROMPT level: writer emits, reviewer consumes.
+- The pointer value is a path string only — never paste plan/research content into the JSON.
+- Same-pattern fixed-name file pointers in orchestrator pipelines (passed via Task prompts, not JSON fields): `bug_plan.md` (plan-bug → execute-bug), `dev_plan.md` (dev-planner → dev-professor), `docs_plan.md` (docs-planner → docs-writer).
 
 ## 4. MCP Servers
 
@@ -506,7 +627,7 @@ All agents can use these unity-mcp tools:
 | orchestrator | `orchestrator-identity-probe` ✅ | `plankestrator-identity-probe` ❌ |
 | plankestrator | `plankestrator-identity-probe` ✅ | `orchestrator-identity-probe` ❌ |
 
-### Probe Procedure
+### Probe Procedure (legacy — superseded by Identity Lock v3)
 
 ```
 Step 0 — IDENTITY PROBE (MANDATORY FIRST STEP):
@@ -516,6 +637,29 @@ Step 0 — IDENTITY PROBE (MANDATORY FIRST STEP):
 4. If SUCCESS → You are plankestrator → Output identity verification
 5. If DENIED → IDENTITY ERROR → STOP
 ```
+
+### Identity Lock Mechanism (v3) — REPLACES Probe Procedure
+
+To prevent orchestrator↔plankestrator confusion mode, the system uses a **machine-asserted identity lock** at session start:
+
+1. **Session start** — `workflow-enforcement.ts` reads `session.agent` from the `session.created` event (priority order: explicit `agent` field → alternate field names → title → description). If it identifies `orchestrator` or `plankestrator`, it sets `identityLocked = true` and records `lockedAgentName`. The agent cannot be re-bound after this point.
+2. **RUNTIME IDENTITY block** — both primary agent prompts (`agents/orchestrator.md`, `agents/plankestrator.md`) start with an explicit `OPENCODE_AGENT_NAME = ...` block asserted by opencode (machine-injected, not self-claimed). The agent MUST check this block before any output; if it contradicts the agent file, the agent must refuse.
+3. **Identity drift = hard error** — once `identityLocked = true`, any JSON output where `agent` does not match `lockedAgentName` is logged as `error` (not `warn`) and the agent's `currentAgent` value is NOT updated. Downstream Task calls are still validated against the locked routing table.
+4. **Forbidden vocabulary check** — the plugin greps locked-agent message text for terminology that belongs to the other primary agent (e.g. orchestrator message containing "I am plankestrator" or "## PLAN"). Violations are logged as `error`.
+5. **Model** — both primary agents run on `bifrost-litellm/QWEN3.7-plus` (Qwen 3.7 Plus via the bifrost-litellm provider). Other agents use their own providers as listed in the Subagent Models table above.
+
+**Why the probe procedure is now legacy:** the probe relied on the agent following instructions in its own prompt — a self-claim. The v3 lock reads identity from opencode's session metadata (which opencode controls, not the model) and from the system-prompt-injected RUNTIME IDENTITY block. Self-claims are no longer authoritative.
+
+### Session Naming Convention
+
+Give every new session a clear name. The plugin uses the title as a fallback for identity detection if `session.agent` is not available. Recommended patterns:
+
+- `orchestrator — fix login bug`
+- `orchestrator — add user settings page`
+- `plankestrator — plan auth refactor`
+- `plankestrator — research state-management libs`
+
+Avoid generic names like `New session` or `Untitled`. They prevent the plugin from locking identity early.
 
 ## 6. Outdated Terms
 
@@ -572,12 +716,12 @@ The workflow-enforcement plugin implements 6 lifecycle hooks:
 
 | Hook | When | Purpose |
 |------|------|---------|
-| `tool.execute.before` | Before any tool call | Routing table enforcement — blocks invalid agent calls |
+| `tool.execute.before` | Before any tool call | Routing table enforcement; JSON-before-Task gate (no grace for locked agents, v4); inspection budget & post-pipeline inspection ban for plankestrator (v4); suppressed while a Task subagent runs (`activeTaskDepth > 0`, v4) |
 | `tool.execute.after` | After tool completes | Logs tool completion |
-| `session.created` | New session starts | Detects which agent is running |
+| `session.created` | New session starts | Detects which agent is running; CHILD (subagent) sessions preserve the parent's identity-lock state (parentID guard, v4) |
 | `session.updated` | Session changes | Detects identity drift |
 | `session.idle` | Session ends | Logs workflow summary |
-| `message.updated` | Message added | Validates JSON output format |
+| `message.updated` | Message added | Validates JSON output format (INVALID JSON logged as error, v4); detects forbidden vocabulary and self-work content markers (v4); skipped while a Task subagent runs |
 
 ## 10. Identity Verification Format
 

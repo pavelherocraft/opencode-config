@@ -1,5 +1,6 @@
 ﻿{
   "$schema": "https://opencode.ai/config.json",
+  "subagent_depth": 3,
   "compaction": {
     "prune": true
   },
@@ -954,7 +955,8 @@
         "serena_insert_after_symbol": "allow",
         "task": {
           "*": "deny",
-          "view-image": "allow"
+          "view-image": "allow",
+          "scout": "allow"
         }
       },
       "options": {}
@@ -1021,7 +1023,8 @@
         "task": {
           "*": "deny",
           "devops-readonly": "allow",
-          "view-image": "allow"
+          "view-image": "allow",
+          "scout": "allow"
         }
       },
       "options": {}
@@ -1108,7 +1111,8 @@
           "mcp-read": "allow",
           "mcp-github": "allow",
           "devops-readonly": "allow",
-          "view-image": "allow"
+          "view-image": "allow",
+          "scout": "allow"
         }
       },
       "options": {}
@@ -1151,7 +1155,8 @@
         "serena_insert_after_symbol": "allow",
         "task": {
           "*": "deny",
-          "view-image": "allow"
+          "view-image": "allow",
+          "scout": "allow"
         }
       },
       "options": {}
@@ -1426,7 +1431,8 @@
         "serena_insert_after_symbol": "allow",
         "task": {
           "*": "deny",
-          "view-image": "allow"
+          "view-image": "allow",
+          "scout": "allow"
         }
       },
       "options": {}
@@ -1495,7 +1501,8 @@
           "mcp-read": "allow",
           "mcp-github": "allow",
           "devops-readonly": "allow",
-          "view-image": "allow"
+          "view-image": "allow",
+          "scout": "allow"
         }
       },
       "options": {}
@@ -1549,7 +1556,8 @@
         "task": {
           "*": "deny",
           "devops-readonly": "allow",
-          "view-image": "allow"
+          "view-image": "allow",
+          "scout": "allow"
         }
       },
       "options": {}
