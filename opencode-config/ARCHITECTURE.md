@@ -68,7 +68,7 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | Agent | Model |
 |-------|-------|
 | worker | bifrost-litellm/MiniMax-M3 |
-| bugfix-triage | bifrost-litellm/GLM-5.3-Flash (res) |
+| bugfix-triage | bifrost-litellm/deepseek-v4.1-flash |
 | bugfix | bifrost-litellm/QWEN3.7-plus |
 | plan-bug | bifrost-litellm/GLM-5.3 (res) |
 | execute-bug | bifrost-litellm/MiniMax-M3 |
@@ -79,7 +79,7 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | consistency-checker | bifrost-litellm/QWEN3.7-plus |
 | advisor | bifrost-litellm/HY4 |
 | docs-writer | bifrost-litellm/mimo-v2.5-pro |
-| docs-planner | bifrost-litellm/aliyun/qwen3.8-flash |
+| docs-planner | bifrost-litellm/deepseek-v4.1-flash |
 | utility | bifrost-litellm/MiniMax-M3 |
 | mcp-github | bifrost-litellm/MiniMax-M3 |
 | mcp-read | bifrost-litellm/MiniMax-M3 |
@@ -119,12 +119,12 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | review-strong | bifrost-litellm/Kimi K3 | top | dev-reviewer, rework, plan-reviewer-complex, research-writer-complex |
 | review-lite | bifrost-litellm/QWEN3.7-plus | mid | consistency-checker, bugfix |
 | review-flash | bifrost-litellm/GLM-5.3 (res) | mid | plan-reviewer-simple, research-reviewer |
-| triage-flash | bifrost-litellm/GLM-5.3-Flash (res) | low | bugfix-triage |
+| triage-flash | bifrost-litellm/deepseek-v4.1-flash | low | bugfix-triage |
 | advisory | bifrost-litellm/HY4 | mid | advisor |
 | executor-strong | bifrost-litellm/GLM-5.3 (res) | mid | dev-professor |
 | executor-cheap | bifrost-litellm/MiniMax-M3 | low | worker, execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image |
 | docs | bifrost-litellm/mimo-v2.5-pro | low | docs-writer, research-writer-simple |
-| docs-plan | bifrost-litellm/aliyun/qwen3.8-flash | low | docs-planner |
+| docs-plan | bifrost-litellm/deepseek-v4.1-flash | low | docs-planner |
 | micro | bifrost-litellm/mimo-v2.5 | low | git-commit, generate-image, generate-image-gpt, scout |
 
 Контроль суммы: 2 primary + 35 subagents = 37 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.

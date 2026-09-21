@@ -1,7 +1,7 @@
 ---
 description: Documentation planner. Creates detailed plan for deep documentation tasks with section structure, scope, and code sources. Writes plan to file for downstream agents.
 mode: subagent
-model: bifrost-litellm/aliyun/qwen3.8-flash
+model: bifrost-litellm/deepseek-v4.1-flash
 temperature: 0.2
 permission:
   edit:

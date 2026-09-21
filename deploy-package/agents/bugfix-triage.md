@@ -1,7 +1,7 @@
 ---
-description: Bugfix triage agent. Analyzes bugs and determines if simple fix or needs deep investigation. GLM-5.3-Flash (res).
+description: Bugfix triage agent. Analyzes bugs and determines if simple fix or needs deep investigation. deepseek-v4.1-flash.
 mode: subagent
-model: bifrost-litellm/GLM-5.3-Flash (res)
+model: bifrost-litellm/deepseek-v4.1-flash
 temperature: 0.1
 permission:
   edit:
