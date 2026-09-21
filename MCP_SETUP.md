@@ -736,7 +736,7 @@ plankestrator can only call these agents:
 | Pipeline | Flow |
 |----------|------|
 | **BUGFIX SIMPLE** | bugfix-triage → worker → utility |
-| **BUGFIX DEEP** | bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility |
+| **BUGFIX DEEP** | bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility |
 
 ### DEV Pipelines
 
@@ -745,7 +745,7 @@ plankestrator can only call these agents:
 | **DEV SIMPLE (без плана)** | worker → utility | Простые задачи без предварительного планирования |
 | **DEV SIMPLE (с планом)** | worker → consistency-checker → utility | Задачи с существующим планом — валидация против плана |
 | **DEV COMPLEX** | dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → rework → consistency-checker → utility | Сложные задачи с планированием — dev-planner пишет план в dev_plan.md, dev-professor читает и ревьюит план перед реализацией |
-| **DEV SUPERCOMPLEX** | PER PLAN STEP: dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → consistency-checker → [rework loop, max 3] → utility | Очень большие планы (>3 шагов) или огромный объём работ — на каждом шаге dev-planner пишет план в dev_plan.md, dev-professor читает и ревьюит план перед реализацией |
+| **DEV SUPERCOMPLEX** | PER PLAN STEP: dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility | Очень большие планы (>3 шагов) или огромный объём работ — на каждом шаге dev-planner пишет план в dev_plan.md, dev-professor читает и ревьюит план перед реализацией |
 
 **Decision rule:** Если `plan_exists=true` для DEV SIMPLE, добавить consistency-checker перед utility. Если `plan_exists=false`, пропустить consistency-checker.
 
@@ -889,11 +889,11 @@ JSON output должен включать поле `agent`:
 | Pipeline Key | Sequence |
 |---|---|
 | `BUGFIX_SIMPLE` | `bugfix-triage → worker → utility` |
-| `BUGFIX_DEEP` | `bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility` |
+| `BUGFIX_DEEP` | `bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility` |
 | `DEV_SIMPLE_NO_PLAN` | `worker → utility` |
 | `DEV_SIMPLE_WITH_PLAN` | `worker → consistency-checker → utility` |
 | `DEV_COMPLEX` | `dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → rework → consistency-checker → utility` |
-| `DEV_SUPERCOMPLEX` | `PER PLAN STEP: dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → consistency-checker → [rework loop, max 3] → utility` |
+| `DEV_SUPERCOMPLEX` | `PER PLAN STEP: dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility` |
 | `DEVOPS` | `devops-agent → devops-reviewer` |
 | `DOCS` | `docs-writer → utility` |
 | `PLAN_SIMPLE` | `plan-writer-simple → plan-reviewer-simple` |

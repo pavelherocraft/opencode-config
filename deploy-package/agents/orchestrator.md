@@ -439,23 +439,23 @@ MUST select agent from this table. NO other agents allowed:
 MUST follow these pipelines exactly:
 
 **BUGFIX SIMPLE:** bugfix-triage → worker → utility
-**BUGFIX DEEP:** bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility
+**BUGFIX DEEP:** bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
   ⚠️ PROMPT REQUIREMENTS:
   - plan-bug prompt MUST end with: "Write the plan to bug_plan.md"
   - execute-bug prompt MUST start with: "Read bug_plan.md"
 **DEVOPS:** devops-agent → devops-reviewer
 **DEV SIMPLE:** worker → utility
-**DEV PLAN EXISTS:** worker → consistency-checker → [rework loop, max 3] → utility
-**DEV COMPLEX:** dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility
+**DEV PLAN EXISTS:** worker → consistency-checker → [rework loop: worker → consistency-checker, max 3] → utility
+**DEV COMPLEX:** dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
   ⚠️ PROMPT REQUIREMENTS:
   - dev-planner prompt MUST end with: "Write the plan to dev_plan.md"
   - dev-professor prompt MUST start with: "Review dev_plan.md"
-**DEV SUPERCOMPLEX:** PER PLAN STEP: dev-planner → dev-professor → dev-reviewer → consistency-checker → [rework loop, max 3] → utility (repeated for each step in the plan)
+**DEV SUPERCOMPLEX:** PER PLAN STEP: dev-planner → dev-professor → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility (repeated for each step in the plan)
   ⚠️ PROMPT REQUIREMENTS (apply to EACH step):
   - dev-planner prompt MUST end with: "Write the plan to dev_plan.md"
   - dev-professor prompt MUST start with: "Review dev_plan.md"
 **DOCS SIMPLE:** docs-writer → utility
-**DOCS DEEP:** docs-planner (writes docs_plan.md) → docs-writer (reads docs_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility
+**DOCS DEEP:** docs-planner (writes docs_plan.md) → docs-writer (reads docs_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
   ⚠️ PROMPT REQUIREMENTS:
   - docs-planner prompt MUST end with: "Write the plan to docs_plan.md"
   - docs-writer prompt MUST start with: "Read docs_plan.md"
@@ -525,10 +525,10 @@ Otherwise set `requires_docs_update: false` and DO NOT call docs-writer.
 
 **Pipelines WITH auto-DOCS hook** (apply `→ [if requires_docs_update] → docs-writer → utility` at the end):
 - BUGFIX SIMPLE: `bugfix-triage → worker → utility → [HOOK]`
-- BUGFIX DEEP: `bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility → [HOOK]`
+- BUGFIX DEEP: `bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility → [HOOK]`
 - DEV SIMPLE (without plan): `worker → utility → [HOOK]`
-- DEV SIMPLE (with plan): `worker → consistency-checker → [rework loop, max 3] → utility → [HOOK]`
-- DEV COMPLEX: `dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility → [HOOK]`
+- DEV SIMPLE (with plan): `worker → consistency-checker → [rework loop: worker → consistency-checker, max 3] → utility → [HOOK]`
+- DEV COMPLEX: `dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility → [HOOK]`
 - DEV SUPERCOMPLEX: PER STEP `... → utility → [HOOK]` (each step may trigger docs update)
 
 **Pipelines WITHOUT auto-DOCS hook**:
@@ -750,7 +750,7 @@ dev-planner (plan step N)
   → dev-professor (implement step N)
   → dev-reviewer (review step N code)
   → consistency-checker (validate step N against architecture)
-  → [rework loop, max 3] (if consistency-checker finds issues)
+  → [rework loop: rework → consistency-checker, max 3] (if consistency-checker finds issues)
   → utility (syntax check step N)
   → advance to step N+1 (repeat chain)
 ```
@@ -1125,7 +1125,7 @@ Step 5 — Call execute-bug:
 - execute-bug reads bug_plan.md, reviews it, then implements
 - Wait for implementation
 
-Step 6 — Continue pipeline: dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility
+Step 6 — Continue pipeline: dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
 - Follow standard rework loop logic if consistency-checker finds issues
 
 ## OUT OF SCOPE EXAMPLE

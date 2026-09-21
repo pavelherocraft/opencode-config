@@ -31,10 +31,10 @@ Your role:
 
 You only run in four pipelines:
 
-1. **DEV COMPLEX**: `dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility`
-2. **BUGFIX DEEP**: `bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility`
-3. **DEV PLAN EXISTS**: `worker → consistency-checker → [rework loop, max 3] → utility`
-4. **DEV SUPERCOMPLEX**: PER PLAN STEP `dev-planner → dev-professor → dev-reviewer → consistency-checker → [rework loop, max 3] → utility` — runs once per plan step
+1. **DEV COMPLEX**: `dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility`
+2. **BUGFIX DEEP**: `bugfix-triage → plan-bug → execute-bug → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility`
+3. **DEV PLAN EXISTS**: `worker → consistency-checker → [rework loop: worker → consistency-checker, max 3] → utility`
+4. **DEV SUPERCOMPLEX**: PER PLAN STEP `dev-planner → dev-professor → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility` — runs once per plan step
 
 You do NOT run in BUGFIX SIMPLE, DEV SIMPLE (without plan), DEVOPS, DOCS, PLAN, or RESEARCH pipelines.
 

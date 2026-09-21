@@ -280,7 +280,7 @@ Pipelines are dependency graphs (DAG); a linear chain is the special case. Notat
 | Sequential step | `a → b` | b starts after a completes |
 | Parallel wave | `[a ∥ b ∥ c]` | a, b, c launch simultaneously (multiple Task calls in ONE message); branches MUST be mutually independent |
 | Barrier | `→ barrier →` | synchronization point: the next stage starts only after ALL wave results have arrived |
-| Rework loop | `[rework loop, max 3]` | conditional repetition of a stage (max iterations stated) |
+| Rework loop | `[rework loop: rework → consistency-checker, max 3]` | conditional repetition of consistency-checker after rework (or worker) applies fixes — max 3 iterations |
 
 **Scope rule:** top-level pipelines (PIPELINE TABLE in `agents/orchestrator.md` / `agents/plankestrator.md`; the `pipeline` JSON field) remain LINEAR `string[]` — one element = one Task call by the primary agent. Parallel waves exist ONLY INSIDE a pipeline element: a subagent's own Task fan-out (e.g. research-writer-complex scout wave). Every wave branch must come from the SUBAGENT's own `permission.task` allowlist (frontmatter + opencode.json), not from the primary's routing table.
 
@@ -301,7 +301,7 @@ bugfix-triage → worker → utility
 ### BUGFIX DEEP
 
 ```
-bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility
+bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
 ```
 
 **Two-stage pipeline decision (mandatory):** the orchestrator NEVER guesses SIMPLE vs DEEP itself. For any BUGFIX it first sends `["bugfix-triage"]` with `complexity: null`. When triage returns its verdict, the orchestrator extends the pipeline ONCE:
@@ -322,25 +322,25 @@ DEV SIMPLE has two variants depending on whether a plan exists:
 | Variant | Flow | When to Use |
 |---------|------|-------------|
 | DEV SIMPLE (without plan) | `worker → utility` | plan_exists=false — direct implementation and validation |
-| DEV SIMPLE (with plan) | `worker → consistency-checker → [rework loop, max 3] → utility` | plan_exists=true — plan-validated implementation with rework loop |
+| DEV SIMPLE (with plan) | `worker → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility` | plan_exists=true — plan-validated implementation with rework loop |
 
 **Decision rule:** If plan_exists=true, use the "with plan" variant. Otherwise, use the "without plan" variant.
 
-**Rework loop:** If consistency-checker finds critical issues, task returns to worker for fixes. Loop repeats up to 3 iterations. If consistency-checker passes → utility. If max iterations reached → failure report.
+**Rework loop:** If consistency-checker finds critical issues, task returns to worker for fixes, then consistency-checker validates again. Loop repeats up to 3 iterations. If consistency-checker passes → utility. If max iterations reached → failure report.
 
 ### DEV COMPLEX
 
 ```
-dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → [rework loop, max 3] → utility
+dev-planner → dev-professor → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
 ```
 
-**Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes. Loop repeats up to 3 iterations.
+**Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes, then consistency-checker validates again. Loop repeats up to 3 iterations.
 
 ### DEV SUPERCOMPLEX
 
 ```
 PER PLAN STEP (repeated for each step in the plan):
-  dev-planner → dev-professor → dev-reviewer → consistency-checker → [rework loop, max 3] → utility
+  dev-planner → dev-professor → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
 ```
 
 Super-complex development tasks with a large pre-existing plan (>3 steps) or huge volume of work. The orchestrator executes the full review/consistency/syntax chain **for every step** of the plan.
@@ -351,7 +351,7 @@ Super-complex development tasks with a large pre-existing plan (>3 steps) or hug
 
 **Per-step chain:** For each step, `dev-planner` writes the plan to `dev_plan.md`, `dev-professor` reads the plan file, critically reviews it, then implements the step, `dev-reviewer` reviews the code, `consistency-checker` validates architecture, then `utility` runs the syntax check before advancing to the next step.
 
-**Rework loop:** If consistency-checker finds critical issues within a step, the task returns to `rework` for fixes. Loop repeats up to 3 iterations per step. If a step passes, the orchestrator advances to the next plan step and repeats the chain.
+**Rework loop:** If consistency-checker finds critical issues within a step, the task returns to `rework` for fixes, then consistency-checker validates again. Loop repeats up to 3 iterations per step. If a step passes, the orchestrator advances to the next plan step and repeats the chain.
 
 **Note:** This pipeline overrides the standard "PLAN EXISTS OVERRIDE" complexity rule — when the plan is large (>3 steps), complexity is classified as `SUPERCOMPLEX` instead of `SIMPLE`.
 
@@ -370,7 +370,7 @@ DOCS DEEP:   docs-planner (writes docs_plan.md)
            → dev-reviewer
            → rework
            → consistency-checker
-           → [rework loop, max 3]
+           → [rework loop: rework → consistency-checker, max 3]
            → utility
 ```
 
