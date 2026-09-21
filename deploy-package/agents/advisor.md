@@ -1,7 +1,7 @@
 ---
-description: Step-boundary advisory reviewer (OMP watchdog analog). Observes implementation results between pipeline steps and returns severity-tagged notes (nit, concern, blocker). Strictly read-only, emission-guarded. Kimi K3.
+description: Step-boundary advisory reviewer (OMP watchdog analog). Observes implementation results between pipeline steps and returns severity-tagged notes (nit, concern, blocker). Strictly read-only, emission-guarded. HY4.
 mode: subagent
-model: bifrost-litellm/Kimi K3
+model: bifrost-litellm/HY4
 temperature: 0.1
 permission:
   edit: deny

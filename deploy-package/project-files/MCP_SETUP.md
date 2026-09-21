@@ -49,13 +49,14 @@ OpenCode использует архитектуру с двумя primary-аг�
 |-------|----------|--------------|-------|
 | `QWEN3.7-plus` | bifrost-litellm | 7 | orchestrator, plankestrator, orchestrator-identity-probe, plankestrator-identity-probe, bugfix, consistency-checker, plan-writer-simple |
 | `MiniMax-M3` | bifrost-litellm | 10 | worker, execute-bug, devops-agent, devops-readonly, view-image, utility, mcp-github, mcp-read, mcp-search, summarizer |
-| `GLM-5.3 (res)` | bifrost-litellm | 3 | dev-professor, plan-reviewer-simple, research-reviewer |
-| `Kimi K3` | bifrost-litellm | 5 | dev-reviewer, rework, plan-reviewer-complex, research-writer-complex, advisor |
+| `GLM-5.3 (res)` | bifrost-litellm | 4 | dev-professor, plan-reviewer-simple, research-reviewer, plan-bug |
+| `Kimi K3` | bifrost-litellm | 4 | dev-reviewer, rework, plan-reviewer-complex, research-writer-complex |
 | `mimo-v2.5` | bifrost-litellm | 4 | generate-image, generate-image-gpt, git-commit, scout |
-| `qwen3.8-max` | bifrost-litellm | 4 | dev-planner, devops-reviewer, plan-writer-complex, plan-bug |
+| `qwen3.8-max` | bifrost-litellm | 3 | dev-planner, devops-reviewer, plan-writer-complex |
 | `mimo-v2.5-pro` | bifrost-litellm | 2 | docs-writer, research-writer-simple |
 | `GLM-5.3-Flash (res)` | bifrost-litellm | 1 | bugfix-triage |
 | `aliyun/qwen3.8-flash` | bifrost-litellm | 1 | docs-planner |
+| `HY4` | bifrost-litellm | 1 | advisor |
 
 ### MCP Servers
 
@@ -408,7 +409,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **rework** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | deny | view-image |
 | **research-writer-simple** | subagent | bifrost-litellm/mimo-v2.5-pro | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image, scout |
 | **plan-reviewer-simple** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **plan-bug** | subagent | bifrost-litellm/qwen3.8-max | 0.1 | *.md | - | - | deny | view-image, scout | Writes SELF-CONTAINED bug plan to bug_plan.md (prewalk: strong planner) |
+| **plan-bug** | subagent | bifrost-litellm/GLM-5.3 (res) | 0.1 | *.md | - | - | deny | view-image, scout | Writes SELF-CONTAINED bug plan to bug_plan.md (prewalk: strong planner) |
 | **docs-writer** | subagent | bifrost-litellm/mimo-v2.5-pro | 0.3 | allow | - | - | deny | view-image |
 | **docs-planner** | subagent | bifrost-litellm/QWEN3.7-plus | 0.2 | *.md | - | allow | deny | view-image | Writes docs plan to docs_plan.md |
 | **dev-professor** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | deny | view-image | Reviews plan from dev_plan.md before implementing |
@@ -432,7 +433,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **generate-image** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (default Gemini image model); git commit/push denied |
 | **generate-image-gpt** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (GPT/DALL-E path, on explicit user request only); git commit/push denied |
 | **scout** | subagent | bifrost-litellm/mimo-v2.5 | 0.1 | deny | deny | allow | deny | – | Local FS recon: read/glob/grep only; task: deny; no opencode.json section (frontmatter-only); never a pipeline step |
-| **advisor** | subagent | bifrost-litellm/Kimi K3 | 0.1 | deny | deny | allow | deny | – | Step-boundary advisory reviewer (DEV COMPLEX, BUGFIX DEEP); read-only (read/grep/glob + read-only serena); severity-tagged notes; unity-mcp deny |
+| **advisor** | subagent | bifrost-litellm/HY4 | 0.1 | deny | deny | allow | deny | – | Step-boundary advisory reviewer (DEV COMPLEX, BUGFIX DEEP); read-only (read/grep/glob + read-only serena); severity-tagged notes; unity-mcp deny |
 
 ### Primary Agent Permissions
 
@@ -1365,7 +1366,7 @@ opencode --agent plankestrator
 | Routing tables | 2 | orchestrator (24), plankestrator (10) |
 | Pipelines | 13 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 | Custom commands | 5 | opencode.json |
-| Models | 9 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, mimo-v2.5-pro, GLM-5.3-Flash (res), aliyun/qwen3.8-flash) |
+| Models | 10 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, mimo-v2.5-pro, GLM-5.3-Flash (res), aliyun/qwen3.8-flash, HY4) |
 
 ### Quick Reference
 

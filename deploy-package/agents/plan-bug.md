@@ -1,7 +1,7 @@
 ---
-description: Bugfix planning agent. Creates a detailed SELF-CONTAINED plan for deep bug fixes with investigation steps. Qwen3.8 Max.
+description: Bugfix planning agent. Creates a detailed SELF-CONTAINED plan for deep bug fixes with investigation steps. GLM-5.3 (res).
 mode: subagent
-model: bifrost-litellm/qwen3.8-max
+model: bifrost-litellm/GLM-5.3 (res)
 temperature: 0.1
 permission:
   edit:

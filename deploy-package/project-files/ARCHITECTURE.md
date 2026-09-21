@@ -70,14 +70,14 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | worker | bifrost-litellm/MiniMax-M3 |
 | bugfix-triage | bifrost-litellm/GLM-5.3-Flash (res) |
 | bugfix | bifrost-litellm/QWEN3.7-plus |
-| plan-bug | bifrost-litellm/qwen3.8-max |
+| plan-bug | bifrost-litellm/GLM-5.3 (res) |
 | execute-bug | bifrost-litellm/MiniMax-M3 |
 | dev-planner | bifrost-litellm/qwen3.8-max |
 | dev-professor | bifrost-litellm/GLM-5.3 (res) |
 | dev-reviewer | bifrost-litellm/Kimi K3 |
 | rework | bifrost-litellm/Kimi K3 |
 | consistency-checker | bifrost-litellm/QWEN3.7-plus |
-| advisor | bifrost-litellm/Kimi K3 |
+| advisor | bifrost-litellm/HY4 |
 | docs-writer | bifrost-litellm/mimo-v2.5-pro |
 | docs-planner | bifrost-litellm/aliyun/qwen3.8-flash |
 | utility | bifrost-litellm/MiniMax-M3 |
@@ -113,12 +113,14 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 |------|-------|------|--------|
 | primary | bifrost-litellm/QWEN3.7-plus | mid | orchestrator, plankestrator |
 | probe | bifrost-litellm/QWEN3.7-plus | mid | orchestrator-identity-probe, plankestrator-identity-probe |
-| plan-strong | bifrost-litellm/qwen3.8-max | top | dev-planner, plan-bug, plan-writer-complex, devops-reviewer |
+| plan-strong | bifrost-litellm/qwen3.8-max | top | dev-planner, plan-writer-complex, devops-reviewer |
 | plan-lite | bifrost-litellm/QWEN3.7-plus | mid | plan-writer-simple |
-| review-strong | bifrost-litellm/Kimi K3 | top | dev-reviewer, rework, plan-reviewer-complex, research-writer-complex, advisor |
+| plan-flash | bifrost-litellm/GLM-5.3 (res) | mid | plan-bug |
+| review-strong | bifrost-litellm/Kimi K3 | top | dev-reviewer, rework, plan-reviewer-complex, research-writer-complex |
 | review-lite | bifrost-litellm/QWEN3.7-plus | mid | consistency-checker, bugfix |
 | review-flash | bifrost-litellm/GLM-5.3 (res) | mid | plan-reviewer-simple, research-reviewer |
 | triage-flash | bifrost-litellm/GLM-5.3-Flash (res) | low | bugfix-triage |
+| advisory | bifrost-litellm/HY4 | mid | advisor |
 | executor-strong | bifrost-litellm/GLM-5.3 (res) | mid | dev-professor |
 | executor-cheap | bifrost-litellm/MiniMax-M3 | low | worker, execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image |
 | docs | bifrost-litellm/mimo-v2.5-pro | low | docs-writer, research-writer-simple |
@@ -128,7 +130,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 Контроль суммы: 2 primary + 35 subagents = 37 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.
 
 **Правила:**
-1. **Prewalk-принцип (OMP):** в паре planner→executor роль planner'а ДОЛЖНА быть tier ≥ executor'а: plan-bug (plan-strong) → execute-bug (executor-cheap); dev-planner (plan-strong) → dev-professor (executor-strong); docs-planner (docs-plan) → docs-writer (docs). Инверсия запрещена.
+1. **Prewalk-принцип (OMP):** в паре planner→executor роль planner'а ДОЛЖНА быть tier ≥ executor'а: plan-bug (plan-flash, mid) → execute-bug (executor-cheap, low); dev-planner (plan-strong, top) → dev-professor (executor-strong, mid); docs-planner (docs-plan, low) → docs-writer (docs, low). Инверсия запрещена.
 2. Смена модели агента = правка этой таблицы + frontmatter `agents/*.md` + Subagent Models + MCP_SETUP Models Distribution (4 места; все — через consistency-checker Check 11).
 3. Новые агенты получают роль из таблицы; новая роль добавляется только с обоснованием в CHANGELOG.
 4. Миграция frontmatter на role-алиасы (`model: "@review-strong"`) — ЗАБЛОКИРОВАНА до поддержки рантаймом opencode (задокументированное платформенное требование, аналогично quota-aware fallback).
@@ -343,7 +345,7 @@ bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.
 
 **Plan file:** `plan-bug` writes the bug fix plan to `bug_plan.md` in the project root. `execute-bug` reads this file before implementing. The orchestrator MUST include "Write the plan to bug_plan.md" in the plan-bug prompt and "Read bug_plan.md" in the execute-bug prompt.
 
-**Prewalk pattern (v5, OMP prewalk analog):** one-shot handoff expensive→cheap at the planning/implementation boundary. `plan-bug` runs on the STRONG planner model (`qwen3.8-max`, tier plan-strong) and writes a SELF-CONTAINED `bug_plan.md`; `execute-bug` runs on the CHEAP executor model (`MiniMax-M3`, tier executor-cheap) and mechanically applies the plan in a fresh context. Escape hatch: `execute-bug` sets `plan_gap: true` in its JSON when the plan turns out incomplete — downstream dev-reviewer/consistency-checker escalate (consistency-checker `escalate_to: "execute-bug"` remains available). Same philosophy in DEV COMPLEX: dev-planner (plan-strong) > dev-professor (executor-strong). Rationale and source: `RESEARCH_OMP_FEATURES.md` P0-2, OMP `docs/prewalk.md`.
+**Prewalk pattern (v5, OMP prewalk analog):** one-shot handoff expensive→cheap at the planning/implementation boundary. `plan-bug` runs on the MID-tier planner model (`GLM-5.3 (res)`, tier plan-flash) and writes a SELF-CONTAINED `bug_plan.md`; `execute-bug` runs on the CHEAP executor model (`MiniMax-M3`, tier executor-cheap) and mechanically applies the plan in a fresh context. Escape hatch: `execute-bug` sets `plan_gap: true` in its JSON when the plan turns out incomplete — downstream dev-reviewer/consistency-checker escalate (consistency-checker `escalate_to: "execute-bug"` remains available). Same philosophy in DEV COMPLEX: dev-planner (plan-strong) > dev-professor (executor-strong). Rationale and source: `RESEARCH_OMP_FEATURES.md` P0-2, OMP `docs/prewalk.md`.
 
 **Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes. Loop repeats up to 3 iterations. If consistency-checker passes → utility. If max iterations reached → failure report.
 
@@ -368,7 +370,7 @@ dev-planner → dev-professor → advisor → dev-reviewer → rework → consis
 
 **Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes, then consistency-checker validates again. Loop repeats up to 3 iterations.
 
-**Advisor step (v5, OMP Advisor Watchdog analog — step-boundary):** `advisor` (Kimi K3, strictly read-only: read/grep/glob + read-only serena) observes the implementation result between pipeline steps and returns severity-tagged notes (`nit|concern|blocker`, contract — §3 Reviewer Severity Field). Mid-turn intervention is NOT possible (our agents are atomic within a step) — advisor fires only at step boundaries. Safeguards: emission guard (max 4 non-blocker notes per run, session dedup, empty-phrase filter — plugin v5 + advisor prompt), immuneTurns analog (`NIT_ONLY_MODE` for 3 pipeline steps after a consumed blocker — concern/blocker notes downgrade to nit), separate cost accounting (advisor ≈ 1 extra model call per step; logged in plugin + orchestrator acks). Advisor never re-orders the pipeline; blocker → ⚠️ ack + notes to dev-reviewer/rework; persistence after 3rd rework iteration → failure report.
+**Advisor step (v5, OMP Advisor Watchdog analog — step-boundary):** `advisor` (HY4, strictly read-only: read/grep/glob + read-only serena) observes the implementation result between pipeline steps and returns severity-tagged notes (`nit|concern|blocker`, contract — §3 Reviewer Severity Field). Mid-turn intervention is NOT possible (our agents are atomic within a step) — advisor fires only at step boundaries. Safeguards: emission guard (max 4 non-blocker notes per run, session dedup, empty-phrase filter — plugin v5 + advisor prompt), immuneTurns analog (`NIT_ONLY_MODE` for 3 pipeline steps after a consumed blocker — concern/blocker notes downgrade to nit), separate cost accounting (advisor ≈ 1 extra model call per step; logged in plugin + orchestrator acks). Advisor never re-orders the pipeline; blocker → ⚠️ ack + notes to dev-reviewer/rework; persistence after 3rd rework iteration → failure report.
 
 ### DEV SUPERCOMPLEX
 
