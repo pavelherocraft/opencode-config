@@ -75,10 +75,10 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | dev-planner | bifrost-litellm/qwen3.8-max |
 | dev-professor | bifrost-litellm/GLM-5.3 (res) |
 | dev-reviewer | bifrost-litellm/Kimi K3 |
-| rework | bifrost-litellm/Kimi K3 |
-| consistency-checker | bifrost-litellm/QWEN3.7-plus |
+| rework | bifrost-litellm/deepseek-v4.1-flash |
+| consistency-checker | bifrost-litellm/mimo-v2.6-pro |
 | advisor | bifrost-litellm/HY4 |
-| docs-writer | bifrost-litellm/mimo-v2.5-pro |
+| docs-writer | bifrost-litellm/mimo-v2.6-pro |
 | docs-planner | bifrost-litellm/deepseek-v4.1-flash |
 | utility | bifrost-litellm/MiniMax-M3 |
 | mcp-github | bifrost-litellm/MiniMax-M3 |
@@ -93,7 +93,7 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | plan-writer-complex | bifrost-litellm/qwen3.8-max |
 | plan-reviewer-simple | bifrost-litellm/GLM-5.3 (res) |
 | plan-reviewer-complex | bifrost-litellm/Kimi K3 |
-| research-writer-simple | bifrost-litellm/mimo-v2.5-pro |
+| research-writer-simple | bifrost-litellm/mimo-v2.6-pro |
 | research-writer-complex | bifrost-litellm/Kimi K3 |
 | research-reviewer | bifrost-litellm/GLM-5.3 (res) |
 | devops-readonly | bifrost-litellm/MiniMax-M3 |
@@ -116,14 +116,16 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | plan-strong | bifrost-litellm/qwen3.8-max | top | dev-planner, plan-writer-complex, devops-reviewer |
 | plan-lite | bifrost-litellm/QWEN3.7-plus | mid | plan-writer-simple |
 | plan-flash | bifrost-litellm/GLM-5.3 (res) | mid | plan-bug |
-| review-strong | bifrost-litellm/Kimi K3 | top | dev-reviewer, rework, plan-reviewer-complex, research-writer-complex |
-| review-lite | bifrost-litellm/QWEN3.7-plus | mid | consistency-checker, bugfix |
+| review-strong | bifrost-litellm/Kimi K3 | top | dev-reviewer, plan-reviewer-complex, research-writer-complex |
+| rework-flash | bifrost-litellm/deepseek-v4.1-flash | low | rework |
+| review-lite | bifrost-litellm/QWEN3.7-plus | mid | bugfix |
+| consistency-flash | bifrost-litellm/mimo-v2.6-pro | low | consistency-checker |
 | review-flash | bifrost-litellm/GLM-5.3 (res) | mid | plan-reviewer-simple, research-reviewer |
 | triage-flash | bifrost-litellm/deepseek-v4.1-flash | low | bugfix-triage |
 | advisory | bifrost-litellm/HY4 | mid | advisor |
 | executor-strong | bifrost-litellm/GLM-5.3 (res) | mid | dev-professor |
 | executor-cheap | bifrost-litellm/MiniMax-M3 | low | worker, execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image |
-| docs | bifrost-litellm/mimo-v2.5-pro | low | docs-writer, research-writer-simple |
+| docs | bifrost-litellm/mimo-v2.6-pro | low | docs-writer, research-writer-simple |
 | docs-plan | bifrost-litellm/deepseek-v4.1-flash | low | docs-planner |
 | micro | bifrost-litellm/mimo-v2.5 | low | git-commit, generate-image, generate-image-gpt, scout |
 

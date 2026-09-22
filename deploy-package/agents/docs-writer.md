@@ -1,7 +1,7 @@
 ---
-description: Documentation writer. Generates any documentation type (README, API reference, ARCHITECTURE, tutorials, migration guides, code comments, changelogs). Xiaomi MiMo-V2.5-Pro.
+description: Documentation writer. Generates any documentation type (README, API reference, ARCHITECTURE, tutorials, migration guides, code comments, changelogs). MiMo-V2.6-Pro.
 mode: subagent
-model: bifrost-litellm/mimo-v2.5-pro
+model: bifrost-litellm/mimo-v2.6-pro
 temperature: 0.3
 permission:
   edit: allow
