@@ -1,7 +1,7 @@
 ---
 description: Rework agent. Fixes issues found during review. DeepSeek V4.1 Flash.
 mode: subagent
-model: bifrost-litellm/deepseek-v4.1-flash
+model: bifrost-litellm/openrouter/deepseek-v4.1-flash
 temperature: 0.2
 permission:
   edit: allow

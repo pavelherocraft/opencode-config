@@ -779,8 +779,8 @@
             }
           }
         },
-        "deepseek-v4.1-flash": {
-          "name": "deepseek-v4.1-flash",
+        "openrouter/deepseek-v4.1-flash": {
+          "name": "openrouter/deepseek-v4.1-flash",
           "limit": {
             "context": 1048576,
             "output": 384000
