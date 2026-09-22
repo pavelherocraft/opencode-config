@@ -54,7 +54,7 @@ OpenCode использует архитектуру с двумя primary-аг�
 | `Kimi K3` | bifrost-litellm | 3 | dev-reviewer, plan-reviewer-complex, research-writer-complex |
 | `mimo-v2.5` | bifrost-litellm | 4 | generate-image, generate-image-gpt, git-commit, scout |
 | `qwen3.8-max` | bifrost-litellm | 3 | dev-planner, devops-reviewer, plan-writer-complex |
-| `mimo-v2.6-pro` | bifrost-litellm | 3 | consistency-checker, docs-writer, research-writer-simple |
+| `xiaomi/mimo-v2.6-pro` | bifrost-litellm | 3 | consistency-checker, docs-writer, research-writer-simple |
 | `deepseek-v4.1-flash` | bifrost-litellm | 3 | bugfix-triage, docs-planner, rework |
 | `HY4` | bifrost-litellm | 1 | advisor |
 
@@ -407,10 +407,10 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **worker** | subagent | bifrost-litellm/stepfun/step-5-preview | 0.2 | allow | - | - | **allow** | view-image |
 | **utility** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | - | **allow** | view-image |
 | **rework** | subagent | bifrost-litellm/deepseek-v4.1-flash | 0.2 | allow | - | - | deny | view-image |
-| **research-writer-simple** | subagent | bifrost-litellm/mimo-v2.6-pro | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image, scout |
+| **research-writer-simple** | subagent | bifrost-litellm/xiaomi/mimo-v2.6-pro | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image, scout |
 | **plan-reviewer-simple** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **plan-bug** | subagent | bifrost-litellm/GLM-5.3 (res) | 0.1 | *.md | - | - | deny | view-image, scout | Writes SELF-CONTAINED bug plan to bug_plan.md (prewalk: strong planner) |
-| **docs-writer** | subagent | bifrost-litellm/mimo-v2.6-pro | 0.3 | allow | - | - | deny | view-image |
+| **docs-writer** | subagent | bifrost-litellm/xiaomi/mimo-v2.6-pro | 0.3 | allow | - | - | deny | view-image |
 | **docs-planner** | subagent | bifrost-litellm/deepseek-v4.1-flash | 0.2 | *.md | - | allow | deny | view-image | Writes docs plan to docs_plan.md |
 | **dev-professor** | subagent | bifrost-litellm/GLM-5.2 | 0.2 | allow | - | - | deny | view-image | Reviews plan from dev_plan.md before implementing |
 | **devops-readonly** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | allow | - | allow | deny | view-image |
@@ -427,7 +427,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **plan-writer-simple** | subagent | bifrost-litellm/QWEN3.7-plus | 0.1 | allow | - | allow | deny | devops-readonly, view-image, scout |
 | **execute-bug** | subagent | bifrost-litellm/MiniMax-M3 | 0.2 | allow | - | - | **allow** | view-image | Reads plan from bug_plan.md before implementing (prewalk: cheap executor; plan_gap escape hatch) |
 | **plan-reviewer-complex** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
-| **consistency-checker** | subagent | bifrost-litellm/mimo-v2.6-pro | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
+| **consistency-checker** | subagent | bifrost-litellm/xiaomi/mimo-v2.6-pro | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
 | **view-image** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
 | **git-commit** | subagent | bifrost-litellm/mimo-v2.5 | 0.1 | deny | deny | allow | **allow** | - | Only agent allowed to run git commit/push (gated via git-commit skill) |
 | **generate-image** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (default Gemini image model); git commit/push denied |
@@ -1366,7 +1366,7 @@ opencode --agent plankestrator
 | Routing tables | 2 | orchestrator (24), plankestrator (10) |
 | Pipelines | 13 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 | Custom commands | 5 | opencode.json |
-| Models | 10 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, mimo-v2.6-pro, deepseek-v4.1-flash, HY4, stepfun/step-5-preview) |
+| Models | 10 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, xiaomi/mimo-v2.6-pro, deepseek-v4.1-flash, HY4, stepfun/step-5-preview) |
 
 ### Quick Reference
 

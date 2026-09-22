@@ -76,9 +76,9 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | dev-professor | bifrost-litellm/GLM-5.3 (res) |
 | dev-reviewer | bifrost-litellm/Kimi K3 |
 | rework | bifrost-litellm/deepseek-v4.1-flash |
-| consistency-checker | bifrost-litellm/mimo-v2.6-pro |
+| consistency-checker | bifrost-litellm/xiaomi/mimo-v2.6-pro |
 | advisor | bifrost-litellm/HY4 |
-| docs-writer | bifrost-litellm/mimo-v2.6-pro |
+| docs-writer | bifrost-litellm/xiaomi/mimo-v2.6-pro |
 | docs-planner | bifrost-litellm/deepseek-v4.1-flash |
 | utility | bifrost-litellm/MiniMax-M3 |
 | mcp-github | bifrost-litellm/MiniMax-M3 |
@@ -93,7 +93,7 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | plan-writer-complex | bifrost-litellm/qwen3.8-max |
 | plan-reviewer-simple | bifrost-litellm/GLM-5.3 (res) |
 | plan-reviewer-complex | bifrost-litellm/Kimi K3 |
-| research-writer-simple | bifrost-litellm/mimo-v2.6-pro |
+| research-writer-simple | bifrost-litellm/xiaomi/mimo-v2.6-pro |
 | research-writer-complex | bifrost-litellm/Kimi K3 |
 | research-reviewer | bifrost-litellm/GLM-5.3 (res) |
 | devops-readonly | bifrost-litellm/MiniMax-M3 |
@@ -119,14 +119,14 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | review-strong | bifrost-litellm/Kimi K3 | top | dev-reviewer, plan-reviewer-complex, research-writer-complex |
 | rework-flash | bifrost-litellm/deepseek-v4.1-flash | low | rework |
 | review-lite | bifrost-litellm/QWEN3.7-plus | mid | bugfix |
-| consistency-flash | bifrost-litellm/mimo-v2.6-pro | low | consistency-checker |
+| consistency-flash | bifrost-litellm/xiaomi/mimo-v2.6-pro | low | consistency-checker |
 | review-flash | bifrost-litellm/GLM-5.3 (res) | mid | plan-reviewer-simple, research-reviewer |
 | triage-flash | bifrost-litellm/deepseek-v4.1-flash | low | bugfix-triage |
 | advisory | bifrost-litellm/HY4 | mid | advisor |
 | executor-strong | bifrost-litellm/GLM-5.3 (res) | mid | dev-professor |
 | executor-cheap | bifrost-litellm/MiniMax-M3 | low | execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image |
 | executor-step5 | bifrost-litellm/stepfun/step-5-preview | low | worker |
-| docs | bifrost-litellm/mimo-v2.6-pro | low | docs-writer, research-writer-simple |
+| docs | bifrost-litellm/xiaomi/mimo-v2.6-pro | low | docs-writer, research-writer-simple |
 | docs-plan | bifrost-litellm/deepseek-v4.1-flash | low | docs-planner |
 | micro | bifrost-litellm/mimo-v2.5 | low | git-commit, generate-image, generate-image-gpt, scout |
 

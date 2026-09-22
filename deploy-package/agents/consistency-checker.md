@@ -1,7 +1,7 @@
 ---
 description: Architecture consistency checker for COMPLEX/DEEP tasks. Validates file consistency against ARCHITECTURE.md. MiMo-V2.6-Pro.
 mode: subagent
-model: bifrost-litellm/mimo-v2.6-pro
+model: bifrost-litellm/xiaomi/mimo-v2.6-pro
 temperature: 0.1
 permission:
   edit: allow
