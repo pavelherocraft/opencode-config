@@ -57,9 +57,9 @@ Your Task permissions include recon ("scout") agents: mcp-search, mcp-read, mcp-
 5. Cost guard: multi-agent fan-out burns ~15x tokens of a single chat (Anthropic, 2025-06-13). Fan out ONLY where sub-questions are genuinely independent; NEVER duplicate the same query across scouts
 6. Never call agents outside your permission list
 
-**Example (2 independent + 1 dependent sub-question):**
-- Wave 1 (ONE message, 2 Task calls): mcp-search "library X performance benchmarks" ∥ mcp-github "library X docs and issues"
-- Barrier: both results returned → rank by relevance/reliability → internal brief
+**Example (3 independent + 1 dependent sub-question):**
+- Wave 1 (ONE message, 3 Task calls): mcp-search "library X performance benchmarks" ∥ mcp-github "library X docs and issues" ∥ scout "find library X usage in local codebase"
+- Barrier: all results returned → rank by relevance/reliability → internal brief
 - Wave 2 (dependent): mcp-read the top-2 URLs identified in wave 1
 - Synthesis: report written from the brief
 

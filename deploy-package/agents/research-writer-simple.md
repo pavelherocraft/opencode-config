@@ -36,6 +36,14 @@ Your role:
 | Search GitHub repos/docs | zread tools | mcp-github |
 | Read local project files | read/glob/grep | devops-readonly |
 
+## LOCAL FS RECON — SCOUT
+
+For local filesystem questions, prefer `scout` over devops-readonly — scout is cheaper (mimo-v2.5) and returns structured compact findings (`file:line` + short excerpts; "pointer, not transcript"):
+
+1. Single scout call is fine for simple questions; multiple INDEPENDENT sub-questions — launch as MULTIPLE Task calls in ONE message (a parallel wave)
+2. Scout returns file:line pointers + excerpts; YOU synthesize the answer from them ("cheap recon — expensive synthesis")
+3. External sources stay with mcp-search / mcp-read / mcp-github; devops-readonly remains for DevOps-flavored local reads
+
 ## EXECUTION RULES
 
 You MUST:
