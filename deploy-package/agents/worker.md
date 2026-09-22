@@ -1,7 +1,7 @@
 ---
 description: Development worker. Implements simple straightforward code changes.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/stepfun/step-5-preview
 temperature: 0.2
 permission:
   edit: allow

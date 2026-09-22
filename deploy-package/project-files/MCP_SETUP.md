@@ -48,7 +48,8 @@ OpenCode использует архитектуру с двумя primary-аг�
 | Model | Provider | Agents Count | Agents |
 |-------|----------|--------------|-------|
 | `QWEN3.7-plus` | bifrost-litellm | 6 | orchestrator, plankestrator, orchestrator-identity-probe, plankestrator-identity-probe, bugfix, plan-writer-simple |
-| `MiniMax-M3` | bifrost-litellm | 10 | worker, execute-bug, devops-agent, devops-readonly, view-image, utility, mcp-github, mcp-read, mcp-search, summarizer |
+| `MiniMax-M3` | bifrost-litellm | 9 | execute-bug, devops-agent, devops-readonly, view-image, utility, mcp-github, mcp-read, mcp-search, summarizer |
+| `stepfun/step-5-preview` | bifrost-litellm | 1 | worker |
 | `GLM-5.3 (res)` | bifrost-litellm | 4 | dev-professor, plan-reviewer-simple, research-reviewer, plan-bug |
 | `Kimi K3` | bifrost-litellm | 3 | dev-reviewer, plan-reviewer-complex, research-writer-complex |
 | `mimo-v2.5` | bifrost-litellm | 4 | generate-image, generate-image-gpt, git-commit, scout |
@@ -403,7 +404,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **bugfix** | subagent | bifrost-litellm/QWEN3.7-plus | 0.2 | allow | - | - | deny | view-image |
 | **mcp-read** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | deny | view-image |
 | **plan-writer-complex** | subagent | bifrost-litellm/GLM-5.2 | 0.1 | allow | - | allow | deny | devops-readonly, view-image, scout |
-| **worker** | subagent | bifrost-litellm/MiniMax-M3 | 0.2 | allow | - | - | **allow** | view-image |
+| **worker** | subagent | bifrost-litellm/stepfun/step-5-preview | 0.2 | allow | - | - | **allow** | view-image |
 | **utility** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | - | **allow** | view-image |
 | **rework** | subagent | bifrost-litellm/deepseek-v4.1-flash | 0.2 | allow | - | - | deny | view-image |
 | **research-writer-simple** | subagent | bifrost-litellm/mimo-v2.6-pro | 0.1 | allow | - | allow | deny | mcp-search, mcp-read, mcp-github, devops-readonly, view-image, scout |
@@ -1365,7 +1366,7 @@ opencode --agent plankestrator
 | Routing tables | 2 | orchestrator (24), plankestrator (10) |
 | Pipelines | 13 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 | Custom commands | 5 | opencode.json |
-| Models | 9 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, mimo-v2.6-pro, deepseek-v4.1-flash, HY4) |
+| Models | 10 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, mimo-v2.6-pro, deepseek-v4.1-flash, HY4, stepfun/step-5-preview) |
 
 ### Quick Reference
 

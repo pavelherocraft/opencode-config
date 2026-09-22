@@ -67,7 +67,7 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 
 | Agent | Model |
 |-------|-------|
-| worker | bifrost-litellm/MiniMax-M3 |
+| worker | bifrost-litellm/stepfun/step-5-preview |
 | bugfix-triage | bifrost-litellm/deepseek-v4.1-flash |
 | bugfix | bifrost-litellm/QWEN3.7-plus |
 | plan-bug | bifrost-litellm/GLM-5.3 (res) |
@@ -124,7 +124,8 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | triage-flash | bifrost-litellm/deepseek-v4.1-flash | low | bugfix-triage |
 | advisory | bifrost-litellm/HY4 | mid | advisor |
 | executor-strong | bifrost-litellm/GLM-5.3 (res) | mid | dev-professor |
-| executor-cheap | bifrost-litellm/MiniMax-M3 | low | worker, execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image |
+| executor-cheap | bifrost-litellm/MiniMax-M3 | low | execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image |
+| executor-step5 | bifrost-litellm/stepfun/step-5-preview | low | worker |
 | docs | bifrost-litellm/mimo-v2.6-pro | low | docs-writer, research-writer-simple |
 | docs-plan | bifrost-litellm/deepseek-v4.1-flash | low | docs-planner |
 | micro | bifrost-litellm/mimo-v2.5 | low | git-commit, generate-image, generate-image-gpt, scout |
