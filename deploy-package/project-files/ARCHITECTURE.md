@@ -97,7 +97,7 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | research-writer-complex | bifrost-litellm/Kimi K3 |
 | research-reviewer | bifrost-litellm/GLM-5.3 (res) |
 | devops-readonly | bifrost-litellm/MiniMax-M3 |
-| git-commit | bifrost-litellm/mimo-v2.5 |
+| git-commit | bifrost-litellm/MiniMax-M3 |
 | generate-image | bifrost-litellm/mimo-v2.5 |
 | generate-image-gpt | bifrost-litellm/mimo-v2.5 |
 | view-image | bifrost-litellm/MiniMax-M3 |
@@ -124,11 +124,11 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | triage-flash | bifrost-litellm/deepseek-v4.1-flash | low | bugfix-triage |
 | advisory | bifrost-litellm/HY4 | mid | advisor |
 | executor-strong | bifrost-litellm/GLM-5.3 (res) | mid | dev-professor |
-| executor-cheap | bifrost-litellm/MiniMax-M3 | low | execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image |
+| executor-cheap | bifrost-litellm/MiniMax-M3 | low | execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image, git-commit |
 | executor-step5 | bifrost-litellm/stepfun/step-5-preview | low | worker |
 | docs | bifrost-litellm/xiaomi/mimo-v2.6-pro | low | docs-writer, research-writer-simple |
 | docs-plan | bifrost-litellm/deepseek-v4.1-flash | low | docs-planner |
-| micro | bifrost-litellm/mimo-v2.5 | low | git-commit, generate-image, generate-image-gpt, scout |
+| micro | bifrost-litellm/mimo-v2.5 | low | generate-image, generate-image-gpt, scout |
 
 Контроль суммы: 2 primary + 35 subagents = 37 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.
 

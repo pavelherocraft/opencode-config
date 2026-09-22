@@ -48,11 +48,11 @@ OpenCode использует архитектуру с двумя primary-аг�
 | Model | Provider | Agents Count | Agents |
 |-------|----------|--------------|-------|
 | `QWEN3.7-plus` | bifrost-litellm | 6 | orchestrator, plankestrator, orchestrator-identity-probe, plankestrator-identity-probe, bugfix, plan-writer-simple |
-| `MiniMax-M3` | bifrost-litellm | 9 | execute-bug, devops-agent, devops-readonly, view-image, utility, mcp-github, mcp-read, mcp-search, summarizer |
+| `MiniMax-M3` | bifrost-litellm | 10 | execute-bug, devops-agent, devops-readonly, view-image, utility, mcp-github, mcp-read, mcp-search, summarizer, git-commit |
 | `stepfun/step-5-preview` | bifrost-litellm | 1 | worker |
 | `GLM-5.3 (res)` | bifrost-litellm | 4 | dev-professor, plan-reviewer-simple, research-reviewer, plan-bug |
 | `Kimi K3` | bifrost-litellm | 3 | dev-reviewer, plan-reviewer-complex, research-writer-complex |
-| `mimo-v2.5` | bifrost-litellm | 4 | generate-image, generate-image-gpt, git-commit, scout |
+| `mimo-v2.5` | bifrost-litellm | 3 | generate-image, generate-image-gpt, scout |
 | `qwen3.8-max` | bifrost-litellm | 3 | dev-planner, devops-reviewer, plan-writer-complex |
 | `xiaomi/mimo-v2.6-pro` | bifrost-litellm | 3 | consistency-checker, docs-writer, research-writer-simple |
 | `deepseek-v4.1-flash` | bifrost-litellm | 3 | bugfix-triage, docs-planner, rework |
@@ -429,7 +429,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **plan-reviewer-complex** | subagent | bifrost-litellm/Kimi K2.7 | 0.1 | allow | - | allow | deny | devops-readonly, view-image |
 | **consistency-checker** | subagent | bifrost-litellm/xiaomi/mimo-v2.6-pro | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
 | **view-image** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
-| **git-commit** | subagent | bifrost-litellm/mimo-v2.5 | 0.1 | deny | deny | allow | **allow** | - | Only agent allowed to run git commit/push (gated via git-commit skill) |
+| **git-commit** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | **allow** | - | Only agent allowed to run git commit/push (gated via git-commit skill) |
 | **generate-image** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (default Gemini image model); git commit/push denied |
 | **generate-image-gpt** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (GPT/DALL-E path, on explicit user request only); git commit/push denied |
 | **scout** | subagent | bifrost-litellm/mimo-v2.5 | 0.1 | deny | deny | allow | deny | – | Local FS recon: read/glob/grep only; task: deny; no opencode.json section (frontmatter-only); never a pipeline step |

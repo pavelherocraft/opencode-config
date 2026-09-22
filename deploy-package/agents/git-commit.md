@@ -1,7 +1,7 @@
 ---
 description: "Git commit agent — the ONLY agent allowed to run git commit/push. Use for ANY request to commit, push, save changes to git, or tag (including 'закоммить', 'запушь', 'сохрани в git'). Direct git commit/push is permission-denied for everyone else — when denied, delegate here. Creates clean conventional commits via the git-commit skill script (gated — secrets, sensitive files, conflict markers); pushes only when explicitly requested."
 mode: subagent
-model: bifrost-litellm/mimo-v2.5
+model: bifrost-litellm/MiniMax-M3
 temperature: 0.1
 permission:
   edit: deny
