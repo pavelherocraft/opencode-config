@@ -392,6 +392,85 @@
           },
           "attachment": true
         },
+        "stepfun/step-3.5-flash-2603": {
+          "name": "stepfun/step-3.5-flash-2603",
+          "limit": {
+            "context": 262144,
+            "output": 65536
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          }
+        },
+        "stepfun/step-3.7-flash": {
+          "name": "stepfun/step-3.7-flash",
+          "limit": {
+            "context": 262144,
+            "output": 230400
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ]
+          },
+          "attachment": true
+        },
+        "stepfun/step-5-preview": {
+          "name": "stepfun/step-5-preview",
+          "limit": {
+            "context": 1000000,
+            "output": 65536
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ]
+          },
+          "attachment": true
+        },
         "tencent/Hy3": {
           "name": "tencent/Hy3",
           "limit": {
@@ -504,6 +583,66 @@
               "reasoningEffort": "max"
             }
           }
+        },
+        "xiaomi/mimo-v2.6-flash": {
+          "name": "xiaomi/mimo-v2.6-flash",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video",
+              "audio"
+            ]
+          },
+          "attachment": true
+        },
+        "xiaomi/mimo-v2.6-pro": {
+          "name": "xiaomi/mimo-v2.6-pro",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video",
+              "audio"
+            ]
+          },
+          "attachment": true
         },
         "gemini/gemini-3-pro-image": {
           "name": "gemini/gemini-3-pro-image",
