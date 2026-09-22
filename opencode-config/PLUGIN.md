@@ -85,9 +85,9 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 **Purpose**: Agent detection, identity tracking, JSON validation, and workflow logging.
 
 **Behavior**: Checks `event.type` to handle:
-1. `session.created` — Detect initial agent identity from session data; reset workflow tracking
+1. `session.created` — Detect initial agent identity from session data; reset workflow tracking. **v4:** CHILD sessions (Task subagents, detected via `parentID` in the payload) return early — they do NOT reset the parent's identity-lock/workflow state (parentID guard; logs `CHILD session created (parentID=...) — primary-agent state PRESERVED`)
 2. `session.idle` — Log workflow summary when agent finishes
-3. `message.updated` — Parse JSON from messages to detect agent (if not yet known) and validate output
+3. `message.updated` — Parse JSON from messages to detect agent (if not yet known) and validate output. **v4:** skipped entirely while a Task subagent runs (`activeTaskDepth > 0` — subagent messages belong to the subagent, e.g. research-writer legitimately writes `## Findings`); additionally detects self-work content markers (`SELF_WORK_MARKERS`) in the locked plankestrator's own assistant messages (role-guard: user messages are never checked) and escalates by setting `selfWorkDetected = true` → the next `read`/`grep`/`glob` throws (see INSPECTION GATE)
 
 **Agent Detection Priority**:
 1. Session data (title, agent field) on `session.created`
@@ -101,12 +101,15 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 **Purpose**: Enforce routing table compliance + fallback agent detection.
 
 **Behavior**:
-1. **Reverse routing lookup**: If `currentAgent` is unknown and a `task` call is made, look up which primary agent can call this subagent
-2. Check if tool is `task` (agent delegation)
-3. Extract target agent name from tool parameters
-4. Look up current agent's whitelist
-5. If target not in whitelist → throw error, block execution
-6. If target in whitelist → allow execution, log valid routing
+1. **v4 depth-guard (first)**: If `activeTaskDepth > 0` (a Task subagent is running), the call belongs to the SUBAGENT, not the locked primary agent → skip ALL enforcement. Nested `task` calls still increment the counter and log `TASK CALL WHILE SUBAGENT ACTIVE` (warn). This guard is what keeps Gate A from blocking subagent `edit`/`write`/`bash` calls — without it every pipeline breaks
+2. **Reverse routing lookup**: If `currentAgent` is unknown and a `task` call is made, look up which primary agent can call this subagent
+3. **v4 JSON-before-Task gate (tightened)**: LOCKED primary agents get NO `isFirstTaskCall` grace — valid JSON is required before any non-auxiliary Task call. Auxiliary targets (`AUXILIARY_TASK_TARGETS` = identity probes + `view-image`) are exempt and legally callable before the classification JSON
+4. **v4 INSPECTION GATE (plankestrator only)**: `read`/`grep`/`glob` throw if (a) the pipeline already started (any prior task call to a non-auxiliary target), (b) `selfWorkDetected` is set, or (c) the inspection budget `INSPECTION_BUDGET = 3` is exhausted. Runs BEFORE `workflowSteps.push()` so the current call is not counted against itself
+5. Check if tool is `task` (agent delegation)
+6. Extract target agent name from tool parameters
+7. Look up current agent's whitelist
+8. If target not in whitelist → throw error, block execution
+9. If target in whitelist → allow execution, increment `activeTaskDepth` (subagent starts), log valid routing
 
 #### `tool.execute.after`
 
@@ -115,9 +118,10 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 **Purpose**: Log workflow step completion.
 
 **Behavior**:
-1. Log tool name and result status
-2. Track workflow progress
-3. Enable debugging of pipeline execution
+1. **v4**: If the completed tool is `task`, decrement `activeTaskDepth` (clamped at 0) — the subagent finished (success or error), enforcement returns to the parent session
+2. Log tool name and result status
+3. Track workflow progress
+4. Enable debugging of pipeline execution
 
 ---
 
@@ -218,6 +222,27 @@ const ROUTING_TABLES = {
 };
 ```
 
+### Tool Allowance Rules for Primary Agents
+
+Primary agents (`orchestrator`, `plankestrator`) are pure routers. The plugin enforces a **single tool gate** at `tool.execute.before` (lines ~457–507 of `workflow-enforcement.ts`):
+
+| Tool | Allowed for Primary Agents? |
+|------|-----------------------------|
+| `task` | ✅ Yes (primary purpose — delegate to specialists) |
+| `read` | ✅ Yes (inspection convenience for quick lookups) |
+| `glob` | ✅ Yes (inspection convenience for quick lookups) |
+| `grep` | ✅ Yes (inspection convenience for quick lookups) |
+| `todowrite` | ❌ No — primary agents don't manage todos |
+| `question` | ❌ No — primary agents don't ask the user |
+| `bash`, `edit`, `write`, `patch`, `webfetch` | ❌ No — hard block with error |
+| Any MCP action tool (`unity-mcp_*`, `serena_*`, `zai_*` write-side) | ❌ No — hard block with error |
+
+**Why read/glob/grep are allowed:**
+- Primary agents need minimal context to make good routing decisions (e.g. peek at `AGENTS.md` or `ARCHITECTURE.md` to inform classification).
+- Heavy investigation is still delegated: `mcp-read` for file reading, `mcp-search` for codebase search, `devops-readonly` for read-only ops queries.
+
+**Historical note:** Earlier plugin revisions had a second contradictory gate (the so-called "Gate B") that blocked `read` / `glob` / `grep` despite this gate allowing them. That gate was removed because it caused the model to fall back to producing plan/research content in its own message body when read was blocked. See `plugins/workflow-enforcement.ts` comments around line 567 for the rationale.
+
 ### Reviewer Severity Validation (v5)
 
 Plugin constants: `SEVERITY_AGENTS = ["dev-reviewer", "consistency-checker", "advisor"(с Phase 4)]`, `VALID_SEVERITIES = ["nit","concern","blocker"]`, `EMPTY_FINDING_PHRASES`, `MAX_NON_BLOCKER_FINDINGS_PER_UPDATE = 4`, `seenFindings` (session-scoped дедуп, сброс на top-level session.created).
@@ -301,6 +326,71 @@ Expected format:
   "pipeline": ["agent1", "agent2"] or []
 }
 ```
+
+### Inspection After Pipeline Start (v4)
+
+When the identity-locked plankestrator calls `read`/`grep`/`glob` after the first pipeline Task call:
+
+```
+⛔ INSPECTION AFTER PIPELINE START — DELEGATE INSTEAD
+
+You are running as: plankestrator (identity-locked).
+The pipeline has already started — ALL inspection (read/grep/glob) is now FORBIDDEN.
+This is the "Turns 2..N" rule (same rule orchestrator follows).
+
+Fix: advance the pipeline. Identity line → JSON block → Task call with the NEXT
+agent from your routing table:
+   - plankestrator-identity-probe
+   - plan-writer-simple
+   ...
+
+Need file/code context? Delegate to devops-readonly via Task — never read yourself.
+```
+
+**Condition**: `identityLocked && lockedAgentName === "plankestrator"`, tool is `read`/`grep`/`glob`, and `workflowSteps` contains a task call whose target is NOT an auxiliary agent (auxiliary = identity probes + `view-image` — they do not count as pipeline start).
+
+**Model fix**: advance the pipeline (identity line → JSON → Task call with the next agent); delegate context needs to `devops-readonly`.
+
+### Inspection Budget Exhausted (v4)
+
+When plankestrator exceeds `INSPECTION_BUDGET = 3` inspection calls (counted across the whole session, Turn 1 included):
+
+```
+⛔ INSPECTION BUDGET EXHAUSTED — CLASSIFY AND DELEGATE NOW
+
+You are running as: plankestrator (identity-locked).
+You have used all 3 allowed inspection calls (read/grep/glob).
+Further inspection is self-work, not classification.
+
+Fix: STOP inspecting. Type and complexity are determined from the REQUEST TEXT
+(number of questions / topics / objects to compare), NOT from files.
+Identity line → JSON block → Task call with next_agent from your routing table.
+```
+
+**Condition**: `inspectionsUsed >= INSPECTION_BUDGET` and the pipeline has not started yet (post-pipeline inspection is caught by the earlier, stricter check above). The prompt tells the model max 2 calls — the plugin's 3 is the hard backstop (prompt stricter than the gate by design).
+
+**Model fix**: classify from the request text and delegate immediately.
+
+### Self-Work Content Detected (v4)
+
+When plankestrator's OWN previous assistant message contained plan/research content markers (`## Findings`, `## Analysis`, `## Research`, `Executive Summary`, `## Recommendations`, `## Overview`, `### Root Cause`, `## Выводы`, `## Результаты исследования`) and the model tries to inspect further:
+
+```
+⛔ SELF-WORK CONTENT DETECTED IN YOUR PREVIOUS MESSAGE
+
+You are running as: plankestrator (identity-locked).
+Your last message contained plan/research content markers (e.g. "## Findings",
+"## Analysis", "Executive Summary"). Producing plan/research CONTENT is self-work —
+it belongs to plan-writer-* / research-writer-* agents, NOT to you.
+
+Fix: do NOT continue investigating. Identity line → JSON block → ONE Task call
+with next_agent from your routing table → ack line. Your message text must contain
+NOTHING else.
+```
+
+**Condition**: `selfWorkDetected` was set by the SELF-WORK CONTENT CHECK in `message.updated` (assistant messages only — user messages containing such headings are never flagged), and a subsequent `read`/`grep`/`glob` call arrives. Task calls are NOT blocked — delegation is the desired correction.
+
+**Model fix**: stop investigating, delegate.
 
 ---
 
@@ -427,6 +517,19 @@ function validateJSONOutput(json: any, agent: string): ValidationResult {
   return { valid: errors.length === 0 && missingFields.length === 0, errors, missingFields };
 }
 ```
+
+### JSON Enforcement Gate (v4 changes)
+
+Two tightenings apply to the JSON-before-Task gate in `tool.execute.before`:
+
+1. **`INVALID JSON OUTPUT` log level: warn → error (v4).** Invalid JSON from a primary agent is now logged as `level: "error"` instead of `warn`. The log alone never blocked anything — the actual enforcement is the throw-gate below.
+
+2. **No `isFirstTaskCall` grace for LOCKED agents (v4).** Previously the first task call of a session bypassed the JSON requirement (race mitigation: `session.created` might not have detected the agent yet). Now:
+   - `identityLocked === true` → grace is OFF (`jsonGracePeriod = isFirstTaskCall && !identityLocked`). No race exists for locked sessions: the lock is established before the model's first turn.
+   - `identityLocked === false` → grace remains (genuine race mitigation for unlocked sessions).
+   - **Exception — auxiliary targets** (`AUXILIARY_TASK_TARGETS` = `IDENTITY_PROBE_AGENTS` + `view-image`): these may legally be called as their own turn BEFORE the classification JSON (plankestrator.md Turn 1 step 3 — view-image for pre-classification image inspection). They never trigger the JSON gate.
+
+Known accepted edge: `message.updated` (JSON validation) can theoretically be processed AFTER `tool.execute.before` of the first pipeline call → one false throw. Self-healing: the model re-sends JSON + Task on the next turn, `hasOutputtedJSON` is then `true`. Expected to be rare; monitor occurrence (see Known Issues).
 
 ---
 
@@ -808,6 +911,24 @@ grep -E "(WORKFLOW VIOLATION|IDENTITY DRIFT|INVALID JSON|Workflow enforcement)" 
 
 **Workaround**: This is expected behavior for manual switches; review session timeline.
 
+### 6. Parallel Second Task Call Skips Routing Check (v4)
+
+**Issue**: While a Task subagent runs (`activeTaskDepth > 0`), the depth-guard returns early for ALL tool calls — including a second `task` call fired in parallel by the parent in the same turn. Such a call bypasses routing-table validation: the plugin increments the counter and logs a warn (`TASK CALL WHILE SUBAGENT ACTIVE`) but does not block. Nested delegations from subagents (legitimate) take the same path.
+
+**Symptoms**:
+- `TASK CALL WHILE SUBAGENT ACTIVE` warn in logs with `depth ≥ 2`
+- A parallel Task call proceeds without whitelist validation
+
+**Workaround**: Both primary agents' prompts forbid more than ONE Task call per turn. Full per-turn enforcement requires message-turn boundaries not exposed by current hooks (see `PLANKESTRATOR_FIX_PLAN.md` → «Не реализуем сейчас»).
+
+### 7. activeTaskDepth Could Stick Above Zero (v4, theoretical)
+
+**Issue**: If `tool.execute.after` does not fire for a `task` call under certain error conditions, `activeTaskDepth` never returns to 0 and enforcement stays silently suspended for the rest of the process.
+
+**Symptoms**: No gate logs (`Valid routing`, violations) despite obvious violations; `rg "activeTaskDepth|TASK CALL WHILE SUBAGENT" <latest log>` shows the imbalance.
+
+**Workaround**: `activeTaskDepth = 0` is force-reset on every top-level `session.created` (op 1.10) — starting a new session clears the stick. Optional hardening if this proves real: timestamp-based auto-reset after 30 minutes.
+
 ---
 
 ## 11. Configuration Reference
@@ -842,6 +963,37 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
   }
 }
 ```
+
+### v4 State & Constants (self-work prevention)
+
+```typescript
+// Максимум read+grep+glob за сессию, ВСЕ — до первого pipeline Task-вызова.
+// Промпт требует max 2 — плагин оставляет 1 вызов запаса (промпт строже закона).
+const INSPECTION_BUDGET = 3
+
+// Маркеры self-work контента в сообщении locked plankestrator (заголовочные
+// токены — снижают false-positive; русские — модель отвечает по-русски).
+const SELF_WORK_MARKERS: Record<string, string[]> = {
+  plankestrator: [
+    "## Findings", "## Research", "Executive Summary", "## Analysis",
+    "### Root Cause", "## Recommendations", "## Overview",
+    "## Выводы", "## Результаты исследования"
+  ]
+}
+
+// Маркер self-work-контента в последнем assistant-сообщении родителя:
+// выставляется SELF-WORK CONTENT CHECK в message.updated, сбрасывается
+// только на session.created верхнего уровня.
+let selfWorkDetected: boolean = false
+
+// >0 пока выполняется Task-субагент — enforcement приостановлен
+// (атрибуция вызовов субагента родителю запрещена).
+// Инкременты: валидный routing, built-in bypass, вложенный task при depth>0.
+// Декремент: tool.execute.after для task. Сброс: session.created верхнего уровня.
+let activeTaskDepth = 0
+```
+
+Reset happens on TOP-LEVEL `session.created` only; child (subagent) sessions with a `parentID` preserve parent state (parentID guard).
 
 ### Routing Table Configuration
 

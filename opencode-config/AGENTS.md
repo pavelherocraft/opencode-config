@@ -397,7 +397,7 @@ Research workflows include writing and review.
 
 **Parallel recon (research-writer-complex):** top-level pipeline is linear; the writer fans out internally — independent sub-questions go as ONE parallel Task wave (mcp-search / mcp-read / mcp-github / devops-readonly / scout, cheap models), then barrier (all results in, ranked into a brief), then synthesis on the strong model:
 
-`decompose → [mcp-search ∥ mcp-read ∥ mcp-github ∥ scout] → barrier (rank + brief) → synthesis → RESEARCH.md`
+`decompose → [mcp-search ∥ mcp-read ∥ mcp-github ∥ devops-readonly ∥ scout] → barrier (rank + brief) → synthesis (Kimi K3) → RESEARCH.md`
 
 Waves/barrier are prompt-level behavior of the writer; plugin and PIPELINE TABLE are unchanged (enforcement suppressed in subsessions; task-permissions already granted).
 

@@ -93,6 +93,28 @@ Output format:
 [any potential issues]
 ```
 
+## File Output Behavior
+
+When user explicitly requests to write the plan to a file (e.g., "write plan to PLAN.md"):
+
+1. **Write the plan** to the specified .md file (built-in edit tool, directly — never delegate writing)
+2. **Report the file path** in your final output so the next agent (plan-reviewer-simple) knows where to read
+
+**Output format when writing to file:**
+```json
+{
+  "plan_file": "path/to/PLAN.md",
+  "plan_written": true,
+  "next_action": "plan-reviewer-simple should read from plan_file"
+}
+```
+
+**Standard field names** (ARCHITECTURE.md §3 "File-Pointer Fields"): `plan_file`, `plan_written`, `next_action`. Pointer, not transcript — never paste the plan content into the JSON.
+
+**If no file specified:**
+- Output the plan in your response body (default behavior)
+- plan-reviewer-simple will read from conversation context
+
 Rules:
 - Keep plan concise
 - Focus on implementation steps

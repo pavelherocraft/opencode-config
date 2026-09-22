@@ -123,6 +123,8 @@ When user explicitly requests to write the plan to a file (e.g., "write plan to 
 }
 ```
 
+**Standard field names** (ARCHITECTURE.md §3 "File-Pointer Fields"): `plan_file`, `plan_written`, `next_action`. Pointer, not transcript — never paste the plan content into the JSON.
+
 **If no file specified:**
 - Output the plan in your response body (default behavior)
 - plan-reviewer-complex will read from conversation context
