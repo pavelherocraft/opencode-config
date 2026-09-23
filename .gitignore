@@ -10,3 +10,8 @@ opencode.db-shm
 opencode.db-wal
 log/
 tool-output/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
