@@ -330,7 +330,7 @@ DEV SIMPLE has two variants depending on whether a plan exists:
 | DEV SIMPLE (без плана) | worker → utility | Straightforward tasks with no prior planning — direct implementation and validation. |
 | DEV SIMPLE (с планом) | worker → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility | Tasks where a plan was created beforehand — implementation is validated against the plan by consistency-checker. If issues found, returns to worker for fixes (up to 3 iterations). |
 
-**Decision rule:** If plan_exists=true, use the "с планом" variant. Otherwise, use the "без плана" variant.
+**Decision rule:** If plan_exists=true, use the "с планом" variant. Otherwise, use the "без плана" variant. **PLAN EXISTS OVERRIDE:** plan_exists=true + not SUPERCOMPLEX → always SIMPLE (с планом) — an existing plan replaces in-pipeline planning; never reclassify a planned ≤3-step task as COMPLEX.
 
 
 ### DEV COMPLEX
@@ -339,13 +339,13 @@ DEV SIMPLE has two variants depending on whether a plan exists:
 dev-planner -> dev-professor -> advisor -> dev-reviewer -> rework -> consistency-checker -> [rework loop: rework → consistency-checker, max 3] -> utility
 
 
-Complex development tasks include planning, guidance, review, rework, and consistency validation.
+Complex development tasks include planning, guidance, review, rework, and consistency validation. DEV COMPLEX implies plan_exists=false — dev-planner creates dev_plan.md in-pipeline; if a plan file already exists, the task is SIMPLE (с планом) or SUPERCOMPLEX, never COMPLEX. Decision tree: ARCHITECTURE.md §2 "DEV Complexity Classification".
 
 ### DEV SUPERCOMPLEX
 
 PER PLAN STEP: dev-planner -> dev-professor -> dev-reviewer -> consistency-checker -> [rework loop: rework → consistency-checker, max 3] -> utility
 
-Super-complex tasks with a large plan (>3 steps) or huge volume of work. The full review/consistency/syntax chain runs **for every step** of the plan. Triggered by explicit request OR when a plan with more than 3 steps and huge volume of work exists.
+Super-complex tasks with a large plan (>3 steps) or huge volume of work. The full review/consistency/syntax chain runs **for every step** of the plan. Triggered by explicit request OR when a plan with more than 3 steps and huge volume of work exists OR when dev-planner MODE: DECOMPOSITION (called BEFORE final classification because the task appears to have >3 steps with no plan) returns >3 steps + huge volume. DECOMPOSITION paths set plan_exists: true, plan_source: "DECOMPOSITION" — complexity: SUPERCOMPLEX with plan_exists: false is INVALID. Decision tree: ARCHITECTURE.md §2 "DEV Complexity Classification".
 
 **Step list** (determined ONCE, priority order): (1) user named the steps explicitly → used verbatim; (2) research/plan file has step headings (`## P0-1`, `## Phase 1`, `## Шаг 1`) → orchestrator extracts them via its one classification `read` or a single `mcp-read` Task call; (3) no list anywhere → one `dev-planner` call with `MODE: DECOMPOSITION` returning JSON `{decomposition: true, steps: [{id, title, description}, ...]}` without writing dev_plan.md. Then the per-step loop: dev-planner (writes dev_plan.md for THIS step) → dev-professor (reads dev_plan.md, implements the step) → dev-reviewer → consistency-checker → [rework loop, max 3] → utility → next step. Never one dev-professor call for the whole task.
 

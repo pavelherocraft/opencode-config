@@ -56,7 +56,7 @@ OpenCode использует архитектуру с двумя primary-аг�
 | `qwen3.8-max` | bifrost-litellm | 3 | dev-planner, devops-reviewer, plan-writer-complex |
 | `xiaomi/mimo-v2.6-pro` | bifrost-litellm | 3 | consistency-checker, docs-writer, research-writer-simple |
 | `openrouter/deepseek-v4.1-flash` | bifrost-litellm | 3 | bugfix-triage, docs-planner, rework |
-| `HY4` | bifrost-litellm | 1 | advisor |
+| `tencent/Hy4` | bifrost-litellm | 1 | advisor |
 
 ### MCP Servers
 
@@ -309,12 +309,14 @@ For image analysis tasks, ALWAYS use view-image agent FIRST:
 |-----------|-------------|----------|
 | DEV SIMPLE | false | worker → utility |
 | DEV SIMPLE | true | worker → consistency-checker → utility |
-| DEV COMPLEX | any | dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → advisor → dev-reviewer → rework → consistency-checker → utility |
-| DEV SUPERCOMPLEX | large plan (>3 steps) | PER STEP: dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → consistency-checker → [rework loop] → utility |
+| DEV COMPLEX | false | dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → advisor → dev-reviewer → rework → consistency-checker → utility |
+| DEV SUPERCOMPLEX | true (large plan >3 steps OR DECOMPOSITION) | PER STEP: dev-planner (writes dev_plan.md) → dev-professor (reviews dev_plan.md, implements) → dev-reviewer → consistency-checker → [rework loop] → utility |
 
 **Decision rules:**
 - When `plan_exists=true` for DEV SIMPLE, add consistency-checker before utility. When `plan_exists=false`, skip consistency-checker.
 - When plan has >3 steps AND huge volume, use DEV SUPERCOMPLEX (complexity: SUPERCOMPLEX).
+- No plan but >3 steps expected → call dev-planner MODE: DECOMPOSITION FIRST, then re-evaluate: >3 steps + huge volume → SUPERCOMPLEX (plan_exists: true, plan_source: "DECOMPOSITION"); 2-3 steps → COMPLEX; 1 step → SIMPLE or COMPLEX. NEVER set complexity: SUPERCOMPLEX with plan_exists: false.
+- DEV COMPLEX implies plan_exists=false (dev-planner writes dev_plan.md in-pipeline); plan_exists=true + not SUPERCOMPLEX → DEV SIMPLE (with plan). Decision tree: ARCHITECTURE.md §2 "DEV Complexity Classification".
 
 ### ⚠️ MANDATORY Prompt Requirements — FAILURE TO COMPLY BREAKS THE PIPELINE ⚠️
 
@@ -433,7 +435,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **generate-image** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (default Gemini image model); git commit/push denied |
 | **generate-image-gpt** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (GPT/DALL-E path, on explicit user request only); git commit/push denied |
 | **scout** | subagent | bifrost-litellm/mimo-v2.5 | 0.1 | deny | deny | allow | deny | – | Local FS recon: read/glob/grep only; task: deny; no opencode.json section (frontmatter-only); never a pipeline step |
-| **advisor** | subagent | bifrost-litellm/HY4 | 0.1 | deny | deny | allow | deny | – | Step-boundary advisory reviewer (DEV COMPLEX, BUGFIX DEEP); read-only (read/grep/glob + read-only serena); severity-tagged notes; unity-mcp deny |
+| **advisor** | subagent | bifrost-litellm/tencent/Hy4 | 0.1 | deny | deny | allow | deny | – | Step-boundary advisory reviewer (DEV COMPLEX, BUGFIX DEEP); read-only (read/grep/glob + read-only serena); severity-tagged notes; unity-mcp deny |
 
 ### Primary Agent Permissions
 
@@ -1366,7 +1368,7 @@ opencode --agent plankestrator
 | Routing tables | 2 | orchestrator (25), plankestrator (10) |
 | Pipelines | 13 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 | Custom commands | 5 | opencode.json |
-| Models | 10 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, xiaomi/mimo-v2.6-pro, openrouter/deepseek-v4.1-flash, HY4, stepfun/step-5-preview) |
+| Models | 10 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, xiaomi/mimo-v2.6-pro, openrouter/deepseek-v4.1-flash, tencent/Hy4, stepfun/step-5-preview) |
 
 ### Quick Reference
 

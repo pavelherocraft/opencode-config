@@ -77,7 +77,7 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | dev-reviewer | bifrost-litellm/Kimi K3 |
 | rework | bifrost-litellm/openrouter/deepseek-v4.1-flash |
 | consistency-checker | bifrost-litellm/xiaomi/mimo-v2.6-pro |
-| advisor | bifrost-litellm/HY4 |
+| advisor | bifrost-litellm/tencent/Hy4 |
 | docs-writer | bifrost-litellm/xiaomi/mimo-v2.6-pro |
 | docs-planner | bifrost-litellm/openrouter/deepseek-v4.1-flash |
 | utility | bifrost-litellm/MiniMax-M3 |
@@ -122,7 +122,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | consistency-flash | bifrost-litellm/xiaomi/mimo-v2.6-pro | low | consistency-checker |
 | review-flash | bifrost-litellm/GLM-5.3 (res) | mid | plan-reviewer-simple, research-reviewer |
 | triage-flash | bifrost-litellm/openrouter/deepseek-v4.1-flash | low | bugfix-triage |
-| advisory | bifrost-litellm/HY4 | mid | advisor |
+| advisory | bifrost-litellm/tencent/Hy4 | mid | advisor |
 | executor-strong | bifrost-litellm/GLM-5.3 (res) | mid | dev-professor |
 | executor-cheap | bifrost-litellm/MiniMax-M3 | low | execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image, git-commit |
 | executor-step5 | bifrost-litellm/stepfun/step-5-preview | low | worker |
@@ -352,6 +352,28 @@ bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.
 
 **Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes. Loop repeats up to 3 iterations. If consistency-checker passes → utility. If max iterations reached → failure report.
 
+### DEV Complexity Classification (decision tree)
+
+Canonical classification rules for DEV tasks (SIMPLE / COMPLEX / SUPERCOMPLEX). `agents/orchestrator.md` (CLASSIFICATION RULES) mirrors this section — any change here must land there in the same commit. Apply IN ORDER:
+
+| # | Question | YES | NO |
+|---|----------|-----|----|
+| Q1 | User EXPLICITLY requests SUPERCOMPLEX ("use SUPERcomplex", "run the super-complex pipeline")? | SUPERCOMPLEX → Q1a | → Q2 |
+| Q1a | A plan with a step list exists? | SUPERCOMPLEX | `dev-planner` `MODE: DECOMPOSITION` runs first (JSON step list, no `dev_plan.md`); classification STAYS SUPERCOMPLEX regardless of step count — explicit request wins; `plan_exists: true`, `plan_source: "DECOMPOSITION"` |
+| Q2 | A plan/research file exists with >3 steps AND huge volume? | SUPERCOMPLEX | → Q2a |
+| Q2a | A plan/research file exists (any size)? | SIMPLE with-plan variant — PLAN EXISTS OVERRIDE | → Q3 |
+| Q3 | Task appears to have >3 logical steps but NO plan exists? | ⚠️ Do NOT classify yet — `dev-planner` `MODE: DECOMPOSITION` first, then re-evaluate: >3 steps + huge volume → SUPERCOMPLEX (`plan_exists: true`, `plan_source: "DECOMPOSITION"`); 2–3 steps → COMPLEX (`plan_exists: false` — dev-planner writes `dev_plan.md` in-pipeline); 1 step → SIMPLE (no architectural decisions) or COMPLEX (architectural decisions needed) | → Q4 |
+| Q4 | 2–3 logical steps OR complex architecture (multi-file changes with dependencies, cross-cutting concerns, architectural decisions)? | COMPLEX | → Q5 |
+| Q5 | Single focused change? | SIMPLE | COMPLEX (default for ambiguous cases) |
+
+**🚫 CRITICAL RULE:** `complexity: SUPERCOMPLEX` with `plan_exists: false` is INVALID. SUPERCOMPLEX requires a determinable step list: a pre-existing plan with >3 steps OR a completed DECOMPOSITION.
+
+**Count logical implementation steps**, not files or skills/technologies: "rename a variable across 5 files" is SIMPLE; one bug fix touching auth, database and caching may still be a single step.
+
+**PLAN EXISTS OVERRIDE:** `plan_exists=true` + not SUPERCOMPLEX → DEV is ALWAYS SIMPLE (with-plan variant). An existing plan replaces in-pipeline planning — never reclassify a planned ≤3-step task as COMPLEX. Consequently DEV COMPLEX always implies `plan_exists: false`.
+
+**Superseded (2026-09-22, `PLAN_DEV_CLASSIFICATION.md`):** the former rule that routed unplanned multi-step DEV tasks (no plan + COMPLEX) to plankestrator as out of scope is NO LONGER valid — they stay with the orchestrator: Q3 decomposition first, then SUPERCOMPLEX / COMPLEX / SIMPLE per the outcome. PLAN/RESEARCH requests themselves remain out of orchestrator's scope.
+
 ### DEV SIMPLE
 
 DEV SIMPLE has two variants depending on whether a plan exists:
@@ -363,6 +385,8 @@ DEV SIMPLE has two variants depending on whether a plan exists:
 
 **Decision rule:** If plan_exists=true, use the "with plan" variant. Otherwise, use the "without plan" variant.
 
+**PLAN EXISTS OVERRIDE:** if a plan file exists and the task is NOT SUPERCOMPLEX (>3 steps + huge volume), DEV is ALWAYS SIMPLE (with-plan variant) — an existing plan replaces in-pipeline planning; never reclassify a planned ≤3-step task as COMPLEX.
+
 **Rework loop:** If consistency-checker finds critical issues, task returns to worker for fixes, then consistency-checker validates again. Loop repeats up to 3 iterations. If consistency-checker passes → utility. If max iterations reached → failure report.
 
 ### DEV COMPLEX
@@ -371,9 +395,11 @@ DEV SIMPLE has two variants depending on whether a plan exists:
 dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
 ```
 
+**Precondition:** DEV COMPLEX implies `plan_exists: false` — no plan file exists at classification time; `dev-planner` creates `dev_plan.md` in-pipeline. If a plan file DOES already exist, the task is either SIMPLE (with-plan variant, ≤3 steps — Q2a) or SUPERCOMPLEX (>3 steps + huge volume — Q2), never COMPLEX. Unplanned multi-step DEV tasks are NOT out of scope for the orchestrator — the Q3 decomposition path applies (see "DEV Complexity Classification" above).
+
 **Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes, then consistency-checker validates again. Loop repeats up to 3 iterations.
 
-**Advisor step (v5, OMP Advisor Watchdog analog — step-boundary):** `advisor` (HY4, strictly read-only: read/grep/glob + read-only serena) observes the implementation result between pipeline steps and returns severity-tagged notes (`nit|concern|blocker`, contract — §3 Reviewer Severity Field). Mid-turn intervention is NOT possible (our agents are atomic within a step) — advisor fires only at step boundaries. Safeguards: emission guard (max 4 non-blocker notes per run, session dedup, empty-phrase filter — plugin v5 + advisor prompt), immuneTurns analog (`NIT_ONLY_MODE` for 3 pipeline steps after a consumed blocker — concern/blocker notes downgrade to nit), separate cost accounting (advisor ≈ 1 extra model call per step; logged in plugin + orchestrator acks). Advisor never re-orders the pipeline; blocker → ⚠️ ack + notes to dev-reviewer/rework; persistence after 3rd rework iteration → failure report.
+**Advisor step (v5, OMP Advisor Watchdog analog — step-boundary):** `advisor` (tencent/Hy4, strictly read-only: read/grep/glob + read-only serena) observes the implementation result between pipeline steps and returns severity-tagged notes (`nit|concern|blocker`, contract — §3 Reviewer Severity Field). Mid-turn intervention is NOT possible (our agents are atomic within a step) — advisor fires only at step boundaries. Safeguards: emission guard (max 4 non-blocker notes per run, session dedup, empty-phrase filter — plugin v5 + advisor prompt), immuneTurns analog (`NIT_ONLY_MODE` for 3 pipeline steps after a consumed blocker — concern/blocker notes downgrade to nit), separate cost accounting (advisor ≈ 1 extra model call per step; logged in plugin + orchestrator acks). Advisor never re-orders the pipeline; blocker → ⚠️ ack + notes to dev-reviewer/rework; persistence after 3rd rework iteration → failure report.
 
 ### DEV SUPERCOMPLEX
 
@@ -382,11 +408,14 @@ PER PLAN STEP (repeated for each step in the step list):
   dev-planner → dev-professor → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
 ```
 
-Super-complex development tasks with a large pre-existing plan (>3 steps) or huge volume of work. The orchestrator executes the full review/consistency/syntax chain **for every step** of the plan — never one pass over the whole task.
+Super-complex development tasks with a large plan (>3 steps — pre-existing OR produced by DECOMPOSITION) or huge volume of work. The orchestrator executes the full review/consistency/syntax chain **for every step** of the plan — never one pass over the whole task.
 
 **Trigger conditions:**
-- Explicit user request (e.g. "use SUPERcomplex", "run the super-complex pipeline"), OR
-- A plan exists with more than 3 steps AND a huge volume of work
+- Explicit user request (e.g. "use SUPERcomplex", "run the super-complex pipeline") — if no step list exists, `dev-planner` `MODE: DECOMPOSITION` runs first and the classification STAYS SUPERCOMPLEX regardless of step count (explicit request wins), OR
+- A plan exists with more than 3 steps AND a huge volume of work, OR
+- No plan exists but the task appears to have >3 steps AND huge volume — determined via `dev-planner` `MODE: DECOMPOSITION` BEFORE final classification (Q3)
+
+DECOMPOSITION paths set `plan_exists: true`, `plan_source: "DECOMPOSITION"`. **🚫 CRITICAL RULE:** `complexity: SUPERCOMPLEX` with `plan_exists: false` is INVALID (see "DEV Complexity Classification" above).
 
 **Step list determination (once, before the first pipeline step; strict priority):**
 1. **User listed the steps explicitly** (e.g. "Implement P0-1, then P0-2, then P0-3") → the steps are used verbatim.
