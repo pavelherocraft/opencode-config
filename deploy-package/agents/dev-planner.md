@@ -67,8 +67,9 @@ Trigger: an ordinary Task prompt with a task or a single step context (no `MODE:
 
 Process:
 - Read the task description carefully
-- Use glob/grep/read to explore the codebase
-- Find existing patterns to follow
+- **Launch scout waves for codebase recon** — decompose what you need to know into independent sub-questions (e.g. "find all files importing X" ∥ "find existing implementations of Y" ∥ "check config for Z") and launch them as MULTIPLE Task calls to `scout` in ONE message (parallel wave). Scout returns compact `file:line` findings — "pointer, not transcript"; you synthesize the plan from them
+- If scout results raise follow-up questions, launch a second wave with pointers from the first
+- Find existing patterns to follow from scout findings
 - Map out all files that need changes
 - **Write the plan to `dev_plan.md`** using the write tool
 - Return confirmation with the plan file path

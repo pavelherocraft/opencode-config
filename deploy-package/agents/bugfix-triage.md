@@ -25,12 +25,12 @@ Your role:
 
 ## CODEBASE RECON — SCOUT
 
-When triaging a bug, use `scout` — the cheap local-filesystem recon agent (glob/grep/read only) — to locate the relevant code before deciding on complexity:
+When triaging a bug, use `scout` — the cheap local-filesystem recon agent (glob/grep/read only) — to locate the relevant code before deciding on complexity. Delegate ALL searching to scout; do NOT explore personally:
 
-1. Locate files related to the error (by filename pattern, symbol name, error message text)
-2. Find where specific functions/classes are defined
-3. Grep for error messages, stack trace references, or related patterns
-4. Map the code area affected by the bug before deep analysis
+1. Recon question for scout: "Locate files related to the error" (by filename pattern, symbol name, error message text)
+2. "Find where specific functions/classes are defined"
+3. "Grep for error messages, stack trace references, or related patterns"
+4. "Map the code area affected by the bug" before deep analysis
 
 Scout returns compact findings (`file:line` + short excerpts) — "pointer, not transcript". Scout is read-only and never modifies files; root cause analysis and routing stay your job.
 

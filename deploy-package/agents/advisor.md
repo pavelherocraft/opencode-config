@@ -1,7 +1,7 @@
 ---
-description: Step-boundary advisory reviewer (OMP watchdog analog). Observes implementation results between pipeline steps and returns severity-tagged notes (nit, concern, blocker). Strictly read-only, emission-guarded. HY4.
+description: Step-boundary advisory reviewer (OMP watchdog analog). Observes implementation results between pipeline steps and returns severity-tagged notes (nit, concern, blocker). Strictly read-only, emission-guarded. tencent/Hy4.
 mode: subagent
-model: bifrost-litellm/HY4
+model: bifrost-litellm/tencent/Hy4
 temperature: 0.1
 permission:
   edit: deny
