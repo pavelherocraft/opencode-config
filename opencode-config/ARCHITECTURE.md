@@ -146,8 +146,8 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | bugfix | `bash: allow` | Bug fixing agent — needs bash for running tests, git operations |
 | execute-bug | `bash: allow` | Bug fix implementation — needs bash for running tests, executing commands |
 | rework | `bash: allow` | Rework agent — needs bash for running tests, git operations |
-| plan-bug | `edit: allow` (`.md` only) | Bug fix planning — writes plan to `bug_plan.md` for execute-bug to read |
-| docs-planner | `edit: allow` (`.md` only) | Documentation planning — writes plan to `docs_plan.md` for docs-writer to read |
+| plan-bug | `edit, write: allow` (`.md` only) | Bug fix planning — writes plan to `bug_plan.md` for execute-bug to read |
+| docs-planner | `edit, write: allow` (`.md` only) | Documentation planning — writes plan to `docs_plan.md` for docs-writer to read |
 | devops-reviewer | `read: allow` in addition to `bash: allow` | DevOps review — needs bash for running commands, read for checking files |
 | devops-agent | `bash: allow` only | DevOps operations — needs bash for npm, docker, deployment commands |
 
@@ -169,11 +169,30 @@ Worker is the implementation agent — it MUST have `bash: allow` to execute com
 
 ### Edit Permissions (plankestrator subagents)
 
-**Important:** `write` is a TOOL NAME, not a permission key. The `edit` permission key controls the `edit`, `write`, `patch`, and `multiedit` tools. However, `"*": "deny"` does NOT just restrict to other file types — it REMOVES the `edit`/`write`/`patch`/`multiedit` tools entirely from the agent's toolset. Use `"*": "ask"` to restrict by glob while keeping tools available, paired with explicit `"*.md": "allow"` (or similar) to whitelist intended targets.
+**Important:** `edit` and `write` are BOTH valid glob-scoped permission keys (verified empirically on a real `plan-bug` run). They gate two different tools with different capabilities:
+
+| Permission key | Tool | Creates new files? | Edits existing files? |
+|----------------|------|:---:|:---:|
+| `edit` | `edit` | ❌ no (string replacement on an existing file) | ✅ yes |
+| `write` | `write` | ✅ yes | ✅ yes |
+
+Because the `edit` tool fails on a non-existent path, an `edit`-only grant cannot create a new file (e.g. `bug_plan.md` / `dev_plan.md`) — the agent must also be granted `write`. A glob restriction such as `{ "*.md": "allow", "*": "deny" }` narrows the tool to matching paths; it does **not** remove the tool from the agent's toolset.
+
+**Recommended pattern for plan/plan-writer agents** (create and edit `.md` only):
+
+```yaml
+permission:
+  edit:
+    "*.md": "allow"
+    "*": "deny"
+  write:
+    "*.md": "allow"
+    "*": "deny"
+```
 
 | Agent | Permission | Restriction |
 |-------|------------|-------------|
-| plan-bug | `edit: allow` (`.md` only) | Only .md files, writes bug_plan.md |
+| plan-bug | `edit, write: allow` (`.md` only) | Only .md files, writes bug_plan.md |
 | plan-writer-simple | `edit: allow` (`.md` only) | Only .md files, user request required |
 | plan-writer-complex | `edit: allow` (`.md` only) | Only .md files, user request required |
 | plan-reviewer-simple | `edit: allow` (`.md` only) | Only .md files, user request required |
@@ -213,7 +232,7 @@ result.agent = mergeDeep(result.agent ?? {}, ConfigAgent.load(dir))
 
 **Example of the failure mode this prevents:** bugfix-triage once kept running QWEN3.7-plus after opencode.json was changed to GLM-5.3-Flash (res) — because the stale frontmatter `model:` silently won.
 
-**Note:** `write` is NOT a permission key — it is a tool name. To allow/deny the `write` tool, use the `edit` permission key. `write: "*.md"` as a permission key is a DEAD KEY — it is silently ignored by opencode.
+**Note:** `write` IS a valid permission key — it is glob-scoped, like `edit`, and gates the `write` tool (which creates new files). `edit` gates the `edit` tool (which only modifies existing files). Agents that must create and then edit a new `.md` (e.g. plan-bug → `bug_plan.md`) need BOTH keys; a glob-scoped `write` key such as `write: { "*.md": "allow", "*": "deny" }` is honoured, not ignored.
 
 **Note:** plankestrator has `edit: deny` — it MUST delegate to subagents, never write directly.
 

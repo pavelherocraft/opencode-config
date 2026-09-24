@@ -444,68 +444,46 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | orchestrator | deny | deny | deny | deny | deny |
 | plankestrator | deny | deny | deny | deny | deny |
 
-### ⚠️ Manual opencode.json Update Required for plan-bug
+### ✅ Resolved 2026-09-23 — plan-bug file creation
 
-`agents/*.md` is the **authoritative source** for agent definitions (model, prompt) — markdown frontmatter is merged after opencode.json and wins on shared keys. Permissions are a deep merge of both sources (see ARCHITECTURE.md → Permission Authority). The repository does **NOT** ship `opencode.json` — it lives at `~/.config/opencode/opencode.json` (user-managed).
+**Status: APPLIED — no manual action required.**
 
-**Required change for `plan-bug`** (to enable `bug_plan.md` writing in BUGFIX DEEP):
+Historically, `plan-bug` could not create `bug_plan.md`, which broke the BUGFIX DEEP pipeline (`execute-bug` had nothing to read). The earlier workaround proposed an `edit` glob (`edit: { "*.md": "allow", "*": "deny" }`), but this was **insufficient**: the `edit` tool only performs string replacement on an **existing** file and FAILS on a non-existent path. Creating a new file requires the separate `write` permission key.
 
-```json
-// BEFORE (legacy — plan-bug could not write):
-"plan-bug": {
-  "permission": {
-    "edit": "deny"
-  }
-}
+**Root cause:** `edit`-glob was already present before the fix — the missing piece was the `write` key. `write` and `edit` are both valid glob-scoped permission keys.
 
-// AFTER (allow .md writing for bug_plan.md):
-"plan-bug": {
-  "permission": {
-    "edit": {
-      "*.md": "allow",
+**Fix applied 2026-09-23** in both authoritative locations:
+
+- `agents/plan-bug.md` frontmatter:
+  ```yaml
+  permission:
+    edit:
+      "*.md": "allow"
       "*": "deny"
-    }
-  }
-}
+    write:
+      "*.md": "allow"
+      "*": "deny"
+  ```
+- `~/.config/opencode/opencode.json` — the `plan-bug` entry (line 1308) now carries
+  `"write": { "*.md": "allow", "*": "deny" }` alongside the existing `edit` glob.
+
+The same create-and-edit pattern is used by `dev-planner` (`dev_plan.md`) and `docs-planner` (`docs_plan.md`). See ARCHITECTURE.md → Edit Permissions.
+
+### ✅ Resolved — execute-bug bash access
+
+**Status: APPLIED — no manual action required.**
+
+`execute-bug` needs `bash: allow` to run tests and verify fixes in BUGFIX DEEP. It is granted in `agents/execute-bug.md` frontmatter (the authoritative source; frontmatter wins on shared keys):
+
+```yaml
+permission:
+  bash:
+    "*": allow
+    "git commit*": deny
+    "git push*": deny
 ```
 
-**Why this matters:** Without this change, the BUGFIX DEEP pipeline will fail because `plan-bug` cannot write `bug_plan.md`, so `execute-bug` has nothing to read.
-
-**Steps:**
-1. Open `~/.config/opencode/opencode.json`
-2. Locate the `plan-bug` agent entry under `agents`
-3. Update `permission.edit` to `{ "*.md": "allow", "*": "deny" }`
-4. Save and restart opencode (or reload the session)
-
-This mirrors the existing `dev-planner` permission, which already uses `edit: { "*.md": "allow", "*": "deny" }` to write `dev_plan.md`.
-
-### ⚠️ Manual opencode.json Update Required for execute-bug
-
-**Required change for `execute-bug`** (to enable bash access for running tests and commands):
-
-```json
-// BEFORE:
-"execute-bug": {
-  "permission": {
-    "bash": "deny"
-  }
-}
-
-// AFTER:
-"execute-bug": {
-  "permission": {
-    "bash": "allow"
-  }
-}
-```
-
-**Why this matters:** execute-bug is the bug fix implementation agent in the BUGFIX DEEP pipeline. It needs `bash: allow` to run tests, execute commands, and verify fixes. ARCHITECTURE.md specifies `bash: allow` for execute-bug.
-
-**Steps:**
-1. Open `~/.config/opencode/opencode.json`
-2. Locate the `execute-bug` agent entry under `agents`
-3. Update `permission.bash` from `"deny"` to `"allow"`
-4. Save and restart opencode (or reload the session)
+The `execute-bug` entry in `opencode.json` (line 1772) carries no `bash` key, so the frontmatter value applies through the deep merge. The grant is deliberately scoped: all commands are allowed except `git commit` / `git push`, which are reserved for the gated `git-commit` agent.
 
 ### view-image — Special Configuration
 
@@ -572,83 +550,75 @@ DevOps агенты имеют `bash: allow` для выполнения ком�
 
 ### Permission Model: edit vs write — CRITICAL
 
-**⚠️ COMMON MISTAKE: Using `write` as a permission key**
+**⚠️ COMMON MISTAKE: assuming the `edit` key alone can create files**
 
 #### The Problem
 
-Many users mistakenly configure permissions like this:
+`edit` and `write` are two separate, glob-scoped permission keys that gate two different tools. The `edit` tool performs string replacement on an **existing** file and FAILS on a non-existent path; only the `write` tool can create a new file. Granting `edit` alone — even glob-scoped — therefore lets an agent modify existing files but prevents it from creating new ones:
 
 ```json
 {
-  "edit": "deny",
-  "write": "*.md"  // ❌ WRONG — this is a DEAD KEY
+  "edit": { "*.md": "allow", "*": "deny" }
+  // ❌ INSUFFICIENT for agents that must CREATE files — no `write` grant
 }
 ```
 
-This configuration **DOES NOT WORK** because:
-
-1. **`write` is a TOOL NAME, not a permission key**
-   - The permission system uses `edit` as the key
-   - `write`, `patch`, `multiedit` are all controlled by the `edit` permission
-
-2. **`write: "*.md"` creates a DEAD KEY**
-   - OpenCode does not recognize `write` as a valid permission key
-   - The configuration is silently ignored
-   - Agent cannot write files despite the apparent permission
+This is exactly what broke `plan-bug` (could not create `bug_plan.md`) and `dev-planner` before the fix.
 
 #### The Solution
 
-To restrict file writing to specific file types, use `edit` with a glob pattern:
+Grant BOTH keys, each glob-scoped to the intended file types:
 
 ```json
 {
-  "edit": { "*.md": "allow", "*": "deny" }  // ✅ CORRECT
+  "edit":  { "*.md": "allow", "*": "deny" },
+  "write": { "*.md": "allow", "*": "deny" }
 }
 ```
 
 This configuration:
-- Allows editing/writing `.md` files
-- Denies editing/writing all other files
-- Controls `edit`, `write`, `patch`, and `multiedit` tools
+- Allows editing **existing** `.md` files (`edit` tool)
+- Allows **creating** new `.md` files (`write` tool)
+- Denies both tools for all other file types
 
 #### Permission Key vs Tool Name
 
-| Permission Key | Controls These Tools |
-|----------------|----------------------|
-| `edit` | `edit`, `write`, `patch`, `multiedit` |
-| `read` | `read` |
-| `bash` | `bash` |
-| `glob` | `glob` |
-| `grep` | `grep` |
+`edit` and `write` are BOTH valid glob-scoped permission keys — verified empirically on a real `plan-bug` run:
 
-**Rule:** Always use the permission KEY, not the tool NAME.
+| Permission Key | Controls This Tool | Creates new files? | Edits existing files? |
+|----------------|--------------------|:---:|:---:|
+| `edit`  | `edit`  | ❌ no  | ✅ yes |
+| `write` | `write` | ✅ yes | ✅ yes |
 
-#### Case Study: dev-planner Permission Fix
+A glob restriction (`{ "*.md": "allow", "*": "deny" }`) narrows the tool to matching paths; it does **not** remove the tool from the agent's toolset.
 
-**Original (broken) configuration:**
+#### Case Study: plan-bug / dev-planner Permission Fix (2026-09-23)
+
+**Original (broken) configuration — `edit`-only:**
 ```json
 {
-  "edit": "deny",
-  "write": "*.md"  // DEAD KEY — dev-planner couldn't write files
+  "edit": { "*.md": "allow", "*": "deny" }
 }
 ```
 
 **Symptoms:**
-- dev-planner could not write `dev_plan.md`
-- Pipeline failed at DEV COMPLEX step
+- plan-bug could not create `bug_plan.md`
+- Pipeline failed at BUGFIX DEEP / DEV COMPLEX step
 - Error: "Permission denied for write tool"
 
-**Fixed configuration:**
+**Fixed configuration — both keys:**
 ```json
 {
-  "edit": { "*.md": "allow", "*": "deny" }  // Now works correctly
+  "edit":  { "*.md": "allow", "*": "deny" },
+  "write": { "*.md": "allow", "*": "deny" }
 }
 ```
 
 **Result:**
-- dev-planner can write `.md` files (including `dev_plan.md`)
-- dev-planner cannot edit other file types
-- DEV COMPLEX pipeline works correctly
+- plan-bug can create and edit `bug_plan.md`
+- dev-planner can create and edit `dev_plan.md`
+- Neither can touch other file types
+- BUGFIX DEEP / DEV COMPLEX pipelines work correctly
 
 #### Valid Permission Patterns
 
@@ -657,7 +627,7 @@ This configuration:
 | `"allow"` | Allow all operations | Full access agent |
 | `"deny"` | Deny all operations | Read-only agent |
 | `"ask"` | Ask user for permission | Interactive agent |
-| `{ "*.md": "allow", "*": "deny" }` | Allow specific file types | dev-planner (writes plans) |
+| `{ "*.md": "allow", "*": "deny" }` | Allow specific file types | dev-planner / plan-bug (create + edit plans) |
 | `{ "*.py": "ask", "*.ts": "ask", "*": "allow" }` | Ask for code files, allow others | orchestrator (reads code, asks before editing) |
 | `{ "src/**": "allow", "*": "deny" }` | Allow specific directory | Agent restricted to src/ |
 
@@ -665,11 +635,12 @@ This configuration:
 
 | Mistake | Correction |
 |---------|------------|
-| `"write": "*.md"` | `"edit": { "*.md": "allow" }` |
+| `"write": "*.md"` alone (agent also edits existing files) | add `"edit": { "*.md": "allow", "*": "deny" }` alongside |
+| `"edit": { "*.md": "allow", "*": "deny" }` alone (agent must CREATE files) | add `"write": { "*.md": "allow", "*": "deny" }` alongside |
 | `"patch": "allow"` | `"edit": "allow"` |
 | `"multiedit": "deny"` | `"edit": "deny"` |
 
-**Remember:** `edit` is the permission key that controls all file modification tools.
+**Remember:** `edit` and `write` are both valid permission keys — grant both when an agent must create and edit files.
 
 ---
 

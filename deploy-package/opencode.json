@@ -1305,6 +1305,7 @@
       "temperature": 0.1,
       "permission": {
         "edit": { "*.md": "allow", "*": "deny" }, "bash": { "*": "deny" },
+        "write": { "*.md": "allow", "*": "deny" },
         "unity-mcp.*": "allow",
         "serena_find_symbol": "allow",
         "serena_find_referencing_symbols": "allow",
@@ -1348,6 +1349,7 @@
       "permission": {
         "edit": { "*.md": "allow", "*": "deny" },
         "bash": { "*": "deny" },
+        "write": { "*.md": "allow", "*": "deny" },
         "read": "allow",
         "unity-mcp.*": "allow",
         "serena_find_symbol": "allow",

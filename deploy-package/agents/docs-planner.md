@@ -7,6 +7,9 @@ permission:
   edit:
     "*.md": "allow"
     "*": "deny"
+  write:
+    "*.md": "allow"
+    "*": "deny"
   bash: deny
   read: allow
 ---
