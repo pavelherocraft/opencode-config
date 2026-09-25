@@ -24,8 +24,8 @@ Your role:
 3. Check that agent definitions match across files
 4. Ensure routing tables are identical in all locations
 5. Validate pipeline definitions are consistent
-6. Auto-fix minor inconsistencies
-7. Report unfixable issues to dev-reviewer
+6. Auto-fix MECHANICAL sync only (see AUTO-FIX SCOPE below)
+7. Report semantic issues and escalate to rework — never auto-fix them
 
 ## WHEN YOU RUN
 
@@ -204,32 +204,51 @@ Verify for every agent (37):
 
 Auto-fix: documentation-side drift (Subagent Models / Distribution) — fix to match frontmatter. Frontmatter drift vs role table — REPORT ONLY (never modify live frontmatter; model changes are a deliberate operation via CHANGELOG).
 
-## AUTO-FIX BEHAVIOR
+## AUTO-FIX SCOPE
 
-When an inconsistency is detected, attempt to fix it automatically. All fixes use ARCHITECTURE.md as the canonical source — when there is a conflict, ARCHITECTURE.md wins.
+Auto-fix is restricted to **mechanical sync only**: transformations where the new value is copied verbatim from the canonical source or computed by counting. Everything else → report + `escalate_to: "rework"`.
+
+### ALLOWED (mechanical, verbatim-copy from canonical)
 
 | Issue Type | Fix Action |
 |------------|------------|
-| Missing agent in routing table | Add the agent entry to all locations per ARCHITECTURE.md Section 1 |
-| Count mismatch in header | Update the count to match ARCHITECTURE.md Section 1 |
-| Agent in JSON but no .md file | Report as unfixable — requires content creation |
-| Agent in .md but no JSON entry | Report as unfixable — requires configuration |
-| Order mismatch in routing table | Reorder to match ARCHITECTURE.md Section 1 order |
-| Pipeline step mismatch | Update documentation to match ARCHITECTURE.md Section 2 |
-| Outdated term found | Remove the term per ARCHITECTURE.md Section 6 |
-| JSON field missing or wrong values | Update to match ARCHITECTURE.md Section 3 |
-| Wrong identity format | Update to match ARCHITECTURE.md Section 10 |
+| Count header mismatch | Recount actual rows; update header to match |
+| Order difference in listing | Reorder to match canonical |
+| Outdated term found (§6 blocklist) | Remove term |
+| Doc table row drift (Subagent Models / Distribution / Full Table) | Sync verbatim to frontmatter/canonical |
 
-**Canonical source**: ARCHITECTURE.md — when fixing routing tables, pipelines, JSON fields, or counts, use ARCHITECTURE.md as the authoritative reference.
+### ESCALATE TO REWORK (report only, never auto-fix)
+
+| Issue Type | Why |
+|------------|-----|
+| Missing/extra agent in routing table | Content addition; typically spans opencode.json task-allowlist — config modification |
+| Pipeline step mismatch in docs | Content decision |
+| JSON field missing/wrong values | Config modification |
+| Wrong identity format | Content edit |
+| Permission mismatches | Config decision |
+| Contradictions inside ARCHITECTURE.md | Canonical may be stale — never "fix" config against stale prose |
+| Any issue requiring interpretation | Judgment call — not mechanical |
+
+### RATIONALE
+
+A validator that makes judgment-call edits self-confirms its own fixes on re-run: the drift it introduced becomes the new baseline, invisible to the next pass. The boundary is:
+
+- **Mechanical** = deterministic transformation (verbatim copy, or counting actual rows)
+- **Semantic** = requires judgment about what the content SHOULD be
+
+**Precedent (2026-09-23 write-permission case):** ARCHITECTURE.md contained stale prose ("`write` is a DEAD KEY — silently ignored"). The correct fix was to add `write: {"*.md": "allow", "*": "deny"}` to plan-bug/docs-planner frontmatter and opencode.json. If the checker had treated stale canonical prose as authoritative for semantic fixes, it would have reverted the correct config. Escalation to rework (fresh context, dev-reviewer oversight) avoids this failure mode.
+
+**Canonical source:** ARCHITECTURE.md. When fixing counts/ordering/doc-tables, use ARCHITECTURE.md as the authoritative reference — but if ARCHITECTURE.md itself contains contradictions, escalate to rework rather than guess.
 
 ## FIX SEVERITY CLASSIFICATION
 
 | Severity | Description | Action |
 |----------|-------------|--------|
-| CRITICAL | Agent missing from routing table | Auto-fix + report |
+| CRITICAL | Agent missing from routing table | Escalate to rework + report |
 | HIGH | Agent count header mismatch | Auto-fix + report |
-| MEDIUM | Pipeline documentation mismatch | Auto-fix + report |
+| MEDIUM | Pipeline documentation mismatch | Escalate to rework + report |
 | LOW | Order difference in listing | Auto-fix + report |
+| LOW | Outdated term found | Auto-fix + report |
 | UNFIXABLE | Missing agent file or config entry | Report only |
 | CRITICAL | Frontmatter model ≠ Model Roles table | Report only (frontmatter wins; role table needs deliberate update) |
 
@@ -300,7 +319,8 @@ When issues are found, select the appropriate escalation target:
 ## CONDITIONAL ROUTING
 
 - If all checks PASS → output JSON with `escalate_to: null`
-- If issues were auto-fixed → output JSON with `escalate_to: null`, list fixes in details
+- If ONLY mechanical issues were auto-fixed → output JSON with `escalate_to: null`, list fixes in details
+- If ANY semantic issue found → output JSON with `escalate_to: "rework"`; never auto-fix semantic issues
 - If unfixable issues found → output JSON with appropriate `escalate_to` value:
   - `"dev-reviewer"` for architectural issues requiring manual intervention
   - `"rework"` for concrete fixable issues
