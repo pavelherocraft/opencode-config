@@ -48,7 +48,7 @@ OpenCode использует архитектуру с двумя primary-аг�
 | Model | Provider | Agents Count | Agents |
 |-------|----------|--------------|-------|
 | `QWEN3.7-plus` | bifrost-litellm | 6 | orchestrator, plankestrator, orchestrator-identity-probe, plankestrator-identity-probe, bugfix, plan-writer-simple |
-| `MiniMax-M3` | bifrost-litellm | 10 | execute-bug, devops-agent, devops-readonly, view-image, utility, mcp-github, mcp-read, mcp-search, summarizer, git-commit |
+| `MiniMax-M3` | bifrost-litellm | 11 | execute-bug, devops-agent, devops-readonly, view-image, utility, mcp-github, mcp-read, mcp-search, summarizer, git-commit, voice-synthesizer |
 | `stepfun/step-5-preview` | bifrost-litellm | 1 | worker |
 | `GLM-5.3 (res)` | bifrost-litellm | 4 | dev-professor, plan-reviewer-simple, research-reviewer, plan-bug |
 | `Kimi K3` | bifrost-litellm | 3 | dev-reviewer, plan-reviewer-complex, research-writer-complex |
@@ -57,7 +57,8 @@ OpenCode использует архитектуру с двумя primary-аг�
 | `xiaomi/mimo-v2.6-pro` | bifrost-litellm | 3 | consistency-checker, docs-writer, research-writer-simple |
 | `openrouter/deepseek-v4.1-flash` | bifrost-litellm | 3 | bugfix-triage, docs-planner, rework |
 | `tencent/Hy4` | bifrost-litellm | 1 | advisor |
-| `voice/xiaomi/mimo-v2.5-tts` | bifrost-litellm | 1 | voice-synthesizer |
+
+> **Skill-only model (0 агентов):** `voice/xiaomi/mimo-v2.5-tts` (bifrost-litellm) — не модель агента: вызывается скриптами скилла `audio-synthesize` (`synthesize.py` / `synthesize.ps1`, default model). В счётчик Models Distribution (10 моделей агентов) не входит.
 
 ### MCP Servers
 
@@ -437,7 +438,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **generate-image-gpt** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (GPT/DALL-E path, on explicit user request only); git commit/push denied |
 | **scout** | subagent | bifrost-litellm/mimo-v2.5 | 0.1 | deny | deny | allow | deny | – | Local FS recon: read/glob/grep only; task: deny; no opencode.json section (frontmatter-only); never a pipeline step |
 | **advisor** | subagent | bifrost-litellm/tencent/Hy4 | 0.1 | deny | deny | allow | deny | – | Step-boundary advisory reviewer (DEV COMPLEX, BUGFIX DEEP); read-only (read/grep/glob + read-only serena); severity-tagged notes; unity-mcp deny |
-| **voice-synthesizer** | subagent | bifrost-litellm/voice/xiaomi/mimo-v2.5-tts | 0.3 | deny | **allow** | allow | **allow** | – | TTS via audio-synthesize skill (standard/clone/design modes); edit denied, task deny |
+| **voice-synthesizer** | subagent | bifrost-litellm/MiniMax-M3 | 0.3 | deny | **allow** | allow | **allow** | – | TTS via audio-synthesize skill (standard/clone/design modes); edit denied, task deny |
 
 ### Primary Agent Permissions
 
@@ -1344,7 +1345,7 @@ opencode --agent plankestrator
 | Routing tables | 2 | orchestrator (26), plankestrator (10) |
 | Pipelines | 13 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 | Custom commands | 5 | opencode.json |
-| Models | 11 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, xiaomi/mimo-v2.6-pro, openrouter/deepseek-v4.1-flash, tencent/Hy4, stepfun/step-5-preview, voice/xiaomi/mimo-v2.5-tts) |
+| Models | 10 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, xiaomi/mimo-v2.6-pro, openrouter/deepseek-v4.1-flash, tencent/Hy4, stepfun/step-5-preview) |
 
 ### Quick Reference
 

@@ -14,7 +14,7 @@
 
 .PARAMETER ExpectedModels
     Expected number of DISTINCT models in use (also MCP_SETUP Distribution rows
-    and Summary count). Default 11.
+    and Summary count). Default 10.
 
 .PARAMETER ExpectedOrch
     Expected orchestrator routing-table size. Default 26.
@@ -38,12 +38,12 @@
 .EXAMPLE
     .\check.ps1
     .\check.ps1 -Json
-    .\check.ps1 -ExpectedAgents 38 -ExpectedModels 11 -ExpectedOrch 26 -ExpectedPlan 10
+    .\check.ps1 -ExpectedAgents 38 -ExpectedModels 10 -ExpectedOrch 26 -ExpectedPlan 10
 #>
 
 param(
     [int]$ExpectedAgents = 38,
-    [int]$ExpectedModels = 11,
+    [int]$ExpectedModels = 10,
     [int]$ExpectedOrch = 26,
     [int]$ExpectedPlan = 10,
     [string]$Config = "",

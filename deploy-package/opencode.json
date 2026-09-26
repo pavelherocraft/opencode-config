@@ -896,6 +896,20 @@
           },
           "attachment": true
         },
+        "voice/xiaomi/mimo-v2.5-tts": {
+          "name": "voice/xiaomi/mimo-v2.5-tts",
+          "limit": {
+            "context": 8192,
+            "output": 8192
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "audio"
+            ]
+          },
+          "attachment": true
+        },
         "voice/xiaomi/mimo-v2.5-asr": {
           "name": "voice/xiaomi/mimo-v2.5-asr",
           "limit": {
@@ -909,13 +923,6 @@
             ]
           },
           "attachment": true
-        },
-        "voice/xiaomi/mimo-v2.5-tts": {
-          "name": "voice/xiaomi/mimo-v2.5-tts",
-          "limit": {
-            "context": 8192,
-            "output": 8192
-          }
         },
         "voice/xiaomi/mimo-v2.5-tts-voiceclone": {
           "name": "voice/xiaomi/mimo-v2.5-tts-voiceclone",

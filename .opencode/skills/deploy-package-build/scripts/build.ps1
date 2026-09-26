@@ -29,7 +29,7 @@
     Gate default 38.
 
 .PARAMETER ExpectedModels
-    Gate default 11.
+    Gate default 10.
 
 .PARAMETER ExpectedOrch
     Gate default 26.
@@ -60,7 +60,7 @@ param(
     [switch]$Archive,
     [switch]$Strict,
     [int]$ExpectedAgents = 38,
-    [int]$ExpectedModels = 11,
+    [int]$ExpectedModels = 10,
     [int]$ExpectedOrch = 26,
     [int]$ExpectedPlan = 10,
     [switch]$Json

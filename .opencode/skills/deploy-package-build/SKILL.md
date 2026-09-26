@@ -53,7 +53,7 @@ limitation — they change only on plugin dependency updates, handled manually).
    prints secret values — pattern name + hit count only
 3. `COUNT:agents_live` == `-ExpectedAgents` (default 38)
 4. `COUNT:models_used` — distinct frontmatter models across live agents ==
-   `-ExpectedModels` (default 11)
+    `-ExpectedModels` (default 10)
 5. `COUNT:routing_orchestrator` — opencode.json task-allows == ARCHITECTURE.md
    header number == ARCHITECTURE.md table rows == plugin ROUTING_TABLES entries
    == `-ExpectedOrch` (default 26)
@@ -138,7 +138,7 @@ python .opencode/skills/deploy-package-build/scripts/build.py --apply [--archive
 | `-Archive` | with -Apply: rebuild deploy-package.7z (requires 7-Zip) |
 | `-Strict` | STALE findings → exit 3 |
 | `-ExpectedAgents <n>` | gate default 38 |
-| `-ExpectedModels <n>` | gate default 11 |
+| `-ExpectedModels <n>` | gate default 10 |
 | `-ExpectedOrch <n>` / `-ExpectedPlan <n>` | gate defaults 26 / 10 |
 | `-Json` | JSON report instead of token lines (exit codes unchanged) |
 

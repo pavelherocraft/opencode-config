@@ -1,6 +1,6 @@
 ---
 name: integrity-check
-description: 'Fast LLM-free integrity check — SHA256 for all 38 agent pairs (live vs deploy), counters (38 agents, 11 models in use, routing 26/10 across opencode.json + ARCHITECTURE.md + workflow-enforcement.ts), every frontmatter model: key validated for format (provider/key) and existence in opencode.json provider models. PASS/FAIL report, exit 0 all pass, exit 3 failures.'
+description: 'Fast LLM-free integrity check — SHA256 for all 38 agent pairs (live vs deploy), counters (38 agents, 10 models in use, routing 26/10 across opencode.json + ARCHITECTURE.md + workflow-enforcement.ts), every frontmatter model: key validated for format (provider/key) and existence in opencode.json provider models. PASS/FAIL report, exit 0 all pass, exit 3 failures.'
 ---
 
 # Integrity Check
@@ -33,8 +33,8 @@ These skills are project-level: invoke them from the repo root via
 4. **Model existence**: every `model:` resolves in live opencode.json
    `provider.<provider>.models.<model-key>`
 5. **Models-in-use counter**: number of DISTINCT `model:` values across the 38 live
-   frontmatters == 11; cross-checks: MCP_SETUP.md (root) Models Distribution data-row
-   count == 11 AND Summary row `| Models | 11 |` == 11
+   frontmatters == 10; cross-checks: MCP_SETUP.md (root) Models Distribution data-row
+   count == 10 AND Summary row `| Models | 10 |` == 10
 6. **Routing counters** (expected 26 orchestrator / 10 plankestrator), from 3 sources each:
    - live opencode.json `agent.<primary>.permission.task` — count of `"allow"` values (excl. `"*"`)
    - ARCHITECTURE.md (root) — `### orchestrator Whitelist (26 agents)` / `### plankestrator
@@ -49,7 +49,7 @@ These skills are project-level: invoke them from the repo root via
 ```powershell
 & ".opencode\skills\integrity-check\scripts\check.ps1"
 & ".opencode\skills\integrity-check\scripts\check.ps1" -Json
-& ".opencode\skills\integrity-check\scripts\check.ps1" -ExpectedAgents 38 -ExpectedModels 11 -ExpectedOrch 26 -ExpectedPlan 10
+    & ".opencode\skills\integrity-check\scripts\check.ps1" -ExpectedAgents 38 -ExpectedModels 10 -ExpectedOrch 26 -ExpectedPlan 10
 ```
 
 ### POSIX mirror

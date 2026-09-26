@@ -10,7 +10,7 @@ writing; --apply performs the build; --archive rebuilds deploy-package.7z.
 
 Usage:
     python build.py [--plan | --apply] [--archive] [--strict] [--json]
-                    [--expected-agents 38] [--expected-models 11]
+                     [--expected-agents 38] [--expected-models 10]
                     [--expected-orch 26] [--expected-plan 10]
 
 Output:
@@ -215,7 +215,7 @@ def main():
     parser.add_argument('--archive', action='store_true')
     parser.add_argument('--strict', action='store_true')
     parser.add_argument('--expected-agents', type=int, default=38)
-    parser.add_argument('--expected-models', type=int, default=11)
+    parser.add_argument('--expected-models', type=int, default=10)
     parser.add_argument('--expected-orch', type=int, default=26)
     parser.add_argument('--expected-plan', type=int, default=10)
     parser.add_argument('--json', action='store_true')

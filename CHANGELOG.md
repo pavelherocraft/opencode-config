@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **voice-synthesizer: TTS-модель заменена на доступную LLM (bifrost-litellm/MiniMax-M3)**: каталожная модель `bifrost-litellm/voice/xiaomi/mimo-v2.5-tts` недоступна через bifrost-litellm (`Param Incorrect`) — TTS-модели работают через специализированный TTS API, а не как обычные LLM. voice-synthesizer стал LLM-агентом (MiniMax-M3, tier executor-cheap), оркестрирующим skill audio-synthesize через bash (TTS-модели вызываются только скриптами скилла). Синхронно: frontmatter voice-synthesizer.md (live + deploy) + IMPORTANT-инструкция; ARCHITECTURE.md ×4 (Subagent Models, Model Roles: executor-cheap +voice-synthesizer, роль voice-synth удалена); MCP_SETUP.md ×3 (Models Distribution: MiniMax-M3 10→11, строка voice/xiaomi/mimo-v2.5-tts удалена; Subagents Full Table; Models 11→10); opencode.json ×2 (секция provider `voice/xiaomi/mimo-v2.5-tts` удалена; asr/voiceclone/voicedesign сохранены для скилла); pipelines_and_models.md (11→10 моделей); integrity-check (ExpectedModels 11→10). Restart required.
+
 ### Added
 
 - **voice-synthesizer** agent (MiMo-V2.5-TTS: standard/clone/design modes)

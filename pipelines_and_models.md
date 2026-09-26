@@ -552,7 +552,7 @@ docs_plan.md        docs_plan.md                                    ▼
 | Модель | Агент(ы) | Тип задач |
 |--------|----------|-----------|
 | **bifrost-litellm/QWEN3.7-plus** | orchestrator, plankestrator, orchestrator-identity-probe, plankestrator-identity-probe, bugfix, plan-writer-simple | Координация, маршрутизация, простое исправление багов |
-| **bifrost-litellm/MiniMax-M3** | execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image, git-commit | Исполнение, MCP-инструменты, суммаризация, валидация |
+| **bifrost-litellm/MiniMax-M3** | execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image, git-commit, voice-synthesizer | Исполнение, MCP-инструменты, суммаризация, валидация |
 | **bifrost-litellm/GLM-5.3 (res)** | dev-professor, plan-bug, plan-reviewer-simple, research-reviewer | Сложная реализация, планирование багфикса (prewalk) |
 | **bifrost-litellm/Kimi K3** | dev-reviewer, plan-reviewer-complex, research-writer-complex | Ревью кода/планов, сложное исследование |
 | **bifrost-litellm/qwen3.8-max** | dev-planner, devops-reviewer, plan-writer-complex | Архитектурное планирование, ревью DevOps, сложные планы |
@@ -561,9 +561,8 @@ docs_plan.md        docs_plan.md                                    ▼
 | **bifrost-litellm/openrouter/deepseek-v4.1-flash** | bugfix-triage, rework, docs-planner | Триаж, реwork по ревью, планирование документации |
 | **bifrost-litellm/mimo-v2.5** | generate-image, generate-image-gpt, scout | Оркестрация image-gen skill, локальная FS-разведка |
 | **bifrost-litellm/tencent/Hy4** | advisor | Step-boundary advisory-ревью (read-only) |
-| **bifrost-litellm/voice/xiaomi/mimo-v2.5-tts** | voice-synthesizer | TTS: стандартная генерация, клонирование и дизайн голоса (audio-synthesize skill) |
 
-> Источник истины — `model:` во frontmatter каждого агента (`agents/*.md`). Всего **11 моделей** на **38 агентов** (2 primary + 36 subagents).
+> Источник истины — `model:` во frontmatter каждого агента (`agents/*.md`). Всего **10 моделей** на **38 агентов** (2 primary + 36 subagents).
 
 ---
 

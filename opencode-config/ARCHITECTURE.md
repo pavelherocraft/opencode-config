@@ -103,9 +103,15 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | generate-image-gpt | bifrost-litellm/mimo-v2.5 |
 | view-image | bifrost-litellm/MiniMax-M3 |
 | scout | bifrost-litellm/mimo-v2.5 |
-| voice-synthesizer | bifrost-litellm/voice/xiaomi/mimo-v2.5-tts |
+| voice-synthesizer | bifrost-litellm/MiniMax-M3 |
 
 Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3.7-plus` and are documented in §Identity Lock Mechanism (v3), item 5 — not duplicated in the Subagent Models table.
+
+### Skill-only models
+
+| Model | Provider | Agents | Usage |
+|-------|----------|--------|-------|
+| voice/xiaomi/mimo-v2.5-tts | bifrost-litellm | 0 | Used by audio-synthesize skill (not agent model) |
 
 ## Model Roles (v5 — single source of truth, OMP model-roles analog)
 
@@ -126,12 +132,11 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | triage-flash | bifrost-litellm/openrouter/deepseek-v4.1-flash | low | bugfix-triage |
 | advisory | bifrost-litellm/tencent/Hy4 | mid | advisor |
 | executor-strong | bifrost-litellm/GLM-5.3 (res) | mid | dev-professor |
-| executor-cheap | bifrost-litellm/MiniMax-M3 | low | execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image, git-commit |
+| executor-cheap | bifrost-litellm/MiniMax-M3 | low | execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image, git-commit, voice-synthesizer |
 | executor-step5 | bifrost-litellm/stepfun/step-5-preview | low | worker |
 | docs | bifrost-litellm/xiaomi/mimo-v2.6-pro | low | docs-writer, research-writer-simple |
 | docs-plan | bifrost-litellm/openrouter/deepseek-v4.1-flash | low | docs-planner |
 | micro | bifrost-litellm/mimo-v2.5 | low | generate-image, generate-image-gpt, scout |
-| voice-synth | bifrost-litellm/voice/xiaomi/mimo-v2.5-tts | low | voice-synthesizer |
 
 Контроль суммы: 2 primary + 36 subagents = 38 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.
 
