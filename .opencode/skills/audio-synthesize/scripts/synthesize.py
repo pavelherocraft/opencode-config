@@ -53,36 +53,49 @@ def main():
         mode = "standard"
         model = args.model or "voice/xiaomi/mimo-v2.5-tts"
     
-    # Build messages
+    # Build messages based on mode
     if mode == "design":
-        user_content = args.voice_description
+        messages = [
+            {"role": "user", "content": args.voice_description},
+            {"role": "assistant", "content": args.text},
+        ]
     elif mode == "clone":
-        user_content = f"Clone the voice from the provided reference audio. Text to synthesize: {args.text}"
+        with open(args.reference_audio, "rb") as f:
+            audio_bytes = f.read()
+        audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+        
+        messages = [
+            {"role": "assistant", "content": args.text},
+        ]
+        
+        audio_field = {
+            "voice": audio_base64,
+            "format": args.format,
+        }
     else:
-        user_content = f"Synthesize the following text with voice '{args.voice}'."
-    
-    messages = [
-        {"role": "user", "content": user_content},
-        {"role": "assistant", "content": args.text},
-    ]
-    
-    # Build request body
-    body = {
-        "model": model,
-        "messages": messages,
-        "audio": {
+        messages = [
+            {"role": "assistant", "content": args.text},
+        ]
+        
+        audio_field = {
             "voice": args.voice,
             "format": args.format,
-        },
-    }
+        }
     
-    # For clone mode, add reference audio if supported
-    if mode == "clone" and args.reference_audio:
-        # TODO: Find how to pass reference audio in API
-        # For now, include path in user message
-        print(f"WARNING: Voice clone mode — reference audio path included in prompt")
-        print(f"  Reference: {args.reference_audio}")
-        print(f"  (API parameter for reference audio not yet documented)")
+    # Build request body
+    if mode == "design":
+        # design mode does NOT support audio.voice
+        body = {
+            "model": model,
+            "messages": messages,
+            "audio": {"format": args.format},
+        }
+    else:
+        body = {
+            "model": model,
+            "messages": messages,
+            "audio": audio_field,
+        }
     
     # Ensure output directory exists
     output_dir = os.path.dirname(args.output)

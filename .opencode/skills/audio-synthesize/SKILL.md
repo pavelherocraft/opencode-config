@@ -26,23 +26,43 @@ Synthesize speech from text using Xiaomi MiMo-V2.5-TTS models via bifrost-litell
 
 The script automatically selects the correct model based on mode.
 
-## Modes
+## API Protocol (by mode)
 
-### 1. Standard TTS (`voice/xiaomi/mimo-v2.5-tts`)
-- `user` message: voice description or instruction
-- `assistant` message: text to synthesize
-- `audio.voice`: voice name (default: "mimo_default")
+### Standard TTS (voice/xiaomi/mimo-v2.5-tts)
+```json
+{
+  "model": "voice/xiaomi/mimo-v2.5-tts",
+  "messages": [{"role": "assistant", "content": "Text"}],
+  "audio": {"voice": "mimo_default", "format": "wav"}
+}
+```
+Voices: mimo_default, 冰糖, 茉莉, 苏打, 白桦, Mia, Chloe, Milo, Dean
 
-### 2. Voice Design (`voice/xiaomi/mimo-v2.5-tts-voicedesign`)
-- `user` message: description of desired voice (e.g., "warm male voice, low pitch")
-- `assistant` message: text to synthesize
-- `audio.voice`: "mimo_default"
+### Voice Design (voice/xiaomi/mimo-v2.5-tts-voicedesign)
+```json
+{
+  "model": "voice/xiaomi/mimo-v2.5-tts-voicedesign",
+  "messages": [
+    {"role": "user", "content": "Voice description"},
+    {"role": "assistant", "content": "Text"}
+  ],
+  "audio": {"format": "wav"}
+}
+```
+**Note:** `audio.voice` field NOT supported in design mode!
 
-### 3. Voice Clone (`voice/xiaomi/mimo-v2.5-tts-voiceclone`)
-- `user` message: instruction + reference audio path
-- `assistant` message: text to synthesize
-- `audio.voice`: "mimo_default"
-- **Note:** API parameter for reference audio not yet documented
+### Voice Clone (voice/xiaomi/mimo-v2.5-tts-voiceclone)
+```json
+{
+  "model": "voice/xiaomi/mimo-v2.5-tts-voiceclone",
+  "messages": [{"role": "assistant", "content": "Text"}],
+  "audio": {
+    "voice": "<base64 audio>",
+    "format": "wav"
+  }
+}
+```
+**Note:** `audio.voice` MUST be base64 of real voice sample (mp3/wav, human speech, ≥3 sec).
 
 ## Usage
 

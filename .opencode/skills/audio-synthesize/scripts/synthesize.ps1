@@ -51,41 +51,56 @@ if ($ReferenceAudio) {
     $Model = if ($Model) { $Model } else { "voice/xiaomi/mimo-v2.5-tts" }
 }
 
-# Build messages
+# Build messages based on mode
 if ($Mode -eq "design") {
-    $userContent = $VoiceDescription
+    $messages = @(
+        @{ role = "user"; content = $VoiceDescription },
+        @{ role = "assistant"; content = $Text }
+    )
 } elseif ($Mode -eq "clone") {
-    $userContent = "Clone the voice from the provided reference audio. Text to synthesize: $Text"
+    # Read reference audio and convert to base64
+    $audioBytes = [System.IO.File]::ReadAllBytes($ReferenceAudio)
+    $audioBase64 = [Convert]::ToBase64String($audioBytes)
+    
+    $messages = @(
+        @{ role = "assistant"; content = $Text }
+    )
+    
+    $audioField = @{
+        voice = $audioBase64
+        format = $Format
+    }
 } else {
-    $userContent = "Synthesize the following text with voice '$Voice'."
-}
-
-$messages = @(
-    @{ role = "user"; content = $userContent },
-    @{ role = "assistant"; content = $Text }
-)
-
-# Build request body
-$body = @{
-    model = $Model
-    messages = $messages
-    audio = @{
+    $messages = @(
+        @{ role = "assistant"; content = $Text }
+    )
+    
+    $audioField = @{
         voice = $Voice
         format = $Format
     }
-} | ConvertTo-Json -Depth 10
+}
+
+# Build request body
+if ($Mode -eq "design") {
+    # design mode does NOT support audio.voice
+    $body = @{
+        model = $Model
+        messages = $messages
+        audio = @{ format = $Format }
+    } | ConvertTo-Json -Depth 10
+} else {
+    $body = @{
+        model = $Model
+        messages = $messages
+        audio = $audioField
+    } | ConvertTo-Json -Depth 10
+}
 
 # Ensure output directory exists
 $outputDir = Split-Path $OutputPath -Parent
 if ($outputDir -and -not (Test-Path $outputDir)) {
     New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
-}
-
-# Clone mode caveat
-if ($Mode -eq "clone") {
-    Write-Host "WARNING: Voice clone mode — reference audio path included in prompt"
-    Write-Host "  Reference: $ReferenceAudio"
-    Write-Host "  (API parameter for reference audio not yet documented)"
 }
 
 # Make API call (HttpClient: works on PowerShell 5.1 and 7+, honors timeout)

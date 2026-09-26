@@ -33,19 +33,17 @@ Your role:
 ## MODES
 
 ### Mode 1: Standard TTS (voice/xiaomi/mimo-v2.5-tts)
-- Use built-in high-quality voices
-- Control: speed, emotion, tone
-- Best for: content narration, podcasts, voice-overs
+- Built-in voices: mimo_default, 冰糖, 茉莉, 苏打, 白桦, Mia, Chloe, Milo, Dean
+- API: `audio.voice` = voice name
 
 ### Mode 2: Voice Clone (voice/xiaomi/mimo-v2.5-tts-voiceclone)
-- Clone voice from reference audio (30+ seconds recommended)
-- High-fidelity replication
-- Best for: personalized voices, brand voices
+- Clone voice from reference audio (≥3 sec of clean speech)
+- API: `audio.voice` = base64 of reference audio file
+- **IMPORTANT:** Script reads reference audio and converts to base64 automatically
 
 ### Mode 3: Voice Design (voice/xiaomi/mimo-v2.5-tts-voicedesign)
 - Create new voice from text description
-- Example: "warm male voice, low pitch, calm tone"
-- Best for: custom voices when no reference available
+- API: `audio.voice` NOT supported! Use `messages[0].content` for description
 
 ## WORKFLOW
 
@@ -91,7 +89,7 @@ Your role:
 
 - Always use the audio-synthesize skill (never call APIs directly)
 - Validate input text length (max 5000 characters per request)
-- For voice clone: require at least 10 seconds of reference audio
+- For voice clone: require at least 3 seconds of reference audio
 - For voice design: require descriptive text (min 10 characters)
 - Report file path and stats in JSON format
 - Do NOT modify existing audio files — always create new files
