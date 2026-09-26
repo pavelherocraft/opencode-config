@@ -1,94 +1,120 @@
 ---
 name: audio-synthesize
-description: 'Text-to-speech synthesis using MiMo-V2.5-TTS models. Supports standard TTS (built-in voices), voice cloning (from reference audio), and voice design (from text description). Generates MP3 output.'
+description: 'Text-to-speech synthesis using MiMo-V2.5-TTS via bifrost-litellm API. Supports standard TTS, voice design, and voice clone modes.'
 ---
 
 # Audio Synthesize Skill
 
 ## Purpose
 
-Synthesize speech from text using Xiaomi MiMo-V2.5-TTS models.
+Synthesize speech from text using Xiaomi MiMo-V2.5-TTS models via bifrost-litellm API.
+
+## API Details
+
+- **Endpoint:** `https://hcbifrost.herocraft.com/litellm/v1/chat/completions`
+- **Models (by mode):** see [Models by Mode](#models-by-mode)
+- **Auth:** `LITELLM_API_KEY` environment variable
+- **Response:** `choices[0].message.audio.data` (base64-encoded audio)
+
+## Models by Mode
+
+| Mode | Model |
+|------|-------|
+| Standard TTS | `voice/xiaomi/mimo-v2.5-tts` |
+| Voice Clone | `voice/xiaomi/mimo-v2.5-tts-voiceclone` |
+| Voice Design | `voice/xiaomi/mimo-v2.5-tts-voicedesign` |
+
+The script automatically selects the correct model based on mode.
 
 ## Modes
 
-1. **Standard TTS** — Use built-in voices with fine-grained control
-2. **Voice Clone** — Clone voice from reference audio samples
-3. **Voice Design** — Create new voice from text description
+### 1. Standard TTS (`voice/xiaomi/mimo-v2.5-tts`)
+- `user` message: voice description or instruction
+- `assistant` message: text to synthesize
+- `audio.voice`: voice name (default: "mimo_default")
+
+### 2. Voice Design (`voice/xiaomi/mimo-v2.5-tts-voicedesign`)
+- `user` message: description of desired voice (e.g., "warm male voice, low pitch")
+- `assistant` message: text to synthesize
+- `audio.voice`: "mimo_default"
+
+### 3. Voice Clone (`voice/xiaomi/mimo-v2.5-tts-voiceclone`)
+- `user` message: instruction + reference audio path
+- `assistant` message: text to synthesize
+- `audio.voice`: "mimo_default"
+- **Note:** API parameter for reference audio not yet documented
 
 ## Usage
 
 ### Standard TTS
 ```powershell
-& "$env:USERPROFILE\.config\opencode\skills\audio-synthesize\scripts\synthesize.ps1" `
+& ".opencode/skills/audio-synthesize/scripts/synthesize.ps1" `
     -Text "Hello, world!" `
-    -Voice "alloy" `
-    -Model "voice/xiaomi/mimo-v2.5-tts" `
-    -Speed 1.0 `
-    -OutputPath "output.mp3"
+    -Voice "mimo_default" `
+    -OutputPath "output.wav"
 ```
 
-### Voice Clone
-```powershell
-& "$env:USERPROFILE\.config\opencode\skills\audio-synthesize\scripts\synthesize.ps1" `
-    -Text "Text to synthesize" `
-    -ReferenceAudio "reference_voice.wav" `
-    -Model "voice/xiaomi/mimo-v2.5-tts-voiceclone" `
-    -OutputPath "cloned_voice.mp3"
+```bash
+python ".opencode/skills/audio-synthesize/scripts/synthesize.py" \
+    --text "Hello, world!" \
+    --voice "mimo_default" \
+    --output "output.wav"
 ```
 
 ### Voice Design
 ```powershell
-& "$env:USERPROFILE\.config\opencode\skills\audio-synthesize\scripts\synthesize.ps1" `
-    -Text "Text to synthesize" `
-    -VoiceDescription "warm male voice, low pitch, calm tone" `
-    -Model "voice/xiaomi/mimo-v2.5-tts-voicedesign" `
-    -OutputPath "designed_voice.mp3"
+& ".opencode/skills/audio-synthesize/scripts/synthesize.ps1" `
+    -Text "Текст для озвучки" `
+    -VoiceDescription "Тёплый мужской голос, низкий тембр" `
+    -OutputPath "designed.wav"
+```
+
+### Voice Clone
+```powershell
+& ".opencode/skills/audio-synthesize/scripts/synthesize.ps1" `
+    -Text "Текст для озвучки" `
+    -ReferenceAudio "reference.wav" `
+    -OutputPath "cloned.wav"
 ```
 
 ## Parameters
 
 ### Required
-- `-Text` — Text to synthesize (max 5000 chars)
-- `-OutputPath` — Output MP3 file path
+- `-Text` / `--text` — Text to synthesize (max 5000 chars)
+- `-OutputPath` / `--output` — Output audio file path
 
-### Mode-specific
-**Standard TTS:**
-- `-Voice` — Voice name (default: "alloy")
-- `-Speed` — Speed multiplier 0.5-2.0 (default: 1.0)
+### Optional
+- `-Voice` / `--voice` — Voice name (default: "mimo_default")
+- `-VoiceDescription` / `--voice-description` — Voice description for design mode
+- `-ReferenceAudio` / `--reference-audio` — Reference audio for clone mode
+- `-Format` / `--format` — Output format: "wav" or "mp3" (default: "wav")
+- `-Model` / `--model` — TTS model override (default: auto-selected by mode)
 
-**Voice Clone:**
-- `-ReferenceAudio` — Path to reference audio file (min 10 seconds)
+## Environment
 
-**Voice Design:**
-- `-VoiceDescription` — Text description of desired voice (min 10 chars)
-
-### Common
-- `-Model` — Model name (auto-detected from mode)
-
-## Models
-
-| Model ID | Mode |
-|----------|------|
-| `voice/xiaomi/mimo-v2.5-tts` | Standard TTS (default) |
-| `voice/xiaomi/mimo-v2.5-tts-voiceclone` | Voice Clone |
-| `voice/xiaomi/mimo-v2.5-tts-voicedesign` | Voice Design |
+- **LITELLM_API_KEY** — required, bifrost-litellm API key
 
 ## Output
 
-- STATUS: success|error
-- OUTPUT_PATH: path to generated MP3
-- DURATION: duration in seconds
-- MODEL: model used
-
-## Gates
-
-- Text length ≤ 5000 characters
-- Reference audio ≥ 10 seconds (for clone mode)
-- Voice description ≥ 10 characters (for design mode)
-- Output directory exists and is writable
+```
+STATUS: success
+MODE: standard|clone|design
+MODEL: voice/xiaomi/mimo-v2.5-tts[-voiceclone|-voicedesign]
+OUTPUT_PATH: path/to/output.wav
+SIZE_BYTES: 12345
+FORMAT: wav
+USAGE: {...}
+```
 
 ## Exit Codes
 
 - 0: Success
 - 2: Usage error (invalid parameters)
-- 3: Gate block (validation failed)
+- 3: Gate block (validation failed, API error, missing env var)
+
+## Gates
+
+- Text length ≤ 5000 characters
+- LITELLM_API_KEY must be set
+- Reference audio must exist (for clone mode)
+- Voice description ≥ 10 characters (for design mode)

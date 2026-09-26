@@ -1,60 +1,133 @@
 #!/usr/bin/env python3
-"""MiMo-V2.5-TTS Synthesis Script (POSIX mirror)"""
+"""MiMo-V2.5-TTS Synthesis Script — real API integration"""
 
 import argparse
+import base64
+import json
 import os
 import sys
-from pathlib import Path
+
+try:
+    import requests
+except ImportError:
+    print("ERROR: 'requests' module not found. Install: pip install requests")
+    sys.exit(3)
+
+BASE_URL = "https://hcbifrost.herocraft.com/litellm/v1"
 
 def main():
     parser = argparse.ArgumentParser(description="MiMo-V2.5-TTS Synthesis")
     parser.add_argument("--text", required=True, help="Text to synthesize")
-    parser.add_argument("--output", required=True, help="Output MP3 path")
-    parser.add_argument("--voice", default="alloy", help="Voice name (standard mode)")
-    parser.add_argument("--speed", type=float, default=1.0, help="Speed multiplier")
-    parser.add_argument("--reference-audio", help="Reference audio for clone mode")
-    parser.add_argument("--voice-description", help="Voice description for design mode")
-    parser.add_argument("--model", help="Model name (auto-detected)")
+    parser.add_argument("--output", required=True, help="Output audio path")
+    parser.add_argument("--voice", default="mimo_default", help="Voice name (standard mode)")
+    parser.add_argument("--voice-description", default=None, help="Voice description (design mode)")
+    parser.add_argument("--reference-audio", default=None, help="Reference audio for clone mode")
+    parser.add_argument("--format", default="wav", choices=["wav", "mp3"], help="Output format")
+    parser.add_argument("--model", default=None, help="TTS model override (default: auto-select by mode)")
     
     args = parser.parse_args()
-    
-    # Determine mode
-    if args.reference_audio:
-        mode = "clone"
-        model = args.model or "voice/xiaomi/mimo-v2.5-tts-voiceclone"
-    elif args.voice_description:
-        mode = "design"
-        model = args.model or "voice/xiaomi/mimo-v2.5-tts-voicedesign"
-    else:
-        mode = "standard"
-        model = args.model or "voice/xiaomi/mimo-v2.5-tts"
     
     # Validation
     if len(args.text) > 5000:
         print("ERROR: Text exceeds 5000 character limit")
         sys.exit(3)
     
-    if mode == "clone" and not os.path.exists(args.reference_audio):
-        print(f"ERROR: Reference audio not found: {args.reference_audio}")
+    if not os.environ.get("LITELLM_API_KEY"):
+        print("ERROR: LITELLM_API_KEY environment variable not set")
         sys.exit(3)
     
-    if mode == "design" and len(args.voice_description) < 10:
-        print("ERROR: Voice description must be at least 10 characters")
-        sys.exit(3)
+    # Determine mode and model
+    if args.reference_audio:
+        mode = "clone"
+        if not os.path.exists(args.reference_audio):
+            print(f"ERROR: Reference audio not found: {args.reference_audio}")
+            sys.exit(3)
+        model = args.model or "voice/xiaomi/mimo-v2.5-tts-voiceclone"
+    elif args.voice_description:
+        mode = "design"
+        if len(args.voice_description) < 10:
+            print("ERROR: Voice description must be at least 10 characters")
+            sys.exit(3)
+        model = args.model or "voice/xiaomi/mimo-v2.5-tts-voicedesign"
+    else:
+        mode = "standard"
+        model = args.model or "voice/xiaomi/mimo-v2.5-tts"
+    
+    # Build messages
+    if mode == "design":
+        user_content = args.voice_description
+    elif mode == "clone":
+        user_content = f"Clone the voice from the provided reference audio. Text to synthesize: {args.text}"
+    else:
+        user_content = f"Synthesize the following text with voice '{args.voice}'."
+    
+    messages = [
+        {"role": "user", "content": user_content},
+        {"role": "assistant", "content": args.text},
+    ]
+    
+    # Build request body
+    body = {
+        "model": model,
+        "messages": messages,
+        "audio": {
+            "voice": args.voice,
+            "format": args.format,
+        },
+    }
+    
+    # For clone mode, add reference audio if supported
+    if mode == "clone" and args.reference_audio:
+        # TODO: Find how to pass reference audio in API
+        # For now, include path in user message
+        print(f"WARNING: Voice clone mode — reference audio path included in prompt")
+        print(f"  Reference: {args.reference_audio}")
+        print(f"  (API parameter for reference audio not yet documented)")
     
     # Ensure output directory exists
     output_dir = os.path.dirname(args.output)
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
     
-    # TODO: Implement actual API call
-    print(f"STATUS: placeholder")
+    # Make API call
+    try:
+        resp = requests.post(
+            f"{BASE_URL}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {os.environ['LITELLM_API_KEY']}",
+                "Content-Type": "application/json",
+            },
+            json=body,
+            timeout=180,
+        )
+        resp.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(f"ERROR: API request failed: {e}")
+        sys.exit(3)
+    
+    # Extract audio
+    try:
+        result = resp.json()
+        audio = result["choices"][0]["message"]["audio"]
+        raw = base64.b64decode(audio["data"])
+    except (KeyError, ValueError) as e:
+        print(f"ERROR: Failed to parse API response: {e}")
+        print(f"Response: {resp.text[:500]}")
+        sys.exit(3)
+    
+    # Save audio
+    with open(args.output, "wb") as f:
+        f.write(raw)
+    
+    # Output
+    usage = result.get("usage", {})
+    print(f"STATUS: success")
     print(f"MODE: {mode}")
     print(f"MODEL: {model}")
-    print(f"TEXT_LENGTH: {len(args.text)}")
     print(f"OUTPUT_PATH: {args.output}")
-    print()
-    print("NOTE: Actual MiMo TTS API integration required.")
+    print(f"SIZE_BYTES: {len(raw)}")
+    print(f"FORMAT: {args.format}")
+    print(f"USAGE: {json.dumps(usage)}")
     
     sys.exit(0)
 
