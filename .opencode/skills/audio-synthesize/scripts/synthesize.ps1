@@ -58,16 +58,24 @@ if ($Mode -eq "design") {
         @{ role = "assistant"; content = $Text }
     )
 } elseif ($Mode -eq "clone") {
-    # Read reference audio and convert to base64
     $audioBytes = [System.IO.File]::ReadAllBytes($ReferenceAudio)
     $audioBase64 = [Convert]::ToBase64String($audioBytes)
-    
+
+    $ext = [System.IO.Path]::GetExtension($ReferenceAudio).ToLower()
+    $mimeType = switch ($ext) {
+        ".wav" { "audio/wav" }
+        ".mp3" { "audio/mpeg" }
+        ".m4a" { "audio/mpeg" }
+        default { "audio/wav" }
+    }
+
     $messages = @(
+        @{ role = "user"; content = "" },
         @{ role = "assistant"; content = $Text }
     )
-    
+
     $audioField = @{
-        voice = $audioBase64
+        voice = "data:$mimeType;base64,$audioBase64"
         format = $Format
     }
 } else {

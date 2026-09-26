@@ -63,13 +63,17 @@ def main():
         with open(args.reference_audio, "rb") as f:
             audio_bytes = f.read()
         audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
-        
+
+        ext = os.path.splitext(args.reference_audio)[1].lower()
+        mime_type = "audio/wav" if ext == ".wav" else "audio/mpeg" if ext in [".mp3", ".m4a"] else "audio/wav"
+
         messages = [
+            {"role": "user", "content": ""},
             {"role": "assistant", "content": args.text},
         ]
-        
+
         audio_field = {
-            "voice": audio_base64,
+            "voice": f"data:{mime_type};base64,{audio_base64}",
             "format": args.format,
         }
     else:
