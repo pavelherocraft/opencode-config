@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **audio-transcribe** skill: speech-to-text via MiMo-V2.5-ASR (Chinese/English, dialects, code-switch, song recognition, noisy environments, multi-speaker)
+- **audio-synthesize** skill updates: voice table (9 voices), limitations documentation, WAV/10MB validation for voice clone
 - **voice-synthesizer** agent (MiMo-V2.5-TTS: standard/clone/design modes)
 - **audio-synthesize** skill (TTS synthesis via MiMo-V2.5-TTS models)
 - New role `voice-synth` (tier: low) in Model Roles table

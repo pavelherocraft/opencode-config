@@ -51,6 +51,24 @@ if ($ReferenceAudio) {
     $Model = if ($Model) { $Model } else { "voice/xiaomi/mimo-v2.5-tts" }
 }
 
+# Validate reference audio format for clone mode
+if ($Mode -eq "clone") {
+    $ext = [System.IO.Path]::GetExtension($ReferenceAudio).ToLower()
+    if ($ext -ne ".wav") {
+        Write-Host "ERROR: Voice clone requires WAV format. Got: $ext"
+        Write-Host "Convert m4a/mp3 to WAV first (e.g., using ffmpeg)"
+        exit 3
+    }
+
+    $fileSize = (Get-Item $ReferenceAudio).Length
+    if ($fileSize -gt 10MB) {
+        $sizeMB = [math]::Round($fileSize / 1MB, 1)
+        Write-Host "ERROR: Reference audio too large ($sizeMB MB)"
+        Write-Host "Maximum size: 10MB"
+        exit 3
+    }
+}
+
 # Build messages based on mode
 if ($Mode -eq "design") {
     $messages = @(
@@ -65,7 +83,7 @@ if ($Mode -eq "design") {
     $mimeType = switch ($ext) {
         ".wav" { "audio/wav" }
         ".mp3" { "audio/mpeg" }
-        ".m4a" { "audio/mpeg" }
+        ".m4a" { "audio/mp4" }
         default { "audio/wav" }
     }
 

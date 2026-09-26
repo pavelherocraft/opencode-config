@@ -58,7 +58,13 @@ OpenCode использует архитектуру с двумя primary-аг�
 | `openrouter/deepseek-v4.1-flash` | bifrost-litellm | 3 | bugfix-triage, docs-planner, rework |
 | `tencent/Hy4` | bifrost-litellm | 1 | advisor |
 
-> **Skill-only model (0 агентов):** `voice/xiaomi/mimo-v2.5-tts` (bifrost-litellm) — не модель агента: вызывается скриптами скилла `audio-synthesize` (`synthesize.py` / `synthesize.ps1`, default model). В счётчик Models Distribution (10 моделей агентов) не входит.
+> **Skill-only models (0 агентов, used by skills, not agents):**
+> - `voice/xiaomi/mimo-v2.5-tts` → `audio-synthesize` (standard TTS)
+> - `voice/xiaomi/mimo-v2.5-tts-voiceclone` → `audio-synthesize` (voice cloning)
+> - `voice/xiaomi/mimo-v2.5-tts-voicedesign` → `audio-synthesize` (voice design)
+> - `voice/xiaomi/mimo-v2.5-asr` → `audio-transcribe` (speech-to-text)
+>
+> Все — bifrost-litellm, не модели агентов: вызываются скриптами скиллов. В счётчик Models Distribution (10 моделей агентов) не входят.
 
 ### MCP Servers
 

@@ -26,6 +26,20 @@ Synthesize speech from text using Xiaomi MiMo-V2.5-TTS models via bifrost-litell
 
 The script automatically selects the correct model based on mode.
 
+## Supported Voices
+
+| Voice | Language | Style |
+|-------|----------|-------|
+| mimo_default | Chinese/English | Neutral |
+| 冰糖 (Bīngtáng) | Chinese | Sweet, young female |
+| 茉莉 (Mòlì) | Chinese | Gentle, mature female |
+| 苏打 (Sūdǎ) | Chinese | Energetic, casual |
+| 白桦 (Báihuà) | Chinese | Calm, professional male |
+| Mia | English | Friendly, natural female |
+| Chloe | English | Professional, clear female |
+| Milo | English | Casual, relaxed male |
+| Dean | English | Authoritative, deep male |
+
 ## API Protocol (by mode)
 
 ### Standard TTS (voice/xiaomi/mimo-v2.5-tts)
@@ -132,9 +146,28 @@ USAGE: {...}
 - 2: Usage error (invalid parameters)
 - 3: Gate block (validation failed, API error, missing env var)
 
+## Limitations
+
+### Voice Clone
+- **Format:** WAV only (m4a/mp3 rejected with HTTP 400)
+- **Duration:** ≥3 seconds of clean speech recommended
+- **Quality:** Human speech only (music/noise rejected)
+- **Size:** Max ~10MB reference audio
+
+### Voice Design
+- `audio.voice` field NOT supported
+- Description should be detailed (≥10 characters)
+- Example: "Тёплый женский голос, спокойный темп, низкий тембр"
+
+### General
+- Max text length: 5000 characters
+- Supported formats: wav, mp3
+- Streaming: supported (stream:true → pcm chunks)
+
 ## Gates
 
 - Text length ≤ 5000 characters
 - LITELLM_API_KEY must be set
 - Reference audio must exist (for clone mode)
+- Reference audio must be WAV format, ≤10MB (for clone mode)
 - Voice description ≥ 10 characters (for design mode)

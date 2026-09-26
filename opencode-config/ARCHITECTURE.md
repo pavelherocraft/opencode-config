@@ -112,6 +112,9 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | Model | Provider | Agents | Usage |
 |-------|----------|--------|-------|
 | voice/xiaomi/mimo-v2.5-tts | bifrost-litellm | 0 | Used by audio-synthesize skill (not agent model) |
+| voice/xiaomi/mimo-v2.5-asr | bifrost-litellm | 0 | Used by audio-transcribe skill (speech-to-text) |
+| voice/xiaomi/mimo-v2.5-tts-voiceclone | bifrost-litellm | 0 | Used by audio-synthesize skill (voice cloning) |
+| voice/xiaomi/mimo-v2.5-tts-voicedesign | bifrost-litellm | 0 | Used by audio-synthesize skill (voice design) |
 
 ## Model Roles (v5 — single source of truth, OMP model-roles analog)
 

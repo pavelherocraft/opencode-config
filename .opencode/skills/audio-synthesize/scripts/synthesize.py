@@ -52,6 +52,21 @@ def main():
     else:
         mode = "standard"
         model = args.model or "voice/xiaomi/mimo-v2.5-tts"
+
+    # Validate reference audio format for clone mode
+    if mode == "clone":
+        ext = os.path.splitext(args.reference_audio)[1].lower()
+        if ext != ".wav":
+            print(f"ERROR: Voice clone requires WAV format. Got: {ext}")
+            print("Convert m4a/mp3 to WAV first (e.g., using ffmpeg)")
+            sys.exit(3)
+
+        # Check file size
+        file_size = os.path.getsize(args.reference_audio)
+        if file_size > 10 * 1024 * 1024:  # 10MB
+            print(f"ERROR: Reference audio too large ({file_size / 1024 / 1024:.1f}MB)")
+            print("Maximum size: 10MB")
+            sys.exit(3)
     
     # Build messages based on mode
     if mode == "design":
@@ -65,7 +80,7 @@ def main():
         audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
 
         ext = os.path.splitext(args.reference_audio)[1].lower()
-        mime_type = "audio/wav" if ext == ".wav" else "audio/mpeg" if ext in [".mp3", ".m4a"] else "audio/wav"
+        mime_type = "audio/wav" if ext == ".wav" else "audio/mp4" if ext == ".m4a" else "audio/mpeg" if ext == ".mp3" else "audio/wav"
 
         messages = [
             {"role": "user", "content": ""},
