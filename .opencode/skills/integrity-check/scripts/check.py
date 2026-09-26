@@ -6,8 +6,8 @@ Fast LLM-free integrity check of the agent orchestration config:
 SHA256 agent pairs, counters, frontmatter model key format/existence.
 
 Usage:
-    python check.py [--json] [--expected-agents 37] [--expected-models 10]
-                    [--expected-orch 25] [--expected-plan 10]
+python check.py [--json] [--expected-agents 38] [--expected-models 11]
+[--expected-orch 26] [--expected-plan 10]
                     [--config <path>]
 
 Output:
@@ -163,9 +163,9 @@ def repo_root(script_dir):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--expected-agents', type=int, default=37)
-    parser.add_argument('--expected-models', type=int, default=10)
-    parser.add_argument('--expected-orch', type=int, default=25)
+    parser.add_argument('--expected-agents', type=int, default=38)
+    parser.add_argument('--expected-models', type=int, default=11)
+    parser.add_argument('--expected-orch', type=int, default=26)
     parser.add_argument('--expected-plan', type=int, default=10)
     parser.add_argument('--config', default='')
     parser.add_argument('--json', action='store_true')

@@ -30,7 +30,7 @@
     With -Compare: differences (changed/missing/new/corrupt) -> exit 3.
 
 .PARAMETER ExpectedAgents
-    Informational WARN threshold for the live agents count. Default 37.
+    Informational WARN threshold for the live agents count. Default 38.
 
 .PARAMETER Json
     JSON report instead of token lines.
@@ -55,7 +55,7 @@ param(
     [string]$Dest = '',
     [string]$Compare = '',
     [switch]$Strict,
-    [int]$ExpectedAgents = 37,
+    [int]$ExpectedAgents = 38,
     [switch]$Json
 )
 

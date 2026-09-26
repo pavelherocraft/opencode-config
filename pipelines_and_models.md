@@ -561,8 +561,9 @@ docs_plan.md        docs_plan.md                                    ▼
 | **bifrost-litellm/openrouter/deepseek-v4.1-flash** | bugfix-triage, rework, docs-planner | Триаж, реwork по ревью, планирование документации |
 | **bifrost-litellm/mimo-v2.5** | generate-image, generate-image-gpt, scout | Оркестрация image-gen skill, локальная FS-разведка |
 | **bifrost-litellm/tencent/Hy4** | advisor | Step-boundary advisory-ревью (read-only) |
+| **bifrost-litellm/voice/xiaomi/mimo-v2.5-tts** | voice-synthesizer | TTS: стандартная генерация, клонирование и дизайн голоса (audio-synthesize skill) |
 
-> Источник истины — `model:` во frontmatter каждого агента (`agents/*.md`). Всего **10 моделей** на **37 агентов** (2 primary + 35 subagents).
+> Источник истины — `model:` во frontmatter каждого агента (`agents/*.md`). Всего **11 моделей** на **38 агентов** (2 primary + 36 subagents).
 
 ---
 

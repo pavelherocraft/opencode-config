@@ -1,6 +1,6 @@
 ---
 name: config-sync
-description: 'SHA256 compare and sync live (~/.config/opencode) vs deploy-package vs project mirrors — 37 agent pairs, opencode.json, workflow-enforcement.ts x3, ARCHITECTURE.md x3, MCP_SETUP.md x2, AGENTS.md x4, PLUGIN.md x3. -Plan reports drift (no changes); -Apply publishes live/root (source of truth) to deploy; -Apply -Reverse restores deploy to live.'
+description: 'SHA256 compare and sync live (~/.config/opencode) vs deploy-package vs project mirrors — 38 agent pairs, opencode.json, workflow-enforcement.ts x3, ARCHITECTURE.md x3, MCP_SETUP.md x2, AGENTS.md x4, PLUGIN.md x3. -Plan reports drift (no changes); -Apply publishes live/root (source of truth) to deploy; -Apply -Reverse restores deploy to live.'
 ---
 
 # Config Sync
@@ -39,7 +39,7 @@ These skills are project-level: invoke them from the repo root via
 
 | # | Group | Members (chain order) | Apply source |
 |---|-------|-----------------------|--------------|
-| agents | `~/.config/opencode/agents/*.md` ↔ `deploy-package/agents/*.md` (37 pairs) | live |
+| agents | `~/.config/opencode/agents/*.md` ↔ `deploy-package/agents/*.md` (38 pairs) | live |
 | config | `~/.config/opencode/opencode.json` ↔ `deploy-package/opencode.json` | live |
 | plugin | `~/.config/opencode/plugins/workflow-enforcement.ts` ↔ `plugins/workflow-enforcement.ts` ↔ `deploy-package/plugins/workflow-enforcement.ts` | live |
 | architecture | `ARCHITECTURE.md` ↔ `opencode-config/ARCHITECTURE.md` ↔ `deploy-package/project-files/ARCHITECTURE.md` | root |

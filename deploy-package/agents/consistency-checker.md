@@ -101,7 +101,7 @@ Files to verify:
 **Source**: ARCHITECTURE.md Section 1 — Routing Tables
 
 Verify that the routing table in `workflow-enforcement.ts` matches ARCHITECTURE.md Section 1 exactly:
-- `workflow-enforcement.ts` → `ROUTING_TABLES.orchestrator` array (25 agents)
+- `workflow-enforcement.ts` → `ROUTING_TABLES.orchestrator` array (26 agents)
 - `workflow-enforcement.ts` → `ROUTING_TABLES.plankestrator` array (10 agents)
 - `AGENTS.md` → orchestrator Whitelist table
 - `AGENTS.md` → plankestrator Whitelist table
@@ -115,8 +115,8 @@ All locations must list exactly the same agents as ARCHITECTURE.md Section 1.
 **Source**: ARCHITECTURE.md Section 1 — Agent Count Summary
 
 Verify that agent count headers are accurate across all files:
-- `AGENTS.md`: "orchestrator Whitelist (25 agents)" — count must match actual rows
-- `PLUGIN.md`: "orchestrator Whitelist (25 agents)" — count must match actual rows
+- `AGENTS.md`: "orchestrator Whitelist (26 agents)" — count must match actual rows
+- `PLUGIN.md`: "orchestrator Whitelist (26 agents)" — count must match actual rows
 - `AGENTS.md`: "plankestrator Whitelist (10 agents)" — count must match actual rows
 - `PLUGIN.md`: "plankestrator Whitelist (10 agents)" — count must match actual rows
 
@@ -196,7 +196,7 @@ And that JSON output includes the `"agent"` field.
 
 **Source**: ARCHITECTURE.md — Model Roles section + Subagent Models table
 
-Verify for every agent (37):
+Verify for every agent (38):
 - frontmatter `model:` in `~/.config/opencode/agents/*.md` matches the Model Roles table (role assignment)
 - Subagent Models table row matches the frontmatter (frontmatter wins — Permission Authority)
 - Prewalk rule holds: in planner→executor pairs (plan-bug→execute-bug, dev-planner→dev-professor, docs-planner→docs-writer) the planner's tier is ≥ executor's tier

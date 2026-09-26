@@ -10,7 +10,7 @@
 2. [Prerequisites](#2-prerequisites)
 3. [Installation Steps](#3-installation-steps)
 4. [opencode.json — Full Configuration](#4-opencodejson--full-configuration)
-5. [Agent Definitions — All 37 Agents](#5-agent-definitions--all-37-agents)
+5. [Agent Definitions — All 38 Agents](#5-agent-definitions--all-38-agents)
 6. [Routing Tables](#6-routing-tables)
 7. [Pipelines](#7-pipelines)
 8. [ARCHITECTURE.md Integration](#8-architecturemd-integration)
@@ -40,8 +40,8 @@ OpenCode использует архитектуру с двумя primary-аг�
 | Category | Count |
 |----------|-------|
 | Primary agents | 2 |
-| Subagents | 35 |
-| **Total unique agents** | **37** |
+| Subagents | 36 |
+| **Total unique agents** | **38** |
 
 ### Models Distribution
 
@@ -57,6 +57,7 @@ OpenCode использует архитектуру с двумя primary-аг�
 | `xiaomi/mimo-v2.6-pro` | bifrost-litellm | 3 | consistency-checker, docs-writer, research-writer-simple |
 | `openrouter/deepseek-v4.1-flash` | bifrost-litellm | 3 | bugfix-triage, docs-planner, rework |
 | `tencent/Hy4` | bifrost-litellm | 1 | advisor |
+| `voice/xiaomi/mimo-v2.5-tts` | bifrost-litellm | 1 | voice-synthesizer |
 
 ### MCP Servers
 
@@ -176,7 +177,7 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 ```
 
 Этот ключ используется для:
-- **Всех LLM моделей** (orchestrator, plankestrator, все 35 subagents)
+- **Всех LLM моделей** (orchestrator, plankestrator, все 36 subagents)
 - **Всех Z.AI MCP серверов** (zai_zread, zai_web_search, zai_web_reader) — проксируются через Bifrost
 
 ### Step 8: Copy Project Files
@@ -271,7 +272,7 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 
 ---
 
-## 5. Agent Definitions — All 37 Agents
+## 5. Agent Definitions — All 38 Agents
 
 ### Primary Agents
 
@@ -370,8 +371,8 @@ DO NOT call execute-bug without this prefix. execute-bug MUST read bug_plan.md b
 | serena_* | allow | Все Serena инструменты |
 | task | { "*": "deny", ... } | Whitelist ниже |
 
-**Task Whitelist (25 agents):**
-orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bugfix, rework, mcp-read, utility, bugfix-triage, plan-bug, devops-agent, devops-reviewer, dev-planner, mcp-search, docs-writer, summarizer, execute-bug, consistency-checker, view-image, docs-planner, generate-image, generate-image-gpt, git-commit, advisor
+**Task Whitelist (26 agents):**
+orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bugfix, rework, mcp-read, utility, bugfix-triage, plan-bug, devops-agent, devops-reviewer, dev-planner, mcp-search, docs-writer, summarizer, execute-bug, consistency-checker, view-image, docs-planner, generate-image, generate-image-gpt, git-commit, advisor, voice-synthesizer
 
 #### plankestrator
 
@@ -436,6 +437,7 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **generate-image-gpt** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (GPT/DALL-E path, on explicit user request only); git commit/push denied |
 | **scout** | subagent | bifrost-litellm/mimo-v2.5 | 0.1 | deny | deny | allow | deny | – | Local FS recon: read/glob/grep only; task: deny; no opencode.json section (frontmatter-only); never a pipeline step |
 | **advisor** | subagent | bifrost-litellm/tencent/Hy4 | 0.1 | deny | deny | allow | deny | – | Step-boundary advisory reviewer (DEV COMPLEX, BUGFIX DEEP); read-only (read/grep/glob + read-only serena); severity-tagged notes; unity-mcp deny |
+| **voice-synthesizer** | subagent | bifrost-litellm/voice/xiaomi/mimo-v2.5-tts | 0.3 | deny | **allow** | allow | **allow** | – | TTS via audio-synthesize skill (standard/clone/design modes); edit denied, task deny |
 
 ### Primary Agent Permissions
 
@@ -525,7 +527,7 @@ view-image анализирует изображения **напрямую че
 
 ### unity-mcp Permissions — All Agents
 
-Все 37 агентов, кроме `scout` и `advisor`, имеют `"unity-mcp.*": "allow"` — полный доступ ко всем инструментам Unity MCP. Исключения: scout — локальный read-only FS-разведчик (read/glob/grep), определённый только frontmatter `agents/scout.md` (без секции в opencode.json); advisor — step-boundary reviewer, строго read-only, определён frontmatter + секцией opencode.json без unity-mcp.
+Все 38 агентов, кроме `scout`, `advisor` и `voice-synthesizer`, имеют `"unity-mcp.*": "allow"` — полный доступ ко всем инструментам Unity MCP. Исключения: scout — локальный read-only FS-разведчик (read/glob/grep), определённый только frontmatter `agents/scout.md` (без секции в opencode.json); advisor — step-boundary reviewer, строго read-only, определён frontmatter + секцией opencode.json без unity-mcp.
 
 ### Key Agent Permissions Details
 
@@ -646,7 +648,7 @@ A glob restriction (`{ "*.md": "allow", "*": "deny" }`) narrows the tool to matc
 
 ## 6. Routing Tables
 
-### orchestrator Whitelist (25 agents)
+### orchestrator Whitelist (26 agents)
 
 | Agent | Role |
 |-------|------|
@@ -675,6 +677,7 @@ A glob restriction (`{ "*.md": "allow", "*": "deny" }`) narrows the tool to matc
 | generate-image-gpt | Image generation (GPT/DALL-E) |
 | git-commit | Gated conventional git commits |
 | advisor | Step-boundary advisory reviewer (severity-tagged, read-only) |
+| voice-synthesizer | Voice synthesis (TTS) |
 
 ### plankestrator Whitelist (10 agents)
 
@@ -896,7 +899,7 @@ const ROUTING_TABLES = {
     "dev-planner", "mcp-search", "docs-writer", "summarizer",
     "execute-bug", "consistency-checker", "view-image", "docs-planner",
     "generate-image", "generate-image-gpt", "git-commit",
-    "advisor"
+    "advisor", "voice-synthesizer"
   ],
   plankestrator: [
     "plankestrator-identity-probe", "plan-writer-simple", "plan-writer-complex",
@@ -1050,7 +1053,7 @@ All commands are `subtask: true` — they run as subagent tasks.
 |------|----------|---------|
 | opencode.json | `~/.config/opencode/opencode.json` | Main configuration (providers, MCP, agents, commands) |
 | workflow-enforcement.ts | `~/.config/opencode/plugins/workflow-enforcement.ts` | Workflow enforcement plugin |
-| [agent].md | `~/.config/opencode/agents/[name].md` | Individual agent definitions (37 files) |
+| [agent].md | `~/.config/opencode/agents/[name].md` | Individual agent definitions (38 files) |
 
 ### Data Storage
 
@@ -1073,7 +1076,7 @@ All commands are `subtask: true` — they run as subagent tasks.
 | dev_plan.md | Project root | Implementation plan (written by dev-planner) |
 | bug_plan.md | Project root | Bug fix plan (written by plan-bug, read by execute-bug) |
 
-### Agent Files List (37 files)
+### Agent Files List (38 files)
 
 ```
 ~/.config/opencode/agents/
@@ -1112,7 +1115,8 @@ All commands are `subtask: true` — they run as subagent tasks.
 ├── view-image.md
 ├── generate-image.md
 ├── generate-image-gpt.md
-└── git-commit.md
+├── git-commit.md
+└── voice-synthesizer.md
 ```
 
 ---
@@ -1239,7 +1243,7 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 
 - [ ] opencode.json скопирован в `~/.config/opencode/`
 - [ ] Plugin скопирован в `~/.config/opencode/plugins/`
-- [ ] Все 37 agent файлов скопированы в `~/.config/opencode/agents/`
+- [ ] Все 38 agent файлов скопированы в `~/.config/opencode/agents/`
 - [ ] `LITELLM_API_KEY` env var настроен
 - [ ] Bifrost MCP URLs доступны (`hcbifrost.herocraft.com/litellm/`)
 - [ ] Routing tables в плагине совпадают с opencode.json
@@ -1258,13 +1262,13 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 - [ ] view-image может анализировать изображения напрямую
 - [ ] worker может выполнять bash команды
 
-### Agent Files (37 total)
+### Agent Files (38 total)
 
 **Primary agents (2):**
 - orchestrator.md
 - plankestrator.md
 
-**Subagents (35):**
+**Subagents (36):**
 - advisor.md
 - bugfix.md
 - bugfix-triage.md
@@ -1299,6 +1303,7 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 - summarizer.md
 - utility.md
 - view-image.md
+- voice-synthesizer.md
 - worker.md
 
 ### Test Commands
@@ -1333,13 +1338,13 @@ opencode --agent plankestrator
 | Component | Count | Location |
 |-----------|-------|----------|
 | Primary agents | 2 | `~/.config/opencode/agents/` |
-| Subagents | 35 | `~/.config/opencode/agents/` |
+| Subagents | 36 | `~/.config/opencode/agents/` |
 | MCP servers | 5 | zai_zread, zai_web_search, zai_web_reader, serena, unity-mcp |
 | Plugin hooks | 6 | workflow-enforcement.ts |
-| Routing tables | 2 | orchestrator (25), plankestrator (10) |
+| Routing tables | 2 | orchestrator (26), plankestrator (10) |
 | Pipelines | 13 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 | Custom commands | 5 | opencode.json |
-| Models | 10 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, xiaomi/mimo-v2.6-pro, openrouter/deepseek-v4.1-flash, tencent/Hy4, stepfun/step-5-preview) |
+| Models | 11 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, xiaomi/mimo-v2.6-pro, openrouter/deepseek-v4.1-flash, tencent/Hy4, stepfun/step-5-preview, voice/xiaomi/mimo-v2.5-tts) |
 
 ### Quick Reference
 

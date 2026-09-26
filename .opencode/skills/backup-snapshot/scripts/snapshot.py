@@ -103,7 +103,7 @@ def main():
     parser.add_argument('--dest', default='')
     parser.add_argument('--compare', default='')
     parser.add_argument('--strict', action='store_true')
-    parser.add_argument('--expected-agents', type=int, default=37)
+    parser.add_argument('--expected-agents', type=int, default=38)
     parser.add_argument('--json', action='store_true')
     args = parser.parse_args()
 

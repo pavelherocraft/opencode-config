@@ -4,7 +4,7 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 
 ## 1. Routing Tables
 
-### orchestrator Whitelist (25 agents)
+### orchestrator Whitelist (26 agents)
 
 | # | Agent Name | Role |
 |---|------------|------|
@@ -33,6 +33,7 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 | 23 | generate-image-gpt | Image generation (GPT/DALL-E) |
 | 24 | git-commit | Gated conventional git commits |
 | 25 | advisor | Step-boundary advisory reviewer (severity-tagged, read-only) |
+| 26 | voice-synthesizer | Voice synthesis (TTS) |
 
 ### plankestrator Whitelist (10 agents)
 
@@ -53,15 +54,15 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 
 | Primary Agent | Whitelist Count | Total (primary + whitelist) |
 |---------------|-----------------|-----------------------------|
-| orchestrator | 25 | 26 (orchestrator + 25 subagents) |
+| orchestrator | 26 | 27 (orchestrator + 26 subagents) |
 | plankestrator | 10 | 11 (plankestrator + 10 subagents) |
-| **Grand Total** | **35** | **37** |
+| **Grand Total** | **36** | **38** |
 
-Note: 35 whitelist entries (view-image shared by both primaries) = 34 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 35 unique subagents + 2 primary agents = 37 unique agents total.
+Note: 36 whitelist entries (view-image shared by both primaries) = 35 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 36 unique subagents + 2 primary agents = 38 unique agents total.
 
 ### Shared Utility Agents
 
-view-image is a shared utility agent available to BOTH primary agents. It is listed in BOTH routing tables (orchestrator: position 20 of 25; plankestrator: position 10 of 10) and granted `task.view-image: allow` in both permission blocks in opencode.json. It is used for image analysis (screenshots, diagrams, error images) via the Task tool.
+view-image is a shared utility agent available to BOTH primary agents. It is listed in BOTH routing tables (orchestrator: position 20 of 26; plankestrator: position 10 of 10) and granted `task.view-image: allow` in both permission blocks in opencode.json. It is used for image analysis (screenshots, diagrams, error images) via the Task tool.
 
 ## Subagent Models
 
@@ -102,12 +103,13 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | generate-image-gpt | bifrost-litellm/mimo-v2.5 |
 | view-image | bifrost-litellm/MiniMax-M3 |
 | scout | bifrost-litellm/mimo-v2.5 |
+| voice-synthesizer | bifrost-litellm/voice/xiaomi/mimo-v2.5-tts |
 
 Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3.7-plus` and are documented in §Identity Lock Mechanism (v3), item 5 — not duplicated in the Subagent Models table.
 
 ## Model Roles (v5 — single source of truth, OMP model-roles analog)
 
-Роли централизуют назначение моделей 37 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Check 11), (3) документации. Квота-aware fallback-цепочки — платформенное требование (см. `PLAN_LLM_FALLBACK.md`; статус: НЕ реализовано, требует поддержки рантайма/proxy).
+Роли централизуют назначение моделей 38 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Check 11), (3) документации. Квота-aware fallback-цепочки — платформенное требование (см. `PLAN_LLM_FALLBACK.md`; статус: НЕ реализовано, требует поддержки рантайма/proxy).
 
 | Role | Model | Tier | Agents |
 |------|-------|------|--------|
@@ -129,8 +131,9 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | docs | bifrost-litellm/xiaomi/mimo-v2.6-pro | low | docs-writer, research-writer-simple |
 | docs-plan | bifrost-litellm/openrouter/deepseek-v4.1-flash | low | docs-planner |
 | micro | bifrost-litellm/mimo-v2.5 | low | generate-image, generate-image-gpt, scout |
+| voice-synth | bifrost-litellm/voice/xiaomi/mimo-v2.5-tts | low | voice-synthesizer |
 
-Контроль суммы: 2 primary + 35 subagents = 37 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.
+Контроль суммы: 2 primary + 36 subagents = 38 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.
 
 **Правила:**
 1. **Prewalk-принцип (OMP):** в паре planner→executor роль planner'а ДОЛЖНА быть tier ≥ executor'а: plan-bug (plan-flash, mid) → execute-bug (executor-cheap, low); dev-planner (plan-strong, top) → dev-professor (executor-strong, mid); docs-planner (docs-plan, low) → docs-writer (docs, low). Инверсия запрещена.
@@ -682,7 +685,7 @@ All three Z.AI MCP servers (`zai_zread`, `zai_web_search`, `zai_web_reader`) are
 
 ## unity-mcp Permissions
 
-### ALL Agents Have unity-mcp Access (exceptions: scout, advisor)
+### ALL Agents Have unity-mcp Access (exceptions: scout, advisor, voice-synthesizer)
 
 unity-mcp is available for ALL agents, not just orchestrator and plankestrator.
 

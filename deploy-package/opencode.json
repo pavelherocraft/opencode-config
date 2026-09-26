@@ -1091,6 +1091,22 @@
     }
   },
   "agent": {
+    "voice-synthesizer": {
+      "mode": "subagent",
+      "temperature": 0.3,
+      "permission": {
+        "edit": "deny",
+        "write": "allow",
+        "bash": "allow",
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "task": {
+          "*": "deny"
+        }
+      },
+      "options": {}
+    },
     "generate-image": {
       "permission": {
         "skill": {
@@ -1570,7 +1586,8 @@
           "generate-image": "allow",
           "generate-image-gpt": "allow",
           "git-commit": "allow",
-          "advisor": "allow"
+          "advisor": "allow",
+          "voice-synthesizer": "allow"
         }
       },
       "options": {}

@@ -1,6 +1,6 @@
 ---
 name: deploy-package-build
-description: 'Deterministic rebuild of deploy-package/ from live sources — byte-copies live agents (37), live opencode.json, live plugins/workflow-enforcement.ts and 4 root docs (ARCHITECTURE/AGENTS/MCP_SETUP/PLUGIN) into the package, SHA256-verifies every copy, regenerates HASHES.txt, and gates on counters (agents 37, distinct models 10, routing 25/10 across opencode.json + ARCHITECTURE.md + workflow-enforcement.ts) plus a literal-secrets scan of opencode.json. -Plan (default) reports SAME/CHANGED/NEW/STALE without writing; -Apply performs the build; -Archive additionally rebuilds deploy-package.7z via 7-Zip. Never deletes files, never runs git. Exit 0, exit 2 usage/environment, exit 3 gate/copy failure.'
+description: 'Deterministic rebuild of deploy-package/ from live sources — byte-copies live agents (38), live opencode.json, live plugins/workflow-enforcement.ts and 4 root docs (ARCHITECTURE/AGENTS/MCP_SETUP/PLUGIN) into the package, SHA256-verifies every copy, regenerates HASHES.txt, and gates on counters (agents 38, distinct models 11, routing 26/10 across opencode.json + ARCHITECTURE.md + workflow-enforcement.ts) plus a literal-secrets scan of opencode.json. -Plan (default) reports SAME/CHANGED/NEW/STALE without writing; -Apply performs the build; -Archive additionally rebuilds deploy-package.7z via 7-Zip. Never deletes files, never runs git. Exit 0, exit 2 usage/environment, exit 3 gate/copy failure.'
 ---
 
 # Deploy Package Build
@@ -34,7 +34,7 @@ These skills are project-level: invoke them from the repo root via
 
 | Source | Destination |
 |--------|-------------|
-| `~/.config/opencode/agents/*.md` (all, expected 37) | `deploy-package/agents/` |
+| `~/.config/opencode/agents/*.md` (all, expected 38) | `deploy-package/agents/` |
 | `~/.config/opencode/opencode.json` | `deploy-package/opencode.json` |
 | `~/.config/opencode/plugins/workflow-enforcement.ts` | `deploy-package/plugins/workflow-enforcement.ts` |
 | `<repo>/ARCHITECTURE.md`, `AGENTS.md`, `MCP_SETUP.md`, `PLUGIN.md` | `deploy-package/project-files/` |
@@ -51,12 +51,12 @@ limitation — they change only on plugin dependency updates, handled manually).
    `"sk-..."`-style tokens (>=16 chars) and `"api_key|apikey|access_token|secret":
    "<literal>"` (value not starting with `$` / `YOUR_` / `{{`). Output NEVER
    prints secret values — pattern name + hit count only
-3. `COUNT:agents_live` == `-ExpectedAgents` (default 37)
+3. `COUNT:agents_live` == `-ExpectedAgents` (default 38)
 4. `COUNT:models_used` — distinct frontmatter models across live agents ==
-   `-ExpectedModels` (default 10)
+   `-ExpectedModels` (default 11)
 5. `COUNT:routing_orchestrator` — opencode.json task-allows == ARCHITECTURE.md
    header number == ARCHITECTURE.md table rows == plugin ROUTING_TABLES entries
-   == `-ExpectedOrch` (default 25)
+   == `-ExpectedOrch` (default 26)
 6. `COUNT:routing_plankestrator` — same, `-ExpectedPlan` (default 10)
 
 ## Workflow
@@ -137,9 +137,9 @@ python .opencode/skills/deploy-package-build/scripts/build.py --apply [--archive
 | `-Apply` | perform the build (copy + verify + HASHES.txt) |
 | `-Archive` | with -Apply: rebuild deploy-package.7z (requires 7-Zip) |
 | `-Strict` | STALE findings → exit 3 |
-| `-ExpectedAgents <n>` | gate default 37 |
-| `-ExpectedModels <n>` | gate default 10 |
-| `-ExpectedOrch <n>` / `-ExpectedPlan <n>` | gate defaults 25 / 10 |
+| `-ExpectedAgents <n>` | gate default 38 |
+| `-ExpectedModels <n>` | gate default 11 |
+| `-ExpectedOrch <n>` / `-ExpectedPlan <n>` | gate defaults 26 / 10 |
 | `-Json` | JSON report instead of token lines (exit codes unchanged) |
 
 ## Gates
@@ -179,6 +179,6 @@ python .opencode/skills/deploy-package-build/scripts/build.py --apply [--archive
 - HASHES.txt: LF-forced, sorted, two-space format — stable for git diffs
 - Never runs git (commit via the `git-commit` agent); never touches live files
   (one-way live→deploy only)
-- Expected counters are parameters (37/10/25/10 defaults) — after a legitimate
+- Expected counters are parameters (38/11/26/10 defaults) — after a legitimate
   architecture change, update the defaults in BOTH scripts and this file together
 - Never edit user-level skills

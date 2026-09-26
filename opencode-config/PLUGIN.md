@@ -127,7 +127,7 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 
 ## 4. Routing Tables
 
-### orchestrator Whitelist (25 agents)
+### orchestrator Whitelist (26 agents)
 
 orchestrator can only call these agents:
 
@@ -158,6 +158,7 @@ orchestrator can only call these agents:
 | generate-image-gpt | Image generation (GPT/DALL-E) |
 | git-commit | Gated conventional git commits |
 | advisor | Step-boundary advisory reviewer (severity-tagged, read-only) |
+| voice-synthesizer | Voice synthesis (TTS) |
 
 ### plankestrator Whitelist (10 agents)
 
@@ -205,7 +206,8 @@ const ROUTING_TABLES = {
     'generate-image',
     'generate-image-gpt',
     'git-commit',
-    'advisor'
+    'advisor',
+    'voice-synthesizer'
   ],
   plankestrator: [
     'plankestrator-identity-probe',
@@ -1024,7 +1026,8 @@ const ROUTING_TABLES = {
     'generate-image',
     'generate-image-gpt',
     'git-commit',
-    'advisor'
+    'advisor',
+    'voice-synthesizer'
   ],
   plankestrator: [
     'plankestrator-identity-probe',

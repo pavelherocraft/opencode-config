@@ -1,6 +1,6 @@
 ---
 name: integrity-check
-description: 'Fast LLM-free integrity check — SHA256 for all 37 agent pairs (live vs deploy), counters (37 agents, 10 models in use, routing 25/10 across opencode.json + ARCHITECTURE.md + workflow-enforcement.ts), every frontmatter model: key validated for format (provider/key) and existence in opencode.json provider models. PASS/FAIL report, exit 0 all pass, exit 3 failures.'
+description: 'Fast LLM-free integrity check — SHA256 for all 38 agent pairs (live vs deploy), counters (38 agents, 11 models in use, routing 26/10 across opencode.json + ARCHITECTURE.md + workflow-enforcement.ts), every frontmatter model: key validated for format (provider/key) and existence in opencode.json provider models. PASS/FAIL report, exit 0 all pass, exit 3 failures.'
 ---
 
 # Integrity Check
@@ -26,18 +26,18 @@ These skills are project-level: invoke them from the repo root via
 
 ## Checks performed
 
-1. **Counts**: live `agents/*.md` == 37, deploy `agents/*.md` == 37, name sets equal
-2. **Pairs**: SHA256 identical for all 37 live↔deploy agent pairs
+1. **Counts**: live `agents/*.md` == 38, deploy `agents/*.md` == 38, name sets equal
+2. **Pairs**: SHA256 identical for all 38 live↔deploy agent pairs
 3. **Model key format**: every frontmatter `model:` matches `provider/model-key`
    (non-empty provider segment, non-empty remainder; split on FIRST `/`)
 4. **Model existence**: every `model:` resolves in live opencode.json
    `provider.<provider>.models.<model-key>`
-5. **Models-in-use counter**: number of DISTINCT `model:` values across the 37 live
-   frontmatters == 10; cross-checks: MCP_SETUP.md (root) Models Distribution data-row
-   count == 10 AND Summary row `| Models | 10 |` == 10
-6. **Routing counters** (expected 25 orchestrator / 10 plankestrator), from 3 sources each:
+5. **Models-in-use counter**: number of DISTINCT `model:` values across the 38 live
+   frontmatters == 11; cross-checks: MCP_SETUP.md (root) Models Distribution data-row
+   count == 11 AND Summary row `| Models | 11 |` == 11
+6. **Routing counters** (expected 26 orchestrator / 10 plankestrator), from 3 sources each:
    - live opencode.json `agent.<primary>.permission.task` — count of `"allow"` values (excl. `"*"`)
-   - ARCHITECTURE.md (root) — `### orchestrator Whitelist (25 agents)` / `### plankestrator
+   - ARCHITECTURE.md (root) — `### orchestrator Whitelist (26 agents)` / `### plankestrator
      Whitelist (10 agents)` header numbers AND actual table row counts under each header
    - live workflow-enforcement.ts — quoted entries in `ROUTING_TABLES.orchestrator` /
      `.plankestrator` arrays (WARN-only if the anchor cannot be parsed)
@@ -49,7 +49,7 @@ These skills are project-level: invoke them from the repo root via
 ```powershell
 & ".opencode\skills\integrity-check\scripts\check.ps1"
 & ".opencode\skills\integrity-check\scripts\check.ps1" -Json
-& ".opencode\skills\integrity-check\scripts\check.ps1" -ExpectedAgents 37 -ExpectedModels 10 -ExpectedOrch 25 -ExpectedPlan 10
+& ".opencode\skills\integrity-check\scripts\check.ps1" -ExpectedAgents 38 -ExpectedModels 11 -ExpectedOrch 26 -ExpectedPlan 10
 ```
 
 ### POSIX mirror
@@ -62,13 +62,13 @@ python .opencode/skills/integrity-check/scripts/check.py [--json]
 
 ```
 STATUS:CHECK_START
-COUNT:agents_live=37 agents_deploy=37 expected=37 -> PASS
+COUNT:agents_live=38 agents_deploy=38 expected=38 -> PASS
 PAIR:worker -> OK
 PAIR:utility live=<sha8> deploy=<sha8> -> FAIL
 FORMAT:worker model=bifrost-litellm/stepfun/step-5-preview -> PASS
 EXISTS:worker bifrost-litellm/stepfun/step-5-preview -> PASS
 COUNT:models_used=10 expected=10 -> PASS
-COUNT:routing_orchestrator json=25 arch_header=25 arch_rows=25 plugin=25 expected=25 -> PASS
+COUNT:routing_orchestrator json=26 arch_header=26 arch_rows=26 plugin=26 expected=26 -> PASS
 COUNT:routing_plankestrator json=10 arch_header=10 arch_rows=10 plugin=10 expected=10 -> PASS
 WARN:routing plugin anchor not parsed (skipped plugin source)
 SUMMARY:checks=<n> pass=<n> fail=<n> warn=<n>
@@ -90,6 +90,6 @@ STATUS:ALL_PASS   |   STATUS:FAILURES fail=<n>
 - STRICTLY READ-ONLY: never writes, copies, fixes or deletes anything
 - No LLM, no network — deterministic local checks only (fast gate)
 - Never edit user-level skills
-- Expected counters are parameters (defaults 37/10/25/10) — after a legitimate
+- Expected counters are parameters (defaults 38/11/26/10) — after a legitimate
   architecture change, update the defaults in BOTH scripts and this file together
 - WARN (e.g. unparsable plugin anchor) never changes the exit code; only FAIL does

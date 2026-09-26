@@ -79,18 +79,18 @@ Copy-Item "opencode.json" "$env:USERPROFILE\.config\opencode\opencode.json" -For
 ### Шаг 4: Копирование агентов
 
 ```powershell
-# Скопировать все 37 файлов агентов:
+# Скопировать все 38 файлов агентов:
 Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 ```
 
 **Путь:** `%USERPROFILE%\.config\opencode\agents\`
 
-**Содержимое:** 37 файлов (.md) — определения всех агентов системы.
+**Содержимое:** 38 файлов (.md) — определения всех агентов системы.
 
 **Проверка:**
 ```powershell
 (Get-ChildItem "$env:USERPROFILE\.config\opencode\agents\*.md").Count
-# Должно быть: 37
+# Должно быть: 38
 ```
 
 ---
@@ -129,7 +129,7 @@ Copy-Item "project-files\MCP_SETUP.md" "C:\path\to\your\project\" -Force
 ```
 
 Этот ключ используется для:
-- **Всех LLM моделей** (все 37 агентов)
+- **Всех LLM моделей** (все 38 агентов)
 - **Всех Z.AI MCP серверов** (zai_zread, zai_web_search, zai_web_reader)
 
 #### Настройка Serena (serena MCP)
@@ -209,7 +209,7 @@ opencode
 - [ ] Serena установлен
 - [ ] `LITELLM_API_KEY` установлена
 - [ ] `opencode.json` скопирован в `%USERPROFILE%\.config\opencode\`
-- [ ] 37 agent файлов скопированы в `%USERPROFILE%\.config\opencode\agents\`
+- [ ] 38 agent файлов скопированы в `%USERPROFILE%\.config\opencode\agents\`
 - [ ] Плагин скопирован в `%USERPROFILE%\.config\opencode\plugins\`
 - [ ] Файлы проекта скопированы в корень проекта
 - [ ] `opencode` запускается без ошибок

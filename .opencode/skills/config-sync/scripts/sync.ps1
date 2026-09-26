@@ -3,7 +3,7 @@
     SHA256 compare and sync live vs deploy-package vs project mirrors.
 
 .DESCRIPTION
-    Compares mirror groups (37 agent pairs, opencode.json,
+    Compares mirror groups (38 agent pairs, opencode.json,
     workflow-enforcement.ts x3, ARCHITECTURE.md x3, MCP_SETUP.md x2, AGENTS.md x4,
     PLUGIN.md x3) by SHA256 and synchronizes them by byte-level copy.
     -Plan (default) reports drift without changes; -Apply publishes live/root

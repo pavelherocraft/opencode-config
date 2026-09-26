@@ -29,7 +29,8 @@ const ROUTING_TABLES = {
     "generate-image",
     "generate-image-gpt",
     "git-commit",
-    "advisor"
+    "advisor",
+    "voice-synthesizer"
   ],
   plankestrator: [
     "plankestrator-identity-probe",

@@ -1093,7 +1093,7 @@ def main():
 
     # --- global counters
     g1_values = []  # unique subagents (35)
-    g2_values = []  # total agents (37)
+    g2_values = []  # total agents (38)
     for i in range(3):
         gt = re.search(r'(?m)^\| \*\*Grand Total\*\* \| \*\*(\d+)\*\* \| \*\*(\d+)\*\* \|\r?$',
                        arch_raws[i][0])
@@ -1543,11 +1543,11 @@ def main():
     print('WARN:restart required (config is read at session start \u2014 the new agent '
           'is visible in a NEW opencode session)')
     print('WARN:CHANGELOG.md [Unreleased] entry is a manual step')
-    print('WARN:consistency-checker.md counts (25/10/37 in the prompt) \u2014 '
+    print('WARN:consistency-checker.md counts (26/10/38 in the prompt) \u2014 '
           'manual edit live+deploy')
     print('WARN:verify.ps1 requiredAgents \u2014 manual update')
     print('WARN:deploy README.md/DEPLOYMENT_GUIDE.md counts \u2014 manual update')
-    print('WARN:integrity-check defaults (37/25/10) in check.ps1+check.py+SKILL.md \u2014 '
+    print('WARN:integrity-check defaults (38/26/10) in check.ps1+check.py+SKILL.md \u2014 '
           'manual update')
     print('WARN:live AGENTS.md \u2014 run config-sync -Apply -Group agents-md')
     print('WARN:SEVERITY_AGENTS/CONTEXT_FILE_AGENTS \u2014 manual update '

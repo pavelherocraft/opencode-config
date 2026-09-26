@@ -34,7 +34,7 @@ These skills are project-level: invoke them from the repo root via
 
 | Mode | Scope | Files |
 |------|-------|-------|
-| `-Agents` (default) | live `agents/*.md` | ~37 |
+| `-Agents` (default) | live `agents/*.md` | ~38 |
 | `-Full` | live agents + live opencode.json + live plugins/workflow-enforcement.ts + live docs (AGENTS/ARCHITECTURE/MCP_SETUP/PLUGIN/REVIEW_CONTEXT .md) + repo root docs (ARCHITECTURE/AGENTS/PLUGIN/MCP_SETUP/REVIEW_CONTEXT/CHANGELOG .md) | ~50 |
 | `-Compare <dir>` | re-hash current state vs snapshot `<dir>` | — |
 
@@ -65,7 +65,7 @@ backup/<yyyy-MM-dd_HHmmss>[_<label>]/
    failure -> exit 3
 4. **Report**: `SUMMARY:mode=<m> files=<n> bytes=<n> dest=<rel>` +
    `STATUS:SUCCESS`; WARN if the live agents count != `-ExpectedAgents`
-   (default 37 — informational, snapshot is still taken)
+   (default 38 — informational, snapshot is still taken)
 
 ### Compare
 
@@ -115,7 +115,7 @@ python .opencode/skills/backup-snapshot/scripts/snapshot.py --compare backup/202
 | `-Dest <dir>` | explicit snapshot dir (must not exist; relative -> repo root) |
 | `-Compare <dir>` | compare mode: current state vs an existing snapshot |
 | `-Strict` | with -Compare: differences (changed/missing/new/corrupt) -> exit 3 |
-| `-ExpectedAgents <n>` | informational WARN threshold (default 37) |
+| `-ExpectedAgents <n>` | informational WARN threshold (default 38) |
 | `-Json` | JSON report instead of token lines |
 
 ## Gates

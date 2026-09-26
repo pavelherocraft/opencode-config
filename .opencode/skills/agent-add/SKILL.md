@@ -1,6 +1,6 @@
 ---
 name: agent-add
-description: 'Add a NEW subagent end-to-end — creates live+deploy agent .md (frontmatter from readonly/standard preset or -PermTemplate), inserts opencode.json agent section + primary task allow, appends to ROUTING_TABLES (plugin x3) and OPENCODE_ROUTING_TABLE (primary prompt x2), updates whitelist tables and counters in ARCHITECTURE.md x3 / AGENTS.md x3 / PLUGIN.md x3 / MCP_SETUP.md x2 (whitelist 25->26 or 10->11, subagents 35->36, total 37->38), adds Subagent Models + Model Roles + Distribution + Full Table rows, SHA256-verifies all mirrors, optional conventional commit + push.'
+description: 'Add a NEW subagent end-to-end — creates live+deploy agent .md (frontmatter from readonly/standard preset or -PermTemplate), inserts opencode.json agent section + primary task allow, appends to ROUTING_TABLES (plugin x3) and OPENCODE_ROUTING_TABLE (primary prompt x2), updates whitelist tables and counters in ARCHITECTURE.md x3 / AGENTS.md x3 / PLUGIN.md x3 / MCP_SETUP.md x2 (whitelist 26->27 or 10->11, subagents 36->37, total 38->39), adds Subagent Models + Model Roles + Distribution + Full Table rows, SHA256-verifies all mirrors, optional conventional commit + push.'
 ---
 
 # Agent Add
@@ -162,7 +162,7 @@ Live files (outside git): #1, #3, live plugin, live `<primary>.md`. Live
 Non-blocking WARNs: stub body (no -BodyFile); live AGENTS.md needs config-sync;
 restart required; CHANGELOG manual entry; consistency-checker.md counts manual;
 verify.ps1 requiredAgents manual; deploy README/DEPLOYMENT_GUIDE counts manual;
-integrity-check defaults (37/25/10) manual; SEVERITY_AGENTS / CONTEXT_FILE_AGENTS
+integrity-check defaults (38/26/10) manual; SEVERITY_AGENTS / CONTEXT_FILE_AGENTS
 manual (only when the new agent is a reviewer); MCP_SETUP unity-note prose manual;
 tree list pre-existing drift (docs-planner missing) — informational.
 
@@ -178,7 +178,7 @@ tree list pre-existing drift (docs-planner missing) — informational.
 
 - Two-phase all-or-nothing: ANY failed anchor/gate -> ZERO files written
 - Never create primary agents; never rename/delete anything
-- Counter increments are PARSED from anchors (+1), never hardcoded (37->38 today,
+- Counter increments are PARSED from anchors (+1), never hardcoded (38->39 today,
   38->39 tomorrow)
 - Counter cross-check is fail-closed: sources disagree -> BLOCK, never guess
 - Never rewrite whole tables — only computed cells/rows (byte-preserving elsewhere)

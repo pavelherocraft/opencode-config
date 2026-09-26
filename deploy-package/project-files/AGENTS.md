@@ -182,7 +182,7 @@ The consistency-checker agent reads ARCHITECTURE.md to validate all configuratio
 
 ## Model Roles
 
-Назначение моделей всем 37 агентам централизовано в ARCHITECTURE.md §Model Roles (единственный источник правды; frontmatter `model:` литерален — рантайм не поддерживает алиасы). Prewalk-принцип: tier(planner) ≥ tier(executor). Валидация — consistency-checker Check 11. Смена модели = 4 синхронных места (roles table, frontmatter, Subagent Models, MCP_SETUP Distribution).
+Назначение моделей всем 38 агентам централизовано в ARCHITECTURE.md §Model Roles (единственный источник правды; frontmatter `model:` литерален — рантайм не поддерживает алиасы). Prewalk-принцип: tier(planner) ≥ tier(executor). Валидация — consistency-checker Check 11. Смена модели = 4 синхронных места (roles table, frontmatter, Subagent Models, MCP_SETUP Distribution).
 
 ## Dual Primary Agents Architecture
 
@@ -218,7 +218,7 @@ Handles planning and research tasks:
 
 ## Routing Tables
 
-### orchestrator Whitelist (25 agents)
+### orchestrator Whitelist (26 agents)
 
 | Agent Name | Role |
 |------------|------|
@@ -247,6 +247,7 @@ Handles planning and research tasks:
 | generate-image-gpt | Image generation (GPT/DALL-E) |
 | git-commit | Gated conventional git commits |
 | advisor | Step-boundary advisory reviewer (severity-tagged, read-only) |
+| voice-synthesizer | Voice synthesis (TTS) |
 
 ### plankestrator Whitelist (10 agents)
 

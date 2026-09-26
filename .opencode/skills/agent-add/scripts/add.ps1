@@ -8,7 +8,7 @@
     (live + deploy), appends to ROUTING_TABLES (plugin x3) and
     OPENCODE_ROUTING_TABLE (primary prompt x2), updates whitelist tables and
     every derived counter in ARCHITECTURE.md x3 / AGENTS.md x3 / PLUGIN.md x3 /
-    MCP_SETUP.md x2 (whitelist 25->26 or 10->11, subagents 35->36, total 37->38),
+    MCP_SETUP.md x2 (whitelist 26->27 or 10->11, subagents 36->37, total 38->39),
     adds Subagent Models + Model Roles + Distribution + Full Table rows,
     SHA256-verifies all mirrors, optional conventional commit + push.
     Two-phase all-or-nothing: any failed gate/anchor -> zero files written.
@@ -701,7 +701,7 @@ foreach ($i in 0..2) {
 
 # --- global counters
 $g1Values = @()   # unique subagents (35)
-$g2Values = @()   # total agents (37)
+$g2Values = @()   # total agents (38)
 foreach ($i in 0..2) {
     $gt = [regex]::Match($archRaws[$i].Text, '(?m)^\| \*\*Grand Total\*\* \| \*\*(\d+)\*\* \| \*\*(\d+)\*\* \|\r?$')
     if ($gt.Success) {
@@ -1566,10 +1566,10 @@ Write-Output 'VERIFY:routing token-exact once'
 # ============================================================================
 Write-Output 'WARN:restart required (config is read at session start — the new agent is visible in a NEW opencode session)'
 Write-Output 'WARN:CHANGELOG.md [Unreleased] entry is a manual step'
-Write-Output 'WARN:consistency-checker.md counts (25/10/37 in the prompt) — manual edit live+deploy'
+Write-Output 'WARN:consistency-checker.md counts (26/10/38 in the prompt) — manual edit live+deploy'
 Write-Output 'WARN:verify.ps1 requiredAgents — manual update'
 Write-Output 'WARN:deploy README.md/DEPLOYMENT_GUIDE.md counts — manual update'
-Write-Output 'WARN:integrity-check defaults (37/25/10) in check.ps1+check.py+SKILL.md — manual update'
+Write-Output 'WARN:integrity-check defaults (38/26/10) in check.ps1+check.py+SKILL.md — manual update'
 Write-Output 'WARN:live AGENTS.md — run config-sync -Apply -Group agents-md'
 Write-Output 'WARN:SEVERITY_AGENTS/CONTEXT_FILE_AGENTS — manual update (only if the new agent is a reviewer)'
 Write-Output 'WARN:MCP_SETUP unity-note prose — manual update (only if unity-mcp is not allowed for the new agent)'

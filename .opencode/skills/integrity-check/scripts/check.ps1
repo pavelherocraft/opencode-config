@@ -3,21 +3,21 @@
     Fast LLM-free integrity check of the agent orchestration config.
 
 .DESCRIPTION
-    SHA256 for all 37 agent pairs (live vs deploy), counters (agents, models in
+    SHA256 for all 38 agent pairs (live vs deploy), counters (agents, models in
     use, routing tables across opencode.json + ARCHITECTURE.md + live
     workflow-enforcement.ts), every frontmatter model: key validated for format
     (provider/key, split on FIRST slash) and existence in opencode.json provider
     models. PASS/FAIL report. STRICTLY READ-ONLY.
 
 .PARAMETER ExpectedAgents
-    Expected number of agent .md files in each mirror. Default 37.
+    Expected number of agent .md files in each mirror. Default 38.
 
 .PARAMETER ExpectedModels
     Expected number of DISTINCT models in use (also MCP_SETUP Distribution rows
-    and Summary count). Default 10.
+    and Summary count). Default 11.
 
 .PARAMETER ExpectedOrch
-    Expected orchestrator routing-table size. Default 25.
+    Expected orchestrator routing-table size. Default 26.
 
 .PARAMETER ExpectedPlan
     Expected plankestrator routing-table size. Default 10.
@@ -38,13 +38,13 @@
 .EXAMPLE
     .\check.ps1
     .\check.ps1 -Json
-    .\check.ps1 -ExpectedAgents 37 -ExpectedModels 10 -ExpectedOrch 25 -ExpectedPlan 10
+    .\check.ps1 -ExpectedAgents 38 -ExpectedModels 11 -ExpectedOrch 26 -ExpectedPlan 10
 #>
 
 param(
-    [int]$ExpectedAgents = 37,
-    [int]$ExpectedModels = 10,
-    [int]$ExpectedOrch = 25,
+    [int]$ExpectedAgents = 38,
+    [int]$ExpectedModels = 11,
+    [int]$ExpectedOrch = 26,
     [int]$ExpectedPlan = 10,
     [string]$Config = "",
     [switch]$Json
@@ -227,7 +227,7 @@ if (-not $namesEqual) {
 $countOk = ($liveFiles.Count -eq $ExpectedAgents -and $deployFiles.Count -eq $ExpectedAgents -and $namesEqual)
 Add-Check -Id 'COUNT' -Target '' -Status $(if ($countOk) { 'PASS' } else { 'FAIL' }) -Detail $countDetail
 
-# --- 3. Pairs (37 agents + opencode.json) ---------------------------------
+# --- 3. Pairs (38 agents + opencode.json) ---------------------------------
 $union = @($liveNames + $deployNames | Select-Object -Unique)
 foreach ($n in $union) {
     $lp = Join-Path $liveAgentsDir "$n.md"
