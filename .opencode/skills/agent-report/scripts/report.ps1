@@ -7,12 +7,12 @@
     Per-agent table (frontmatter model, Model Roles role/tier, mode, flattened
     permissions, routing whitelist membership orch/plan/both/none) plus
     model-distribution and role-distribution summaries. Sources: live (default)
-    or deploy agent files, root ARCHITECTURE.md (Model Roles + whitelists),
+    or repo agent files, root ARCHITECTURE.md (Model Roles + whitelists),
     live opencode.json (routing cross-check, WARN on mismatch). Formats:
     aligned table (default), markdown, JSON. STRICTLY READ-ONLY.
 
 .PARAMETER Source
-    Agents dir: live (default) or deploy-package/agents.
+    Agents dir: live (default) or repo agents/.
 
 .PARAMETER Format
     Report body format: table (default), markdown, json.
@@ -66,8 +66,8 @@ try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 
 # --- Flag combination gates ------------------------------------------------
 # NOTE: no [ValidateSet] - a PS binding error exits 1, spec requires exit 2.
-if ($Source -ne '' -and $Source -ne 'live' -and $Source -ne 'deploy') {
-    Write-Output "ERROR:USAGE invalid -Source value: $Source (expected live|deploy)"
+if ($Source -ne '' -and $Source -ne 'live' -and $Source -ne 'repo') {
+    Write-Output "ERROR:USAGE invalid -Source value: $Source (expected live|repo)"
     exit 2
 }
 if (-not $Source) { $Source = 'live' }
@@ -240,7 +240,7 @@ function Format-AgentTable($Rows) {
 # --- Paths ------------------------------------------------------------------
 $skillDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $skillDir)))
-if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "deploy-package"))) {
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot '.opencode'))) {
     $gitRoot = Invoke-Native -FilePath "git" -Arguments @("-C", $skillDir, "rev-parse", "--show-toplevel")
     if ($LASTEXITCODE -eq 0 -and $gitRoot) { $repoRoot = ($gitRoot | Select-Object -First 1).Trim() }
 }
@@ -249,8 +249,8 @@ $liveDir = Join-Path $env:USERPROFILE '.config\opencode'
 if ($AgentsDir) {
     $agentsDir = $AgentsDir
     if (-not [System.IO.Path]::IsPathRooted($agentsDir)) { $agentsDir = Join-Path $repoRoot $agentsDir }
-} elseif ($Source -eq 'deploy') {
-    $agentsDir = Join-Path $repoRoot 'deploy-package\agents'
+} elseif ($Source -eq 'repo') {
+    $agentsDir = Join-Path $repoRoot 'agents'
 } else {
     $agentsDir = Join-Path $liveDir 'agents'
 }

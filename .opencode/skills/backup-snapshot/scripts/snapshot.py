@@ -58,7 +58,7 @@ def sha256_file(p):
 def repo_root(script_dir):
     """<repo>/.opencode/skills/<skill>/scripts -> <repo>."""
     root = script_dir.resolve().parents[3]
-    if (root / 'deploy-package').exists():
+    if (root / '.opencode' / 'skills').is_dir():
         return root
     try:
         out = subprocess.check_output(
@@ -74,17 +74,28 @@ def repo_root(script_dir):
 
 def get_scope(mode, live_dir, root):
     scope = []
+    optional = []
+
+    def add(src, rel, required=True):
+        (scope if required else optional).append({'src': src, 'rel': rel})
+
     for f in sorted((live_dir / 'agents').glob('*.md')):
-        scope.append({'src': str(f), 'rel': 'live/agents/' + f.name})
+        add(str(f), 'live/agents/' + f.name)
     if mode == 'full':
-        scope.append({'src': str(live_dir / 'opencode.json'), 'rel': 'live/opencode.json'})
-        scope.append({'src': str(live_dir / 'plugins' / 'workflow-enforcement.ts'),
-                      'rel': 'live/plugins/workflow-enforcement.ts'})
-        for f in ('AGENTS', 'ARCHITECTURE', 'MCP_SETUP', 'PLUGIN', 'REVIEW_CONTEXT'):
-            scope.append({'src': str(live_dir / (f + '.md')), 'rel': 'live/docs/' + f + '.md'})
-        for f in ('ARCHITECTURE', 'AGENTS', 'PLUGIN', 'MCP_SETUP', 'REVIEW_CONTEXT', 'CHANGELOG'):
-            scope.append({'src': str(root / (f + '.md')), 'rel': 'repo/docs/' + f + '.md'})
-    return scope
+        add(str(live_dir / 'opencode.json'), 'live/opencode.json')
+        add(str(live_dir / 'plugins' / 'workflow-enforcement.ts'),
+            'live/plugins/workflow-enforcement.ts')
+        for f in sorted((live_dir / 'skills' / 'git-commit').rglob('*')):
+            if f.is_file():
+                add(str(f), 'live/skills/git-commit/' + f.relative_to(live_dir / 'skills' / 'git-commit').as_posix())
+        for f in ('AGENTS', 'REVIEW_CONTEXT'):
+            add(str(live_dir / (f + '.md')), 'live/docs/' + f + '.md', required=False)
+        for f in ('ARCHITECTURE', 'REVIEW_CONTEXT', 'CHANGELOG', 'AGENTS.global'):
+            add(str(root / (f + '.md')), 'repo/docs/' + f + '.md', required=False)
+        add(str(root / 'opencode.json'), 'repo/opencode.json', required=False)
+    # Optional entries are included only when present (docs may not exist yet).
+    return [e for e in scope if Path(e['src']).is_file()] + \
+           [e for e in optional if Path(e['src']).is_file()]
 
 
 def rel_to_repo(p, root):
@@ -103,7 +114,7 @@ def main():
     parser.add_argument('--dest', default='')
     parser.add_argument('--compare', default='')
     parser.add_argument('--strict', action='store_true')
-    parser.add_argument('--expected-agents', type=int, default=38)
+    parser.add_argument('--expected-agents', type=int, default=40)
     parser.add_argument('--json', action='store_true')
     args = parser.parse_args()
 

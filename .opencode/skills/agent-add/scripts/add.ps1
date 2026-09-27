@@ -1,17 +1,17 @@
 <#
 .SYNOPSIS
-    Add ONE new subagent end-to-end across all synchronized places.
+    Add ONE new subagent end-to-end (live-first, single canonical doc).
 
 .DESCRIPTION
-    Creates live+deploy agent .md (frontmatter from readonly/standard preset or
-    -PermTemplate), inserts the opencode.json agent section + primary task allow
-    (live + deploy), appends to ROUTING_TABLES (plugin x3) and
-    OPENCODE_ROUTING_TABLE (primary prompt x2), updates whitelist tables and
-    every derived counter in ARCHITECTURE.md x3 / AGENTS.md x3 / PLUGIN.md x3 /
-    MCP_SETUP.md x2 (whitelist 26->27 or 10->11, subagents 36->37, total 38->39),
-    adds Subagent Models + Model Roles + Distribution + Full Table rows,
-    SHA256-verifies all mirrors, optional conventional commit + push.
-    Two-phase all-or-nothing: any failed gate/anchor -> zero files written.
+    Edits are made in LIVE (the runtime source of truth): creates the agent
+    .md (frontmatter from readonly/standard preset or -PermTemplate), inserts
+    the live opencode.json agent section + primary task allow, appends to
+    ROUTING_TABLES (live plugin) and OPENCODE_ROUTING_TABLE (live primary
+    prompt), updates the whitelist tables and every derived counter in
+    ARCHITECTURE.md (single root copy) plus its Subagent Models + Model Roles
+    rows. Two-phase all-or-nothing: any failed gate/anchor -> zero files
+    written. The repo mirror is refreshed afterwards via `config-sync --save`,
+    NOT by this script.
 
 .PARAMETER Agent
     New agent name (file stem), ^[a-z][a-z0-9-]*$ (REQUIRED).
@@ -177,9 +177,6 @@ function Write-RawText([string]$Path, [string]$Text, [bool]$Bom) {
     [System.IO.File]::WriteAllText($Path, $Text, $enc)
 }
 
-function Get-Sha256([string]$Path) {
-    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
-}
 
 function Split-ModelKey([string]$Full) {
     if (-not $Full) { return $null }
@@ -317,27 +314,13 @@ function Get-WhitelistCount([string]$ArchText, [string]$PrimaryName) {
     return @{ Header = [int]$hm.Groups[1].Value; Rows = $rows }
 }
 
-function Get-WhitelistCountUnnumbered([string]$Text, [string]$PrimaryName) {
-    $headerPat = '^### ' + [regex]::Escape($PrimaryName) + ' Whitelist \((\d+) agents\)'
-    $hm = [regex]::Match($Text, $headerPat, [System.Text.RegularExpressions.RegexOptions]::Multiline)
-    if (-not $hm.Success) { return $null }
-    $after = $Text.Substring($hm.Index + $hm.Length)
-    $firstPipe = [regex]::Match($after, '(?m)^\|')
-    if (-not $firstPipe.Success) { return @{ Header = [int]$hm.Groups[1].Value; Rows = -1 } }
-    $rest = $after.Substring($firstPipe.Index)
-    $blank = [regex]::Match($rest, '\r?\n[ \t]*\r?\n')
-    $tbl = if ($blank.Success) { $rest.Substring(0, $blank.Index) } else { $rest }
-    # data rows = pipe rows that are neither the header nor the |---| separator
-    $rows = [regex]::Matches($tbl, '(?m)^\| [^-|]').Count - 1
-    return @{ Header = [int]$hm.Groups[1].Value; Rows = $rows }
-}
 
 # ============================================================================
 # Paths
 # ============================================================================
 $skillDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $skillDir)))
-if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "deploy-package"))) {
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot '.opencode'))) {
     $gitRoot = Invoke-Native -FilePath "git" -Arguments @("-C", $skillDir, "rev-parse", "--show-toplevel")
     if ($LASTEXITCODE -eq 0 -and $gitRoot) { $repoRoot = ($gitRoot | Select-Object -First 1).Trim() }
 }
@@ -348,42 +331,21 @@ if (-not (Test-Path -LiteralPath $liveDir -PathType Container)) {
 }
 
 $liveAgentMd = Join-Path $liveDir "agents\$Agent.md"
-$deployAgentMd = Join-Path $repoRoot "deploy-package\agents\$Agent.md"
 $liveCfgPath = Join-Path $liveDir 'opencode.json'
-$deployCfgPath = Join-Path $repoRoot 'deploy-package\opencode.json'
 $pluginPaths = @(
-    (Join-Path $liveDir 'plugins\workflow-enforcement.ts'),
-    (Join-Path $repoRoot 'plugins\workflow-enforcement.ts'),
-    (Join-Path $repoRoot 'deploy-package\plugins\workflow-enforcement.ts')
+    (Join-Path $liveDir 'plugins\workflow-enforcement.ts')
 )
 $primaryLiveMd = Join-Path $liveDir "agents\$Primary.md"
-$primaryDeployMd = Join-Path $repoRoot "deploy-package\agents\$Primary.md"
 $archPaths = @(
-    (Join-Path $repoRoot 'ARCHITECTURE.md'),
-    (Join-Path $repoRoot 'opencode-config\ARCHITECTURE.md'),
-    (Join-Path $repoRoot 'deploy-package\project-files\ARCHITECTURE.md')
-)
-$agentsMdPaths = @(
-    (Join-Path $repoRoot 'AGENTS.md'),
-    (Join-Path $repoRoot 'opencode-config\AGENTS.md'),
-    (Join-Path $repoRoot 'deploy-package\project-files\AGENTS.md')
-)
-$pluginMdPaths = @(
-    (Join-Path $repoRoot 'PLUGIN.md'),
-    (Join-Path $repoRoot 'opencode-config\PLUGIN.md'),
-    (Join-Path $repoRoot 'deploy-package\project-files\PLUGIN.md')
-)
-$mcpPaths = @(
-    (Join-Path $repoRoot 'MCP_SETUP.md'),
-    (Join-Path $repoRoot 'deploy-package\project-files\MCP_SETUP.md')
+    (Join-Path $repoRoot 'ARCHITECTURE.md')
 )
 
-# New agent files must NOT exist; all 17 edit targets must exist.
-if ((Test-Path -LiteralPath $liveAgentMd) -or (Test-Path -LiteralPath $deployAgentMd)) {
-    Write-Output "BLOCK:agent already exists: $Agent (live/deploy .md file present)"
+# New agent file must NOT exist; all edit targets must exist.
+if (Test-Path -LiteralPath $liveAgentMd) {
+    Write-Output "BLOCK:agent already exists: $Agent (live .md file present)"
     exit 3
 }
-$editTargets = @($liveCfgPath, $deployCfgPath) + $pluginPaths + @($primaryLiveMd, $primaryDeployMd) + $archPaths + $agentsMdPaths + $pluginMdPaths + $mcpPaths
+$editTargets = @($liveCfgPath) + $pluginPaths + @($primaryLiveMd) + $archPaths
 foreach ($t in $editTargets) {
     if (-not (Test-Path -LiteralPath $t -PathType Leaf)) {
         Write-Output "ERROR:target file not found: $t"
@@ -556,20 +518,6 @@ if ($PermTemplate) {
         if ($tplLines[$i] -match '^---[ \t]*$') { break }
         $fmPermLines += $tplLines[$i] -replace '^  ', ''
     }
-    # (3) Full Table cells from MCP_SETUP (fallback: derive deny/allow lines).
-    $mcpRootText = (Read-RawText $mcpPaths[0]).Text
-    $ftRow = [regex]::Match($mcpRootText, ('(?m)^\| \*\*' + [regex]::Escape($PermTemplate) + '\*\* \| subagent \| .+?\| .+?\| (.+?) \| (.+?) \| (.+?) \| (.+?) \|'))
-    if ($ftRow.Success) {
-        $fullCells = @{ edit = $ftRow.Groups[1].Value.Trim(); write = $ftRow.Groups[2].Value.Trim(); read = $ftRow.Groups[3].Value.Trim(); bash = $ftRow.Groups[4].Value.Trim() }
-    } else {
-        $warns += "WARN:perm-template full-table row not found for '$PermTemplate' — deriving cells from JSON block"
-        $fullCells = @{
-            edit = $(if ($tplSection -match '"edit":\s*"allow"') { 'allow' } else { 'deny' })
-            write = $(if ($tplSection -match '"write":\s*"allow"') { 'allow' } else { 'deny' })
-            read = $(if ($tplSection -match '"read":\s*"allow"') { 'allow' } else { 'deny' })
-            bash = $(if ($tplSection -match '"bash":\s*"allow"') { '**allow**' } else { 'deny' })
-        }
-    }
     # Task entries: copy allow tokens from the template task block + -TaskAllow extras.
     $tplTask = $null
     try { $tplTask = $cfg.agent.$PermTemplate.permission.task } catch {}
@@ -586,7 +534,6 @@ if ($PermTemplate) {
     $jsonPermLines = $preset.JsonPerm
     $taskEntries = @($preset.DefaultTask)
     foreach ($t in $taskAllowList) { if ($taskEntries -notcontains $t) { $taskEntries += $t } }
-    $fullCells = $preset.FullTable
     $script:TplJsonSection = $null
 }
 
@@ -594,36 +541,9 @@ if ($PermTemplate) {
 # Read all targets
 # ============================================================================
 $liveCfgRaw = Read-RawText $liveCfgPath
-$deployCfgRaw = Read-RawText $deployCfgPath
 $pluginRaws = @($pluginPaths | ForEach-Object { Read-RawText $_ })
-$primaryRaws = @((Read-RawText $primaryLiveMd), (Read-RawText $primaryDeployMd))
+$primaryRaws = @((Read-RawText $primaryLiveMd))
 $archRaws = @($archPaths | ForEach-Object { Read-RawText $_ })
-$agentsMdRaws = @($agentsMdPaths | ForEach-Object { Read-RawText $_ })
-$pluginMdRaws = @($pluginMdPaths | ForEach-Object { Read-RawText $_ })
-$mcpRaws = @($mcpPaths | ForEach-Object { Read-RawText $_ })
-
-# ============================================================================
-# Mirror pre-gates
-# ============================================================================
-$drifts = @()
-if ((Get-Sha256 $liveCfgPath) -ne (Get-Sha256 $deployCfgPath)) { $drifts += 'opencode.json pair' }
-$pluginHashes = @($pluginPaths | ForEach-Object { Get-Sha256 $_ })
-if (@($pluginHashes | Select-Object -Unique).Count -gt 1) { $drifts += 'plugin x3' }
-if ((Get-Sha256 $primaryLiveMd) -ne (Get-Sha256 $primaryDeployMd)) { $drifts += 'primary pair' }
-$archHashes = @($archPaths | ForEach-Object { Get-Sha256 $_ })
-if (@($archHashes | Select-Object -Unique).Count -gt 1) { $drifts += 'ARCHITECTURE.md x3' }
-$agentsMdHashes = @($agentsMdPaths | ForEach-Object { Get-Sha256 $_ })
-if (@($agentsMdHashes | Select-Object -Unique).Count -gt 1) { $drifts += 'AGENTS.md x3' }
-$mcpHashes = @($mcpPaths | ForEach-Object { Get-Sha256 $_ })
-if (@($mcpHashes | Select-Object -Unique).Count -gt 1) { $drifts += 'MCP_SETUP.md x2' }
-if ($drifts.Count -gt 0) {
-    if ($Apply) {
-        Write-Output "BLOCK:mirrors drifted — run config-sync first ($($drifts -join '; '))"
-        exit 3
-    } else {
-        foreach ($d in $drifts) { $warns += "WARN:mirror drift ($d) — run config-sync before apply" }
-    }
-}
 
 # ============================================================================
 # Counter cross-check (fail-closed)
@@ -633,135 +553,43 @@ function Add-Diff([string]$Source, [string]$Id, [object]$Value, [object]$Expecte
     $script:DiffLines += "DIFF:$Source $Id value=$Value expected=$Expected"
 }
 
-# --- whitelist count of -Primary from 10 source groups
+# --- whitelist count of -Primary from the live sources + ARCHITECTURE
 $wlValues = @()
-foreach ($i in 0..2) {
-    $v = Count-RoutingPlugin $pluginRaws[$i].Text $Primary
-    if ($null -eq $v) { Add-Diff "plugins[$i]" 'routing_plugin' 'null' 'number'; continue }
-    $wlValues += @{ Src = "plugin$($i + 1)"; Val = $v }
-}
-foreach ($i in 0..1) {
-    $v = Count-RoutingLine $primaryRaws[$i].Text
-    if ($null -eq $v) { Add-Diff "primary_md[$i]" 'opencode_routing_table' 'null' 'number'; continue }
-    $wlValues += @{ Src = "primary_md$($i + 1)"; Val = $v }
-}
+$v = Count-RoutingPlugin $pluginRaws[0].Text $Primary
+if ($null -eq $v) { Add-Diff 'plugin' 'routing_plugin' 'null' 'number' } else { $wlValues += @{ Src = 'plugin'; Val = $v } }
+$v = Count-RoutingLine $primaryRaws[0].Text
+if ($null -eq $v) { Add-Diff 'primary_md' 'opencode_routing_table' 'null' 'number' } else { $wlValues += @{ Src = 'primary_md'; Val = $v } }
 $ta = Count-TaskAllow $cfg $Primary
 if ($null -eq $ta) { Add-Diff 'opencode.json' 'task_allow' 'null' 'number' } else { $wlValues += @{ Src = 'json_task'; Val = $ta } }
-foreach ($i in 0..2) {
-    $wl = Get-WhitelistCount $archRaws[$i].Text $Primary
-    if ($null -eq $wl) { Add-Diff "arch[$i]" 'whitelist_header' 'null' 'number'; continue }
-    if ($wl.Header -ne $wl.Rows) { Add-Diff "arch[$i]" 'whitelist_rows' $wl.Rows $wl.Header }
-    $wlValues += @{ Src = "arch$($i + 1)"; Val = $wl.Header }
+$wl = Get-WhitelistCount $archRaws[0].Text $Primary
+if ($null -eq $wl) { Add-Diff 'arch' 'whitelist_header' 'null' 'number' } else {
+    if ($wl.Header -ne $wl.Rows) { Add-Diff 'arch' 'whitelist_rows' $wl.Rows $wl.Header }
+    $wlValues += @{ Src = 'arch'; Val = $wl.Header }
 }
-foreach ($i in 0..2) {
-    $wl = Get-WhitelistCountUnnumbered $agentsMdRaws[$i].Text $Primary
-    if ($null -eq $wl) { Add-Diff "agents_md[$i]" 'whitelist_header' 'null' 'number'; continue }
-    if ($wl.Header -ne $wl.Rows) { Add-Diff "agents_md[$i]" 'whitelist_rows' $wl.Rows $wl.Header }
-    $wlValues += @{ Src = "agents_md$($i + 1)"; Val = $wl.Header }
-}
-foreach ($i in 0..2) {
-    $wl = Get-WhitelistCountUnnumbered $pluginMdRaws[$i].Text $Primary
-    if ($null -eq $wl) { Add-Diff "plugin_md[$i]" 'whitelist_header' 'null' 'number'; continue }
-    if ($wl.Header -ne $wl.Rows) { Add-Diff "plugin_md[$i]" 'whitelist_rows' $wl.Rows $wl.Header }
-    $wlValues += @{ Src = "plugin_md$($i + 1)"; Val = $wl.Header }
-}
-foreach ($i in 0..1) {
-    $wl = Get-WhitelistCountUnnumbered $mcpRaws[$i].Text $Primary
-    if ($null -eq $wl) { Add-Diff "mcp[$i]" 'whitelist_s6_header' 'null' 'number'; continue }
-    if ($wl.Header -ne $wl.Rows) { Add-Diff "mcp[$i]" 'whitelist_s6_rows' $wl.Rows $wl.Header }
-    $wlValues += @{ Src = "mcp_s6_$($i + 1)"; Val = $wl.Header }
-    # Task Whitelist header + comma list
-    $twHeaders = [regex]::Matches($mcpRaws[$i].Text, '(?m)^\*\*Task Whitelist \((\d+) agents\):\*\*\r?$')
-    $found = $null
-    foreach ($h in $twHeaders) {
-        $before = $mcpRaws[$i].Text.Substring(0, $h.Index)
-        $lastH4 = [regex]::Matches($before, '(?m)^#### (orchestrator|plankestrator)\r?$')
-        if ($lastH4.Count -gt 0 -and $lastH4[$lastH4.Count - 1].Groups[1].Value -eq $Primary) { $found = $h }
-    }
-    if ($null -eq $found) { Add-Diff "mcp[$i]" 'task_whitelist_header' 'missing' $Primary }
-    else {
-        $afterLine = [regex]::Match($mcpRaws[$i].Text.Substring($found.Index + $found.Length), '(?m)^(\S[^\r\n]*)\r?$')
-        if ($afterLine.Success) {
-            $nComma = (Split-Tokens $afterLine.Groups[1].Value).Count
-            $wlValues += @{ Src = "mcp_taskwl_$($i + 1)"; Val = [int]$found.Groups[1].Value }
-            if ($nComma -ne [int]$found.Groups[1].Value) { Add-Diff "mcp[$i]" 'task_whitelist_list' $nComma $found.Groups[1].Value }
-        } else { Add-Diff "mcp[$i]" 'task_whitelist_list' 'missing' 'number' }
-    }
-    $sumRow = [regex]::Match($mcpRaws[$i].Text, '(?m)^\| Routing tables \| 2 \| orchestrator \((\d+)\), plankestrator \((\d+)\) \|\r?$')
-    if ($sumRow.Success) {
-        $g = $(if ($Primary -eq 'orchestrator') { 1 } else { 2 })
-        $wlValues += @{ Src = "mcp_summary_routing_$($i + 1)"; Val = [int]$sumRow.Groups[$g].Value }
-    } else { Add-Diff "mcp[$i]" 'summary_routing_row' 'missing' 'number' }
-}
-foreach ($i in 0..2) {
-    $acs = [regex]::Match($archRaws[$i].Text, ('(?m)^\| ' + [regex]::Escape($Primary) + ' \| (\d+) \|'))
-    if ($acs.Success) { $wlValues += @{ Src = "arch_agent_count_$($i + 1)"; Val = [int]$acs.Groups[1].Value } }
-    else { Add-Diff "arch[$i]" 'agent_count_summary' 'missing' 'number' }
-}
-
-# --- global counters
-$g1Values = @()   # unique subagents (35)
-$g2Values = @()   # total agents (38)
-foreach ($i in 0..2) {
-    $gt = [regex]::Match($archRaws[$i].Text, '(?m)^\| \*\*Grand Total\*\* \| \*\*(\d+)\*\* \| \*\*(\d+)\*\* \|\r?$')
-    if ($gt.Success) {
-        $g1Values += @{ Src = "arch_grand_total_$($i + 1)"; Val = [int]$gt.Groups[1].Value }
-        $g2Values += @{ Src = "arch_grand_total_$($i + 1)"; Val = [int]$gt.Groups[2].Value }
-    } else { Add-Diff "arch[$i]" 'grand_total' 'missing' 'number' }
-    $note = [regex]::Match($archRaws[$i].Text, '(?m)^Note: (\d+) whitelist entries[^\r\n]*?= (\d+) unique whitelisted subagents[^\r\n]*?(\d+) unique subagents \+ 2 primary agents = (\d+) unique agents total\.')
-    if ($note.Success) {
-        $g1Values += @{ Src = "arch_note_$($i + 1)"; Val = [int]$note.Groups[3].Value }
-        $g2Values += @{ Src = "arch_note_$($i + 1)"; Val = [int]$note.Groups[4].Value }
-    } else { Add-Diff "arch[$i]" 'note_counters' 'missing' 'number' }
-    $kontrol = [regex]::Match($archRaws[$i].Text, '(?m)^\u041A\u043E\u043D\u0442\u0440\u043E\u043B\u044C \u0441\u0443\u043C\u043C\u044B: 2 primary \+ (\d+) subagents = (\d+) \u0430\u0433\u0435\u043D\u0442\u043E\u0432;')
-    if ($kontrol.Success) {
-        $g1Values += @{ Src = "arch_kontrol_$($i + 1)"; Val = [int]$kontrol.Groups[1].Value }
-        $g2Values += @{ Src = "arch_kontrol_$($i + 1)"; Val = [int]$kontrol.Groups[2].Value }
-    } else { Add-Diff "arch[$i]" 'kontrol_summy' 'missing' 'number' }
-    $intro = [regex]::Match($archRaws[$i].Text, '(?m)\u043C\u043E\u0434\u0435\u043B\u0435\u0439 (\d+) \u0430\u0433\u0435\u043D\u0442\u0430\u043C')
-    if ($intro.Success) { $g2Values += @{ Src = "arch_intro_$($i + 1)"; Val = [int]$intro.Groups[1].Value } }
-    else { Add-Diff "arch[$i]" 'model_roles_intro' 'missing' 'number' }
-}
-foreach ($i in 0..2) {
-    $prose = [regex]::Match($agentsMdRaws[$i].Text, '(?m)\u0432\u0441\u0435\u043C (\d+) \u0430\u0433\u0435\u043D\u0442\u0430\u043C')
-    if ($prose.Success) { $g2Values += @{ Src = "agents_md_prose_$($i + 1)"; Val = [int]$prose.Groups[1].Value } }
-    else { Add-Diff "agents_md[$i]" 'model_roles_prose' 'missing' 'number' }
-}
-foreach ($i in 0..1) {
-    $ac = [regex]::Match($mcpRaws[$i].Text, '(?m)^\| Subagents \| (\d+) \|\r?$')
-    if ($ac.Success) { $g1Values += @{ Src = "mcp_agent_count_$($i + 1)"; Val = [int]$ac.Groups[1].Value } }
-    else { Add-Diff "mcp[$i]" 'agent_count_subagents' 'missing' 'number' }
-    $tu = [regex]::Match($mcpRaws[$i].Text, '(?m)^\| \*\*Total unique agents\*\* \| \*\*(\d+)\*\* \|\r?$')
-    if ($tu.Success) { $g2Values += @{ Src = "mcp_total_unique_$($i + 1)"; Val = [int]$tu.Groups[1].Value } }
-    else { Add-Diff "mcp[$i]" 'total_unique_agents' 'missing' 'number' }
-    $allSub = [regex]::Match($mcpRaws[$i].Text, '(?m)\u0432\u0441\u0435 (\d+) subagents')
-    if ($allSub.Success) { $g1Values += @{ Src = "mcp_prose_$($i + 1)"; Val = [int]$allSub.Groups[1].Value } }
-    else { Add-Diff "mcp[$i]" 'vse_subagents_prose' 'missing' 'number' }
-    $subHdr = [regex]::Match($mcpRaws[$i].Text, '(?m)^\*\*Subagents \((\d+)\):\*\*\r?$')
-    if ($subHdr.Success) { $g1Values += @{ Src = "mcp_subagents_hdr_$($i + 1)"; Val = [int]$subHdr.Groups[1].Value } }
-    else { Add-Diff "mcp[$i]" 'subagents_bold_header' 'missing' 'number' }
-    $af = [regex]::Match($mcpRaws[$i].Text, '(?m)^### Agent Files \((\d+) total\)\r?$')
-    if ($af.Success) { $g2Values += @{ Src = "mcp_agent_files_$($i + 1)"; Val = [int]$af.Groups[1].Value } }
-    else { Add-Diff "mcp[$i]" 'agent_files_total' 'missing' 'number' }
-    $sumSub = [regex]::Match($mcpRaws[$i].Text, '(?m)^\| Subagents \| (\d+) \| \S')
-    if ($sumSub.Success) { $g1Values += @{ Src = "mcp_summary_subagents_$($i + 1)"; Val = [int]$sumSub.Groups[1].Value } }
-    else { Add-Diff "mcp[$i]" 'summary_subagents' 'missing' 'number' }
-    # alphabetical '- *.md' list length under **Subagents (N):**
-    if ($subHdr.Success) {
-        $after = $mcpRaws[$i].Text.Substring($subHdr.Index + $subHdr.Length)
-        $dash = [regex]::Matches($after, '(?m)^- [^\r\n]+\.md\r?$')
-        $stop = [regex]::Match($after, '(?m)^(?!- )\S')
-        $cnt = 0
-        foreach ($d in $dash) { if ($stop.Success -and $d.Index -gt $stop.Index) { break }; $cnt++ }
-        $g1Values += @{ Src = "mcp_alpha_list_$($i + 1)"; Val = $cnt }
-    }
-    # tree list length — informational only (known docs-planner drift)
-    $treeHdr = [regex]::Match($mcpRaws[$i].Text, '(?m)^### Agent Files List \((\d+) files\)\r?$')
-    if ($treeHdr.Success) {
-        $after2 = $mcpRaws[$i].Text.Substring($treeHdr.Index + $treeHdr.Length)
-        if ($after2 -notmatch 'docs-planner\.md') { $warns += 'WARN:mcp tree list pre-existing drift (docs-planner.md missing) — informational' }
-    }
-}
+$acs = [regex]::Match($archRaws[0].Text, ('(?m)^\| ' + [regex]::Escape($Primary) + ' \| (\d+)'))
+if ($acs.Success) { $wlValues += @{ Src = 'arch_agent_count'; Val = [int]$acs.Groups[1].Value } }
+else { Add-Diff 'arch' 'agent_count_summary' 'missing' 'number' }
+# --- global counters (ARCHITECTURE.md, single canonical copy)
+$g1Values = @()   # unique subagents
+$g2Values = @()   # total agents
+$gt = [regex]::Match($archRaws[0].Text, '(?m)^\| \*\*Grand Total\*\* \| \*\*(\d+)\*\* \| \*\*(\d+)\*\* \|\r?$')
+if ($gt.Success) {
+    $g1Values += @{ Src = 'arch_grand_total'; Val = [int]$gt.Groups[1].Value }
+    $g2Values += @{ Src = 'arch_grand_total'; Val = [int]$gt.Groups[2].Value }
+} else { Add-Diff 'arch' 'grand_total' 'missing' 'number' }
+$note = [regex]::Match($archRaws[0].Text, '(?m)^Note: (\d+) whitelist entries[^\r\n]*?= (\d+) unique whitelisted subagents[^\r\n]*?(\d+) unique subagents \+ 2 primary agents = (\d+) unique agents total\.')
+if ($note.Success) {
+    $g1Values += @{ Src = 'arch_note'; Val = [int]$note.Groups[3].Value }
+    $g2Values += @{ Src = 'arch_note'; Val = [int]$note.Groups[4].Value }
+} else { Add-Diff 'arch' 'note_counters' 'missing' 'number' }
+$kontrol = [regex]::Match($archRaws[0].Text, '(?m)^\u041A\u043E\u043D\u0442\u0440\u043E\u043B\u044C \u0441\u0443\u043C\u043C\u044B: 2 primary \+ (\d+) subagents = (\d+) \u0430\u0433\u0435\u043D\u0442\u043E\u0432;')
+if ($kontrol.Success) {
+    $g1Values += @{ Src = 'arch_kontrol'; Val = [int]$kontrol.Groups[1].Value }
+    $g2Values += @{ Src = 'arch_kontrol'; Val = [int]$kontrol.Groups[2].Value }
+} else { Add-Diff 'arch' 'kontrol_summy' 'missing' 'number' }
+$intro = [regex]::Match($archRaws[0].Text, '(?m)\u043C\u043E\u0434\u0435\u043B\u0435\u0439 (\d+) \u0430\u0433\u0435\u043D\u0442\u0430\u043C')
+if ($intro.Success) { $g2Values += @{ Src = 'arch_intro'; Val = [int]$intro.Groups[1].Value } }
+else { Add-Diff 'arch' 'model_roles_intro' 'missing' 'number' }
 
 function Assert-Group([object[]]$Values, [string]$GroupId) {
     if ($Values.Count -eq 0) { return $null }
@@ -949,166 +777,16 @@ function Edit-ModelRolesAdd([string]$Text, [string]$AgentName, [string]$NewModel
 }
 
 # MCP: **Task Whitelist (N agents):** of -Primary — header +1, comma list append.
-function Edit-TaskWhitelist([string]$Text, [string]$PrimaryName, [string]$NewName) {
-    $res = @{ Text = $null; OldCount = 0; Error = $null }
-    $lines = [System.Collections.Generic.List[string]](Split-LinesKeepEol $Text)
-    $hitIdx = -1
-    for ($i = 0; $i -lt $lines.Count; $i += 2) {
-        if ($lines[$i] -match '^\*\*Task Whitelist \((\d+) agents\):\*\*$') {
-            $owner = $null
-            for ($j = $i - 2; $j -ge 0; $j -= 2) {
-                $hm = [regex]::Match($lines[$j], '^#### (orchestrator|plankestrator)$')
-                if ($hm.Success) { $owner = $hm.Groups[1].Value; break }
-            }
-            if ($owner -eq $PrimaryName) {
-                if ($hitIdx -ge 0) { $res.Error = "anchor: Task Whitelist for '$PrimaryName' found more than once"; return $res }
-                $hitIdx = $i
-            }
-        }
-    }
-    if ($hitIdx -lt 0) { $res.Error = "anchor: Task Whitelist header not found for '$PrimaryName'"; return $res }
-    $hm = [regex]::Match($lines[$hitIdx], '\((\d+) agents\)')
-    $res.OldCount = [int]$hm.Groups[1].Value
-    $lines[$hitIdx] = [regex]::Replace($lines[$hitIdx], '\(\d+ agents\)', ('(' + ($res.OldCount + 1) + ' agents)'), 1)
-    $listIdx = -1
-    for ($i = $hitIdx + 2; $i -lt $lines.Count; $i += 2) {
-        if ($lines[$i].Trim()) { $listIdx = $i; break }
-    }
-    if ($listIdx -lt 0) { $res.Error = 'anchor: Task Whitelist comma list not found'; return $res }
-    $toks = @(Split-Tokens $lines[$listIdx])
-    if ($toks -contains $NewName) { $res.Error = "token already present in Task Whitelist: $NewName"; return $res }
-    $lines[$listIdx] = $lines[$listIdx].TrimEnd() + ', ' + $NewName
-    $res.Text = ($lines -join '')
-    return $res
-}
 
 # MCP: Models Distribution — ADD branch (port of migrate.ps1 Edit-Distribution).
-function Edit-DistributionAdd([string]$Text, [string]$AgentName, [string]$NewShort) {
-    $res = @{ Text = $null; Error = $null; Warns = @(); Shorts = @(); RowCreated = $false; NewCount = 0 }
-    $lines = [System.Collections.Generic.List[string]](Split-LinesKeepEol $Text)
-    $span = Find-SectionSpan $lines '^### Models Distribution' '^### '
-    if (-not $span) { $res.Error = 'anchor: ### Models Distribution section not found'; return $res }
-    $rowPat = '^\| `(.+?)` \| (.+?) \| (\d+) \| (.*?) \|$'
-    $rows = @()
-    for ($i = $span.Start; $i -lt $span.End; $i += 2) {
-        $m = [regex]::Match($lines[$i], $rowPat)
-        if ($m.Success -and $m.Groups[1].Value.Trim() -ne 'Model') {
-            $rows += @{ Idx = $i; Short = $m.Groups[1].Value.Trim(); Provider = $m.Groups[2].Value.Trim(); Count = [int]$m.Groups[3].Value; Agents = $m.Groups[4].Value.Trim() }
-        }
-    }
-    if ($rows.Count -eq 0) { $res.Error = 'anchor: Models Distribution data rows not found'; return $res }
-    $newRows = @($rows | Where-Object { $_.Short -eq $NewShort })
-    if ($newRows.Count -eq 1) {
-        $nr = $newRows[0]
-        $toks = @(Split-Tokens $nr.Agents)
-        if ($toks -notcontains $AgentName) { $toks += $AgentName }
-        $lines[$nr.Idx] = "| ``$($nr.Short)`` | $($nr.Provider) | $($toks.Count) | $($toks -join ', ') |"
-        $res.NewCount = $toks.Count
-    } elseif ($newRows.Count -eq 0) {
-        $last = $rows[$rows.Count - 1]
-        $eol = Get-Eol $lines $last.Idx
-        if (-not $eol) { $eol = "`r`n" }
-        $insertAt = $last.Idx + 2
-        $lines.Insert($insertAt, "| ``$NewShort`` | bifrost-litellm | 1 | $AgentName |")
-        $lines.Insert($insertAt + 1, $eol)
-        $res.RowCreated = $true
-        $res.NewCount = 1
-    } else {
-        $res.Error = "anchor: Distribution row for '$NewShort' found $($newRows.Count) times (expected 1)"; return $res
-    }
-    $bound = [Math]::Min($span.End + 2, $lines.Count)
-    for ($i = $span.Start; $i -lt $bound; $i += 2) {
-        $m = [regex]::Match($lines[$i], $rowPat)
-        if ($m.Success -and $m.Groups[1].Value.Trim() -ne 'Model') { $res.Shorts += $m.Groups[1].Value.Trim() }
-    }
-    $res.Text = ($lines -join '')
-    return $res
-}
 
 # MCP: Summary Models row (regenerate from distribution shorts).
-function Edit-SummaryModelsRow([string]$Text, [string[]]$Shorts) {
-    $lines = [System.Collections.Generic.List[string]](Split-LinesKeepEol $Text)
-    $pat = '^\| Models \| \d+ \| bifrost-litellm \(.*\) \|$'
-    $hits = @()
-    for ($i = 0; $i -lt $lines.Count; $i += 2) {
-        if ($lines[$i] -match $pat) { $hits += $i }
-    }
-    if ($hits.Count -ne 1) { return @{ Text = $null; Error = "anchor: Summary Models row found $($hits.Count) times (expected 1)" } }
-    $lines[$hits[0]] = "| Models | $($Shorts.Count) | bifrost-litellm ($($Shorts -join ', ')) |"
-    return @{ Text = ($lines -join ''); Error = $null }
-}
 
 # MCP: Subagents Full Table — append row after the last **agent** row.
-function Edit-FullTableAppend([string]$Text, [string]$NewRowContent) {
-    $res = @{ Text = $null; Error = $null }
-    $lines = [System.Collections.Generic.List[string]](Split-LinesKeepEol $Text)
-    $span = Find-SectionSpan $lines '^### Subagents \u2014 Full Table' '^### '
-    if (-not $span) { $res.Error = 'anchor: ### Subagents Full Table section not found'; return $res }
-    $lastRow = -1
-    for ($i = $span.Start + 2; $i -lt $span.End; $i += 2) {
-        if ($lines[$i] -match '^\| \*\*') { $lastRow = $i }
-    }
-    if ($lastRow -lt 0) { $res.Error = 'anchor: Full Table data rows not found'; return $res }
-    $eol = Get-Eol $lines $lastRow
-    if (-not $eol) { $eol = Detect-Eol $Text; if (-not $eol) { $eol = "`r`n" } }
-    $lines.Insert($lastRow + 2, $NewRowContent)
-    $lines.Insert($lastRow + 3, $eol)
-    $res.Text = ($lines -join '')
-    return $res
-}
 
 # MCP: **Subagents (N):** alpha insert of '- <name>.md'.
-function Edit-AlphaInsert([string]$Text, [string]$FileName) {
-    $res = @{ Text = $null; Error = $null }
-    $lines = [System.Collections.Generic.List[string]](Split-LinesKeepEol $Text)
-    $anchor = Find-UniqueLine $lines '^\*\*Subagents \(\d+\):\*\*$'
-    if ($anchor.Error) { $res.Error = $anchor.Error; return $res }
-    $start = $anchor.Index
-    $end = $start
-    for ($i = $start + 2; $i -lt $lines.Count; $i += 2) {
-        if ($lines[$i] -match '^- [^\r\n]+\.md$') { $end = $i } else { break }
-    }
-    if ($end -eq $start) { $res.Error = 'anchor: Subagents file list not found'; return $res }
-    $insertAt = -1
-    for ($i = $start + 2; $i -le $end; $i += 2) {
-        $cur = $lines[$i] -replace '^- ', ''
-        if ([string]::CompareOrdinal($cur, $FileName) -gt 0) { $insertAt = $i; break }
-    }
-    $eol = Get-Eol $lines $end
-    if (-not $eol) { $eol = Detect-Eol $Text; if (-not $eol) { $eol = "`r`n" } }
-    $newContent = '- ' + $FileName
-    if ($insertAt -lt 0) {
-        $lines.Insert($end + 2, $newContent)
-        $lines.Insert($end + 3, $eol)
-    } else {
-        $lines.Insert($insertAt, $newContent)
-        $lines.Insert($insertAt + 1, $eol)
-    }
-    $res.Text = ($lines -join '')
-    return $res
-}
 
 # MCP: Agent Files List tree — insert 'branch <name>.md' before the last corner line.
-function Edit-TreeInsert([string]$Text, [string]$FileName) {
-    $res = @{ Text = $null; Error = $null }
-    $lines = [System.Collections.Generic.List[string]](Split-LinesKeepEol $Text)
-    $anchor = Find-UniqueLine $lines '^### Agent Files List \(\d+ files\)$'
-    if ($anchor.Error) { $res.Error = $anchor.Error; return $res }
-    $lastCorner = -1
-    $treeStart = -1
-    for ($i = $anchor.Index + 2; $i -lt $lines.Count; $i += 2) {
-        if ($lines[$i] -match '^\u251C\u2500\u2500 ') { if ($treeStart -lt 0) { $treeStart = $i } }
-        if ($lines[$i] -match '^\u2514\u2500\u2500 ') { $lastCorner = $i; break }
-    }
-    if ($lastCorner -lt 0) { $res.Error = 'anchor: Agent Files List tree not found'; return $res }
-    $eol = Get-Eol $lines $lastCorner
-    if (-not $eol) { $eol = Detect-Eol $Text; if (-not $eol) { $eol = "`r`n" } }
-    $branch = [string][char]0x251C + [string][char]0x2500 + [string][char]0x2500
-    $lines.Insert($lastCorner, $branch + ' ' + $FileName)
-    $lines.Insert($lastCorner + 1, $eol)
-    $res.Text = ($lines -join '')
-    return $res
-}
 
 # Primary .md: append '["<name>"]' to the OPENCODE_ROUTING_TABLE line.
 function Edit-RoutingLine([string]$Text, [string]$NewName) {
@@ -1280,12 +958,6 @@ if ($script:TplJsonSection) {
     $jsonSection = ($secLines -join $eolJ)
 }
 
-$enDash = [string][char]0x2013
-$extrasCell = ($taskEntries -join ', ')
-if (-not $extrasCell) { $extrasCell = $enDash }
-$bashCell = $fullCells.bash
-if ($bashCell -eq 'allow') { $bashCell = '**allow**' }
-$fullTableRow = '| **' + $Agent + '** | subagent | ' + $Model + ' | ' + $tempStr + ' | ' + $fullCells.edit + ' | ' + $fullCells.write + ' | ' + $fullCells.read + ' | ' + $bashCell + ' | ' + $extrasCell + ' |'
 $descCell = $Description
 
 # ============================================================================
@@ -1300,7 +972,7 @@ function Block([string]$Msg) {
     exit 3
 }
 
-# --- groups 3-4: opencode.json live + deploy
+# --- live opencode.json: agent section + primary task allow
 $newLiveCfgText = $liveCfgRaw.Text
 $r = Edit-JsonAgentSection $newLiveCfgText $jsonSection
 if ($r.Error) { Block $r.Error }
@@ -1312,38 +984,25 @@ try { $null = $newLiveCfgText | ConvertFrom-Json } catch { Block "new live openc
 $pending[$liveCfgPath] = @{ Text = $newLiveCfgText; Bom = $liveCfgRaw.Bom; Rel = (Get-RelPath $liveCfgPath) }
 $planLines += "PLAN:$(Get-RelPath $liveCfgPath) agent_section+task_allow"
 
-$newDeployCfgText = $deployCfgRaw.Text
-$r = Edit-JsonAgentSection $newDeployCfgText $jsonSection
-if ($r.Error) { Block $r.Error }
-$newDeployCfgText = $r.Text
-$r = Edit-PrimaryTaskAllow $newDeployCfgText $Primary $Agent
-if ($r.Error) { Block $r.Error }
-$newDeployCfgText = $r.Text
-try { $null = $newDeployCfgText | ConvertFrom-Json } catch { Block "new deploy opencode.json does not parse: $_" }
-$pending[$deployCfgPath] = @{ Text = $newDeployCfgText; Bom = $deployCfgRaw.Bom; Rel = (Get-RelPath $deployCfgPath) }
-$planLines += "PLAN:$(Get-RelPath $deployCfgPath) agent_section+task_allow"
-
-# --- group 5: plugin x3
-for ($i = 0; $i -lt 3; $i++) {
+# --- live plugin: ROUTING_TABLES append
+for ($i = 0; $i -lt $pluginPaths.Count; $i++) {
     $r = Edit-RoutingArray $pluginRaws[$i].Text $Primary $Agent ''
     if ($r.Error) { Block $r.Error }
     $pending[$pluginPaths[$i]] = @{ Text = $r.Text; Bom = $pluginRaws[$i].Bom; Rel = (Get-RelPath $pluginPaths[$i]) }
     $planLines += "PLAN:$(Get-RelPath $pluginPaths[$i]) routing_array[$Primary] old=$($r.OldCount) new=$($r.OldCount + 1)"
 }
 
-# --- group 6: primary .md x2
-for ($i = 0; $i -lt 2; $i++) {
-    $path = $(if ($i -eq 0) { $primaryLiveMd } else { $primaryDeployMd })
+# --- live primary .md: OPENCODE_ROUTING_TABLE append
+for ($i = 0; $i -lt $primaryRaws.Count; $i++) {
     $r = Edit-RoutingLine $primaryRaws[$i].Text $Agent
     if ($r.Error) { Block $r.Error }
-    $pending[$path] = @{ Text = $r.Text; Bom = $primaryRaws[$i].Bom; Rel = (Get-RelPath $path) }
-    $planLines += "PLAN:$(Get-RelPath $path) opencode_routing_table old=$($r.OldCount) new=$($r.OldCount + 1)"
+    $pending[$primaryLiveMd] = @{ Text = $r.Text; Bom = $primaryRaws[$i].Bom; Rel = (Get-RelPath $primaryLiveMd) }
+    $planLines += "PLAN:$(Get-RelPath $primaryLiveMd) opencode_routing_table old=$($r.OldCount) new=$($r.OldCount + 1)"
 }
 
-# --- group 7: ARCHITECTURE.md x3
+# --- repo ARCHITECTURE.md (single canonical copy)
 $numberedRow = '| ' + ($wlN + 1) + ' | ' + $Agent + ' | ' + $descCell + ' |'
-$plainRow = '| ' + $Agent + ' | ' + $descCell + ' |'
-for ($i = 0; $i -lt 3; $i++) {
+for ($i = 0; $i -lt $archPaths.Count; $i++) {
     $t = $archRaws[$i].Text
     $r = Edit-WhitelistTable $t $Primary $numberedRow
     if ($r.Error) { Block $r.Error }
@@ -1381,101 +1040,6 @@ for ($i = 0; $i -lt 3; $i++) {
     $pending[$archPaths[$i]] = @{ Text = $t; Bom = $archRaws[$i].Bom; Rel = (Get-RelPath $archPaths[$i]) }
 }
 
-# --- group 8: AGENTS.md x3
-for ($i = 0; $i -lt 3; $i++) {
-    $t = $agentsMdRaws[$i].Text
-    $r = Edit-WhitelistTable $t $Primary $plainRow
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $planLines += "PLAN:$(Get-RelPath $agentsMdPaths[$i]) whitelist header+row old=$($r.OldCount) new=$($r.OldCount + 1)"
-    $r = Edit-NumberedCounter $t '(?m)\u0432\u0441\u0435\u043C (\d+) \u0430\u0433\u0435\u043D\u0442\u0430\u043C' @(1)
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $planLines += "PLAN:$(Get-RelPath $agentsMdPaths[$i]) model_roles_prose old=$($r.Old[0]) new=$($r.New[0])"
-    $pending[$agentsMdPaths[$i]] = @{ Text = $t; Bom = $agentsMdRaws[$i].Bom; Rel = (Get-RelPath $agentsMdPaths[$i]) }
-}
-
-# --- group 9: PLUGIN.md x3
-for ($i = 0; $i -lt 3; $i++) {
-    $t = $pluginMdRaws[$i].Text
-    $r = Edit-WhitelistTable $t $Primary $plainRow
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $planLines += "PLAN:$(Get-RelPath $pluginMdPaths[$i]) whitelist header+row old=$($r.OldCount) new=$($r.OldCount + 1)"
-    $r = Edit-RoutingArray $t $Primary $Agent '^### Routing Table Implementation'
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $planLines += "PLAN:$(Get-RelPath $pluginMdPaths[$i]) routing_code_block[$Primary] old=$($r.OldCount) new=$($r.OldCount + 1)"
-    $pending[$pluginMdPaths[$i]] = @{ Text = $t; Bom = $pluginMdRaws[$i].Bom; Rel = (Get-RelPath $pluginMdPaths[$i]) }
-}
-
-# --- group 10: MCP_SETUP.md x2
-$newShort = $ModelKey
-for ($i = 0; $i -lt 2; $i++) {
-    $t = $mcpRaws[$i].Text
-    $r = Edit-NumberedCounter $t '(?m)^\| Subagents \| (\d+) \|\r?$' @(1)
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $r = Edit-NumberedCounter $t '(?m)^\| \*\*Total unique agents\*\* \| \*\*(\d+)\*\* \|\r?$' @(1)
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $r = Edit-NumberedCounter $t '(?m)\u0432\u0441\u0435 (\d+) subagents' @(1)
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $r = Edit-TaskWhitelist $t $Primary $Agent
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $planLines += "PLAN:$(Get-RelPath $mcpPaths[$i]) task_whitelist old=$($r.OldCount) new=$($r.OldCount + 1)"
-    $r = Edit-WhitelistTable $t $Primary $plainRow
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $planLines += "PLAN:$(Get-RelPath $mcpPaths[$i]) whitelist_s6 header+row old=$($r.OldCount) new=$($r.OldCount + 1)"
-    $r = Edit-RoutingArray $t $Primary $Agent '^### Routing Tables in Plugin'
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $planLines += "PLAN:$(Get-RelPath $mcpPaths[$i]) routing_plugin_block[$Primary] old=$($r.OldCount) new=$($r.OldCount + 1)"
-    $distInfo = $null
-    $r = Edit-DistributionAdd $t $Agent $newShort
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $warns += $r.Warns
-    $distInfo = $r
-    if ($distInfo.RowCreated) {
-        $r2 = Edit-SummaryModelsRow $t $distInfo.Shorts
-        if ($r2.Error) { Block $r2.Error }
-        $t = $r2.Text
-    }
-    $planLines += "PLAN:$(Get-RelPath $mcpPaths[$i]) distribution short=$newShort count=$($distInfo.NewCount) row_created=$($distInfo.RowCreated)"
-    $r = Edit-FullTableAppend $t $fullTableRow
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $planLines += "PLAN:$(Get-RelPath $mcpPaths[$i]) full_table_row"
-    $r = Edit-NumberedCounter $t '(?m)^### Agent Files \((\d+) total\)\r?$' @(1)
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $r = Edit-NumberedCounter $t '(?m)^\*\*Subagents \((\d+)\):\*\*\r?$' @(1)
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $r = Edit-AlphaInsert $t ($Agent + '.md')
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $r = Edit-NumberedCounter $t '(?m)^### Agent Files List \((\d+) files\)\r?$' @(1)
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $r = Edit-TreeInsert $t ($Agent + '.md')
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $r = Edit-NumberedCounter $t '(?m)^\| Subagents \| (\d+) \| \S' @(1)
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $routingGroups = $(if ($Primary -eq 'orchestrator') { @(1) } else { @(2) })
-    $r = Edit-NumberedCounter $t '(?m)^\| Routing tables \| 2 \| orchestrator \((\d+)\), plankestrator \((\d+)\) \|\r?$' $routingGroups
-    if ($r.Error) { Block $r.Error }
-    $t = $r.Text
-    $pending[$mcpPaths[$i]] = @{ Text = $t; Bom = $mcpRaws[$i].Bom; Rel = (Get-RelPath $mcpPaths[$i]) }
-    $planLines += "PLAN:$(Get-RelPath $mcpPaths[$i]) agent_files/list/tree/summary counters"
-}
-
 # ============================================================================
 # Plan output
 # ============================================================================
@@ -1493,8 +1057,6 @@ if ($PlanOnly) {
 Write-Output 'STATUS:APPLY_START'
 Write-RawText -Path $liveAgentMd -Text $agentFileText -Bom $false
 Write-Output "CREATED:$(Get-RelPath $liveAgentMd)"
-Write-RawText -Path $deployAgentMd -Text $agentFileText -Bom $false
-Write-Output "CREATED:$(Get-RelPath $deployAgentMd)"
 foreach ($entry in $pending.GetEnumerator()) {
     Write-RawText -Path $entry.Key -Text $entry.Value.Text -Bom $entry.Value.Bom
     Write-Output "EDITED:$($entry.Value.Rel)"
@@ -1505,34 +1067,10 @@ foreach ($entry in $pending.GetEnumerator()) {
 # ============================================================================
 try { $null = ((Read-RawText $liveCfgPath).Text) | ConvertFrom-Json } catch {
     Write-Output "ERROR:live opencode.json no longer parses: $_"
-    Write-Output 'WARN:partial state — restore from backup-snapshot / config-sync'
+    Write-Output 'WARN:partial state — restore from backup-snapshot'
     exit 3
 }
-try { $null = ((Read-RawText $deployCfgPath).Text) | ConvertFrom-Json } catch {
-    Write-Output "ERROR:deploy opencode.json no longer parses: $_"
-    Write-Output 'WARN:partial state — restore from backup-snapshot / config-sync'
-    exit 3
-}
-$verifyGroups = @(
-    @{ Name = 'agent pair'; Paths = @($liveAgentMd, $deployAgentMd) },
-    @{ Name = 'json pair'; Paths = @($liveCfgPath, $deployCfgPath) },
-    @{ Name = 'plugin x3'; Paths = $pluginPaths },
-    @{ Name = 'primary pair'; Paths = @($primaryLiveMd, $primaryDeployMd) },
-    @{ Name = 'architecture x3'; Paths = $archPaths },
-    @{ Name = 'agents-md x3'; Paths = $agentsMdPaths },
-    @{ Name = 'mcp-setup x2'; Paths = $mcpPaths }
-)
-foreach ($g in $verifyGroups) {
-    $hashes = @($g.Paths | ForEach-Object { Get-Sha256 $_ })
-    if (@($hashes | Select-Object -Unique).Count -eq 1) {
-        Write-Output "VERIFY:$($g.Name) identical"
-    } else {
-        Write-Output "ERROR:SHA256 mismatch: $($g.Name)"
-        Write-Output 'WARN:partial state — restore from backup-snapshot / config-sync'
-        exit 3
-    }
-}
-# Counter re-parse: all whitelist sources == old+1, globals == old+1.
+# Counter re-parse: all whitelist sources == old+1.
 $cfg2 = ((Read-RawText $liveCfgPath).Text) | ConvertFrom-Json
 $ta2 = Count-TaskAllow $cfg2 $Primary
 if ($ta2 -ne ($wlN + 1)) { Write-Output "ERROR:post-apply counter check failed: json task allow = $ta2 expected $($wlN + 1)"; exit 3 }
@@ -1544,21 +1082,14 @@ $rl2 = Count-RoutingLine $pm2
 if ($rl2 -ne ($wlN + 1)) { Write-Output "ERROR:post-apply counter check failed: OPENCODE_ROUTING_TABLE = $rl2 expected $($wlN + 1)"; exit 3 }
 $arch2 = (Read-RawText $archPaths[0]).Text
 $wl2 = Get-WhitelistCount $arch2 $Primary
-if ($null -eq $wl2 -or $wl2.Header -ne ($wlN + 1)) { Write-Output "ERROR:post-apply counter check failed: ARCH whitelist header"; exit 3 }
-$mcp2 = (Read-RawText $mcpPaths[0]).Text
-$ac2 = [regex]::Match($mcp2, '(?m)^\| Subagents \| (\d+) \|\r?$')
-if (-not $ac2.Success -or [int]$ac2.Groups[1].Value -ne ($g1 + 1)) { Write-Output "ERROR:post-apply counter check failed: MCP Agent Count Subagents"; exit 3 }
-$tu2 = [regex]::Match($mcp2, '(?m)^\| \*\*Total unique agents\*\* \| \*\*(\d+)\*\* \|\r?$')
-if (-not $tu2.Success -or [int]$tu2.Groups[1].Value -ne ($g2 + 1)) { Write-Output "ERROR:post-apply counter check failed: MCP Total unique agents"; exit 3 }
+if ($null -eq $wl2 -or $wl2.Header -ne ($wlN + 1)) { Write-Output 'ERROR:post-apply counter check failed: ARCH whitelist header'; exit 3 }
 Write-Output 'VERIFY:counters re-parsed old+1'
 # Routing arrays contain the new name exactly once (token-exact).
-foreach ($pp in $pluginPaths) {
-    $ts3 = (Read-RawText $pp).Text
-    $outer3 = [regex]::Match($ts3, '(?s)const ROUTING_TABLES = \{(.*?)\r?\n\}')
-    $inner3 = [regex]::Match($outer3.Groups[1].Value, ('(?s)' + [regex]::Escape($Primary) + '\s*:\s*\[(.*?)\]'))
-    $tokCount = @([regex]::Matches($inner3.Groups[1].Value, $script:TokenRx) | Where-Object { $_.Value.Trim('"', [char]0x27) -eq $Agent }).Count
-    if ($tokCount -ne 1) { Write-Output "ERROR:post-apply routing token count != 1 in $pp"; exit 3 }
-}
+$ts3 = (Read-RawText $pluginPaths[0]).Text
+$outer3 = [regex]::Match($ts3, '(?s)const ROUTING_TABLES = \{(.*?)\r?\n\}')
+$inner3 = [regex]::Match($outer3.Groups[1].Value, ('(?s)' + [regex]::Escape($Primary) + '\s*:\s*\[(.*?)\]'))
+$tokCount = @([regex]::Matches($inner3.Groups[1].Value, $script:TokenRx) | Where-Object { $_.Value.Trim('"', [char]0x27) -eq $Agent }).Count
+if ($tokCount -ne 1) { Write-Output "ERROR:post-apply routing token count != 1 in $($pluginPaths[0])"; exit 3 }
 Write-Output 'VERIFY:routing token-exact once'
 
 # ============================================================================
@@ -1566,16 +1097,11 @@ Write-Output 'VERIFY:routing token-exact once'
 # ============================================================================
 Write-Output 'WARN:restart required (config is read at session start — the new agent is visible in a NEW opencode session)'
 Write-Output 'WARN:CHANGELOG.md [Unreleased] entry is a manual step'
-Write-Output 'WARN:consistency-checker.md counts (26/10/38 in the prompt) — manual edit live+deploy'
-Write-Output 'WARN:verify.ps1 requiredAgents — manual update'
-Write-Output 'WARN:deploy README.md/DEPLOYMENT_GUIDE.md counts — manual update'
-Write-Output 'WARN:integrity-check defaults (38/26/10) in check.ps1+check.py+SKILL.md — manual update'
-Write-Output 'WARN:live AGENTS.md — run config-sync -Apply -Group agents-md'
+Write-Output 'WARN:run config-sync --save before commit (refreshes the repo mirror: agents/, opencode.json, plugins/)'
 Write-Output 'WARN:SEVERITY_AGENTS/CONTEXT_FILE_AGENTS — manual update (only if the new agent is a reviewer)'
-Write-Output 'WARN:MCP_SETUP unity-note prose — manual update (only if unity-mcp is not allowed for the new agent)'
 
 # ============================================================================
-# Optional conventional commit of the 16 repo files
+# Optional conventional commit of the repo files
 # ============================================================================
 if ($Commit) {
     $gitName = (Invoke-Native -FilePath "git" -Arguments @("-C", $repoRoot, "config", "user.name") | Select-Object -First 1)
@@ -1590,37 +1116,25 @@ if ($Commit) {
     $commitMsgFile = Join-Path $tempDir 'commit-msg-agents.txt'
     [System.IO.File]::WriteAllText($commitMsgFile, $commitMsg, (New-Object System.Text.UTF8Encoding($false)))
     Write-Output 'STATUS:COMMIT_START'
-    $repoRelPaths = @(
-        "deploy-package/agents/$Agent.md",
-        'deploy-package/opencode.json',
-        'plugins/workflow-enforcement.ts',
-        'deploy-package/plugins/workflow-enforcement.ts',
-        'ARCHITECTURE.md',
-        'opencode-config/ARCHITECTURE.md',
-        'deploy-package/project-files/ARCHITECTURE.md',
-        'AGENTS.md',
-        'opencode-config/AGENTS.md',
-        'deploy-package/project-files/AGENTS.md',
-        'PLUGIN.md',
-        'opencode-config/PLUGIN.md',
-        'deploy-package/project-files/PLUGIN.md',
-        'MCP_SETUP.md',
-        'deploy-package/project-files/MCP_SETUP.md',
-        "deploy-package/agents/$Primary.md"
-    )
+    $mirrorCandidates = @("agents/$Agent.md", "agents/$Primary.md", 'opencode.json', 'plugins/workflow-enforcement.ts')
+    $repoRelPaths = @('ARCHITECTURE.md') + @($mirrorCandidates | Where-Object { Test-Path -LiteralPath (Join-Path $repoRoot ($_ -replace '/', '\')) -PathType Leaf })
+    $missingMirrors = @($mirrorCandidates | Where-Object { -not (Test-Path -LiteralPath (Join-Path $repoRoot ($_ -replace '/', '\')) -PathType Leaf) })
+    if ($missingMirrors.Count -gt 0) {
+        Write-Output "WARN:repo mirror not refreshed yet (run config-sync --save): $($missingMirrors -join ', ')"
+    }
     Invoke-Native -FilePath "git" -Arguments (@('-C', $repoRoot, 'add') + $repoRelPaths) | Out-Null
     if ($LASTEXITCODE -ne 0) { Write-Output 'ERROR:git add failed'; exit 3 }
     Invoke-Native -FilePath "git" -Arguments @('-C', $repoRoot, 'commit', '-F', $commitMsgFile) | Out-Null
     if ($LASTEXITCODE -ne 0) { Write-Output 'ERROR:git commit failed'; exit 3 }
-    $commitHash = (Invoke-Native -FilePath "git" -Arguments @('-C', $repoRoot, 'rev-parse', 'HEAD') | Select-Object -First 1)
+    $commitHash = (Invoke-Native -FilePath "git" -Arguments @("-C", $repoRoot, "rev-parse", "HEAD") | Select-Object -First 1)
     if ($commitHash) { $commitHash = $commitHash.Trim() }
     Write-Output "COMMITTED:hash=$commitHash msg=$commitMsg"
     if ($Push) {
         Write-Output 'STATUS:PUSH_START'
-        $branch = ((Invoke-Native -FilePath "git" -Arguments @('-C', $repoRoot, 'branch', '--show-current')) | Select-Object -First 1)
+        $branch = ((Invoke-Native -FilePath "git" -Arguments @("-C", $repoRoot, "branch", "--show-current")) | Select-Object -First 1)
         if ($branch) { $branch = $branch.Trim() }
         if (-not $branch) { Write-Output 'ERROR: could not determine current branch'; exit 3 }
-        Invoke-Native -FilePath "git" -Arguments @('-C', $repoRoot, 'push', 'origin', $branch) | Out-Null
+        Invoke-Native -FilePath "git" -Arguments @("-C", $repoRoot, "push", "origin", $branch) | Out-Null
         if ($LASTEXITCODE -ne 0) { Write-Output 'ERROR:git push failed'; exit 3 }
         Write-Output "PUSHED:branch=$branch"
     }

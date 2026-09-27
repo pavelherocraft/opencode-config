@@ -19,7 +19,7 @@
     Output format: ascii (default), markdown, json.
 
 .PARAMETER Source
-    Agents dir for models: live (default) or deploy-package/agents.
+    Agents dir for models: live (default) or repo agents/.
 
 .PARAMETER AgentsDir
     Explicit agents dir (overrides -Source).
@@ -68,8 +68,8 @@ $script:TierRank = @{ 'low' = 1; 'mid' = 2; 'top' = 3 }
 
 # --- Flag combination gate ---------------------------------------------------
 # NOTE: no [ValidateSet] - a PS binding error exits 1, spec requires exit 2.
-if ($Source -ne '' -and $Source -ne 'live' -and $Source -ne 'deploy') {
-    Write-Output "ERROR:USAGE invalid -Source value: $Source (expected live|deploy)"
+if ($Source -ne '' -and $Source -ne 'live' -and $Source -ne 'repo') {
+    Write-Output "ERROR:USAGE invalid -Source value: $Source (expected live|repo)"
     exit 2
 }
 if (-not $Source) { $Source = 'live' }
@@ -375,7 +375,7 @@ function Join-Boxes([object[]]$Boxes, [string[]]$Conns) {
 # --- Paths ------------------------------------------------------------------
 $skillDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $skillDir)))
-if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "deploy-package"))) {
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot '.opencode'))) {
     $gitRoot = Invoke-Native -FilePath "git" -Arguments @("-C", $skillDir, "rev-parse", "--show-toplevel")
     if ($LASTEXITCODE -eq 0 -and $gitRoot) { $repoRoot = ($gitRoot | Select-Object -First 1).Trim() }
 }
@@ -403,8 +403,8 @@ if (-not $roleInfo) {
 if ($AgentsDir) {
     $agentsDir = $AgentsDir
     if (-not [System.IO.Path]::IsPathRooted($agentsDir)) { $agentsDir = Join-Path $repoRoot $agentsDir }
-} elseif ($Source -eq 'deploy') {
-    $agentsDir = Join-Path $repoRoot 'deploy-package\agents'
+} elseif ($Source -eq 'repo') {
+    $agentsDir = Join-Path $repoRoot 'agents'
 } else {
     $agentsDir = Join-Path $liveDir 'agents'
 }

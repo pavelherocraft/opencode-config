@@ -1,6 +1,6 @@
 ---
 name: model-key-validate
-description: 'Fast LLM-free validation of every frontmatter model key across the live agent files (optionally deploy mirrors too) — format provider/model-key, existence in opencode.json provider models, Did-you-mean suggestions via Levenshtein for every invalid key, unused-model report (catalog keys referenced by zero agents). Runs in seconds, no network. Exit 0 all valid, exit 3 failures found.'
+description: 'Fast LLM-free validation of every frontmatter model key across the live agent files (optionally the repo agents/ mirror too) — format provider/model-key, existence in opencode.json provider models, Did-you-mean suggestions via Levenshtein for every invalid key, unused-model report (catalog keys referenced by zero agents). Runs in seconds, no network. Exit 0 all valid, exit 3 failures found.'
 ---
 
 # Model Key Validate
@@ -42,8 +42,8 @@ These skills are project-level: invoke them from the repo root via
    `max(3, len/3)`; unknown provider -> closest-provider suggestions
 5. **Unused models**: every catalog key with ZERO referencing agents ->
    `UNUSED:` (WARN-status, does NOT affect exit code)
-6. **Deploy mirrors** (`-Both`): the same checks for `deploy-package/agents/*.md`
-   + `PAIR:` SHA256 live<->deploy per agent
+ 6. **Repo mirror** (`-Both`): the same checks for the repo `agents/*.md` mirror
+    + `PAIR:` SHA256 live<->repo per agent
 
 ## Usage
 
@@ -65,7 +65,7 @@ python .opencode/skills/model-key-validate/scripts/validate.py [--both] [--provi
 | Param | Meaning |
 |-------|---------|
 | `-Agents <dir>` | agents dir to validate (default: live `~/.config/opencode/agents`) |
-| `-Both` | also validate deploy-package/agents + PAIR hashes |
+| `-Both` | also validate repo agents/ + PAIR hashes |
 | `-Config <path>` | opencode.json (default `%USERPROFILE%\.config\opencode\opencode.json`) |
 | `-Provider <name>` | validate only keys of this provider (others -> SKIP, not FAIL) |
 | `-Suggest <n>` | max suggestions per invalid key (default 3, min 1) |

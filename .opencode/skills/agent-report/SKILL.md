@@ -1,6 +1,6 @@
 ---
 name: agent-report
-description: 'Fast LLM-free fleet report — per-agent table (frontmatter model, Model Roles role/tier, mode, flattened permissions, routing membership orch/plan/both/none) plus model-distribution and role-distribution summaries. Sources: live (default) or deploy agent files, root ARCHITECTURE.md (Model Roles + whitelists), live opencode.json (routing cross-check, WARN on mismatch). Formats: aligned table (default), markdown, JSON. Strictly read-only, runs in seconds. Exit 0 report generated, exit 2 usage/environment error.'
+description: 'Fast LLM-free fleet report — per-agent table (frontmatter model, Model Roles role/tier, mode, flattened permissions, routing membership orch/plan/both/none) plus model-distribution and role-distribution summaries. Sources: live (default) or repo agents/ mirror, root ARCHITECTURE.md (Model Roles + whitelists), live opencode.json (routing cross-check, WARN on mismatch). Formats: aligned table (default), markdown, JSON. Strictly read-only, runs in seconds. Exit 0 report generated, exit 2 usage/environment error.'
 ---
 
 # Agent Report
@@ -27,13 +27,13 @@ These skills are project-level: invoke them from the repo root via
 - Model key validity/suggestions — use `model-key-validate`
 - Changing a model — use `agent-model-migrate`
 - Pipeline structure diagrams — use `pipeline-visualize`
-- Packaging deploy-package — use `deploy-package-build`
+- Syncing the repo mirror — use `config-sync --save`
 
 ## Data sources
 
 | Field | Source (authority order) |
 |-------|--------------------------|
-| model, mode, permissions | agent frontmatter — live `~/.config/opencode/agents/*.md` (default) or `deploy-package/agents` (`-Source deploy`) |
+| model, mode, permissions | agent frontmatter — live `~/.config/opencode/agents/*.md` (default) or repo `agents/` (`-Source repo`) |
 | role, tier | root `ARCHITECTURE.md` → `## Model Roles` table |
 | routing | root `ARCHITECTURE.md` → `### orchestrator Whitelist` / `### plankestrator Whitelist` table rows |
 | routing cross-check | `opencode.json` (`-Config`, default live) → `agent.<primary>.permission.task` allow-keys (mismatch → WARN, never fatal) |
@@ -41,8 +41,8 @@ These skills are project-level: invoke them from the repo root via
 Authority rule: the displayed `model` is ALWAYS the frontmatter value
 (Permission Authority — opencode.json carries no model field). The Model Roles
 `model` column is only COMPARED against frontmatter (`WARN:ROLE_MODEL_DRIFT`),
-never displayed as truth. Skills read the ROOT ARCHITECTURE.md (known
-pre-existing drift: the live copy under ~/.config/opencode may differ).
+never displayed as truth. Skills read the ROOT ARCHITECTURE.md (the single
+canonical copy — it exists only in the repo).
 
 ## Report columns
 
@@ -86,7 +86,7 @@ pre-existing drift: the live copy under ~/.config/opencode may differ).
 & ".opencode\skills\agent-report\scripts\report.ps1"
 & ".opencode\skills\agent-report\scripts\report.ps1" -Format markdown
 & ".opencode\skills\agent-report\scripts\report.ps1" -Format json
-& ".opencode\skills\agent-report\scripts\report.ps1" -Source deploy
+& ".opencode\skills\agent-report\scripts\report.ps1" -Source repo
 & ".opencode\skills\agent-report\scripts\report.ps1" -Role executor-cheap
 & ".opencode\skills\agent-report\scripts\report.ps1" -Model "GLM-5.3"
 & ".opencode\skills\agent-report\scripts\report.ps1" -Agent worker
@@ -95,14 +95,14 @@ pre-existing drift: the live copy under ~/.config/opencode may differ).
 ### POSIX mirror
 
 ```bash
-python .opencode/skills/agent-report/scripts/report.py [--source live|deploy] [--format table|markdown|json] [--agent NAME] [--role ROLE] [--model SUBSTR]
+python .opencode/skills/agent-report/scripts/report.py [--source live|repo] [--format table|markdown|json] [--agent NAME] [--role ROLE] [--model SUBSTR]
 ```
 
 ## Parameters
 
 | Param | Meaning |
 |-------|---------|
-| `-Source live\|deploy` | agents dir: live (default) or `deploy-package/agents` |
+| `-Source live\|repo` | agents dir: live (default) or repo `agents/` |
 | `-Format table\|markdown\|json` | report body format (default `table`) |
 | `-Agent <name>` | single-agent report (exact, token-equal; not found → exit 2) |
 | `-Role <role>` | filter by Model Roles role (exact) |
@@ -116,7 +116,7 @@ python .opencode/skills/agent-report/scripts/report.py [--source live|deploy] [-
 | Gate | Effect |
 |------|--------|
 | `-Agent` combined with `-Role`/`-Model` | BLOCK (exit 2) |
-| `-Source deploy` combined with `-AgentsDir` | BLOCK (exit 2) |
+| `-Source repo` combined with `-AgentsDir` | BLOCK (exit 2) |
 | Agents dir / ARCHITECTURE.md missing, agents dir empty | BLOCK (exit 2) |
 | Anchors `## Model Roles` / whitelist headers not found | BLOCK (exit 2) |
 | `-Agent <name>` not found among scanned agents | BLOCK (exit 2) |
@@ -153,7 +153,7 @@ whitelist only, etc.) so orch+plan+both+none == agents.
 | 2 | Usage/environment error (bad flags/combination, missing dirs/files, anchors absent, `-Agent` not found, empty agents dir) |
 
 This skill has NO exit 3: it reports state, it does not gate. Gating checks
-live in `integrity-check` / `deploy-package-build`.
+live in `integrity-check`.
 
 ## Hard rules
 

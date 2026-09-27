@@ -1,35 +1,41 @@
-# Global Rules
+﻿# Global Rules
 
-These rules apply to ALL projects, ALL sessions, and ALL agents. They override anything suggested by earlier session history or project habits.
+Применяются во ВСЕХ проектах и сессиях. Специфика проекта — в ARCHITECTURE.md корня проекта (если есть).
 
 ## Git Commits — HARD RULE
 
-**NEVER run `git commit`, `git push`, or `git tag` yourself. ALWAYS delegate to the `git-commit` agent via the Task tool (subagent_type: "git-commit"). No exceptions, in any project, even if this session's history contains past direct commits.**
+**НИКОГДА не выполняй `git commit`, `git push`, `git tag` сам. ВСЕГДА делегируй агенту `git-commit` через Task tool (subagent_type: "git-commit"). Без исключений.**
+- Прямые git commit/push заблокированы permissions для всех, кроме агента git-commit. Отказ в правах = сигнал делегировать через task, не обходить
+- Push передавай только если пользователь явно попросил
+- Если task tool недоступен — скажи пользователю, не коммить вручную
 
-- Applies to every phrasing: "commit", "push", "save changes", "закоммить", "запушь", "сохрани в git"
-- Direct `git commit` / `git push` are blocked by permissions for everyone except the `git-commit` agent. **If such a call is denied — that is your signal to delegate via `task` to the `git-commit` agent, not to work around it**
-- Pass through the push instruction only if the user explicitly asked to push
-- If the `task` tool is unavailable, tell the user instead of committing manually
+## Media Generation — HARD RULE
 
-## Image Generation — HARD RULE
+**Генерация изображений/видео/речи — ТОЛЬКО через профильных субагентов** (image-creator, video-generator, voice-synthesizer, voice-clone, voice-transcriber) через Task tool. Не вызывай медиа-API напрямую и не генерируй сам.
 
-**Any request to draw, generate, create, render, or edit an image MUST be delegated:**
+## Image Analysis
 
-- Default → `generate-image` agent (Task tool, subagent_type: "generate-image") — Gemini image model
-- ONLY if the user explicitly requests GPT/DALL-E (e.g. "use gpt image", "dall-e", "gpt-image") → `generate-image-gpt` agent
-- NEVER call generation skills, scripts, or image APIs directly
+Анализ изображений — только агент `view-image` через Task tool (subagent_type: "view-image").
 
-## MCP-First Rules
+## MCP Tools Rules
 
-### Web Search
-- Use `webSearchPrime` MCP tool for all search tasks
-- Translate Russian queries to English before searching
+### Search
+Всегда `zai_web_search` (tool: zai_web_search_web_search_prime) для веб-поиска. НЕ webfetch. Запросы — на английском.
 
-### Reading URLs
-- Use `webReader` MCP tool for reading webpage content
+### Read URLs
+Всегда `zai_web_reader` для чтения URL. НЕ webfetch.
 
-### GitHub Repositories
-- Use `zread` MCP tools: `search_doc`, `get_repo_structure`, `read_file`
+### GitHub
+Всегда `zai_zread` инструменты (search_doc, read_file, get_repo_structure) для GitHub-репозиториев и опенсорс-документации.
 
-### Fallback
-- If MCP tools fail, use `webfetch` as a last resort
+## Serena MCP Rules
+
+Serena-инструменты ПЕРВИЧНЫ для кодовых операций (find_symbol, find_referencing_symbols, get_symbols_overview, rename_symbol, safe_delete_symbol, replace_symbol_body, insert_after/before_symbol). Встроенные grep/read/edit — вторичны, только при отказе Serena или для текстовых паттернов.
+
+## unity-mcp Rules
+
+Для Unity-проектов — ВСЕГДА unity-mcp (CoplayDev) инструменты МАКСИМАЛЬНО: manage_gameobject, manage_scene, create_script, manage_script, manage_asset, read_console и др. Встроенные edit/write/bash для Unity-операций НЕ использовать (только если unity-mcp недоступен).
+
+## Per-Audience Context Files
+
+`REVIEW_CONTEXT.md` (корень проекта + user-level) — инструкции ТОЛЬКО для reviewer-агентов. Исполнительные агенты не читают.

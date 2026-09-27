@@ -2,15 +2,14 @@
 """
 add.py - POSIX mirror of add.ps1
 
-Add ONE new subagent end-to-end across ALL synchronized places: live+deploy
-agent .md (frontmatter from readonly/standard preset or --perm-template),
-opencode.json agent section + primary task allow (live + deploy),
-ROUTING_TABLES (plugin x3) and OPENCODE_ROUTING_TABLE (primary prompt x2),
-whitelist tables and every derived counter in ARCHITECTURE.md x3 / AGENTS.md
-x3 / PLUGIN.md x3 / MCP_SETUP.md x2, Subagent Models + Model Roles +
-Distribution + Full Table rows, SHA256-verifies all mirrors, optional
-conventional commit + push. Two-phase all-or-nothing: any failed gate/anchor
--> zero files written.
+Add ONE new subagent end-to-end. Edits are made in LIVE (the runtime source
+of truth): agent .md (frontmatter from readonly/standard preset or
+--perm-template), opencode.json agent section + primary task allow,
+ROUTING_TABLES (live plugin) and OPENCODE_ROUTING_TABLE (live primary prompt),
+plus whitelist tables and derived counters in ARCHITECTURE.md (single root
+copy) and its Subagent Models + Model Roles rows. Two-phase all-or-nothing:
+any failed gate/anchor -> zero files written. The repo mirror is refreshed
+afterwards via `config-sync --save`, NOT by this script.
 
 Usage:
     python add.py --agent <name> --model <provider/model-key>
@@ -31,7 +30,6 @@ Exit codes:
 """
 
 import argparse
-import hashlib
 import json
 import re
 import subprocess
@@ -42,7 +40,6 @@ from pathlib import Path
 LINE_SPLIT = re.compile(r'(\r\n|\r|\n)')
 TOKEN_RX = re.compile(r'["\'][^"\']+["\']')
 ROLE_ROW = re.compile(r'^\| (.+?) \| (.+?) \| (.+?) \| (.*?) \|$')
-DIST_ROW = re.compile(r'^\| `(.+?)` \| (.+?) \| (\d+) \| (.*?) \|$')
 SECTION_END_KONTROL = r'^\u041A\u043E\u043D\u0442\u0440\u043E\u043B\u044C \u0441\u0443\u043C\u043C\u044B:'
 
 PRESETS = {
@@ -57,7 +54,6 @@ PRESETS = {
             'serena_search_for_pattern: allow',
         ],
         'default_task': [],
-        'full_table': {'edit': 'deny', 'write': 'deny', 'read': 'allow', 'bash': 'deny'},
     },
     'standard': {
         'fm_yaml': [
@@ -72,7 +68,6 @@ PRESETS = {
             'serena_insert_after_symbol: allow',
         ],
         'default_task': ['view-image'],
-        'full_table': {'edit': 'deny', 'write': 'deny', 'read': 'allow', 'bash': 'deny'},
     },
 }
 
@@ -91,21 +86,12 @@ def write_raw(p, text, bom):
     Path(p).write_bytes(text.encode('utf-8-sig' if bom else 'utf-8'))
 
 
-def sha256_file(p):
-    h = hashlib.sha256()
-    with open(p, 'rb') as f:
-        while True:
-            chunk = f.read(65536)
-            if not chunk:
-                break
-            h.update(chunk)
-    return h.hexdigest().upper()
 
 
 def repo_root(script_dir):
     """<repo>/.opencode/skills/<skill>/scripts -> <repo>."""
     root = script_dir.resolve().parents[3]
-    if (root / 'deploy-package').exists():
+    if (root / '.opencode' / 'skills').is_dir():
         return root
     try:
         out = subprocess.check_output(
@@ -277,16 +263,6 @@ def get_whitelist_count(text, primary):
     return {'header': header, 'rows': rows}
 
 
-def get_whitelist_count_unnumbered(text, primary):
-    """Unnumbered rows variant (AGENTS/PLUGIN/MCP §6)."""
-    ht = _whitelist_header_and_table(text, primary)
-    if ht is None:
-        return None
-    header, tbl = ht
-    if tbl is None:
-        return {'header': header, 'rows': -1}
-    rows = len(re.findall(r'(?m)^\| [^-|]', tbl)) - 1
-    return {'header': header, 'rows': rows}
 
 
 # ============================================================================
@@ -453,166 +429,16 @@ def edit_model_roles_add(text, agent, new_model, role, tier):
     return ''.join(lines), new_role, warns
 
 
-def edit_task_whitelist(text, primary, new_name):
-    """MCP '**Task Whitelist (N agents):**' of -Primary: header +1, comma list
-    append. Returns (new_text, old_count)."""
-    lines = split_lines_keep_eol(text)
-    hit_idx = -1
-    for i in range(0, len(lines), 2):
-        m = re.match(r'^\*\*Task Whitelist \((\d+) agents\):\*\*$', lines[i])
-        if m:
-            owner = None
-            for j in range(i - 2, -1, -2):
-                hm = re.match(r'^#### (orchestrator|plankestrator)$', lines[j])
-                if hm:
-                    owner = hm.group(1)
-                    break
-            if owner == primary:
-                if hit_idx >= 0:
-                    raise EditError(f"anchor: Task Whitelist for '{primary}' found more than once")
-                hit_idx = i
-    if hit_idx < 0:
-        raise EditError(f"anchor: Task Whitelist header not found for '{primary}'")
-    hm = re.search(r'\((\d+) agents\)', lines[hit_idx])
-    old_count = int(hm.group(1))
-    lines[hit_idx] = re.sub(r'\(\d+ agents\)', f'({old_count + 1} agents)',
-                            lines[hit_idx], count=1)
-    list_idx = -1
-    for i in range(hit_idx + 2, len(lines), 2):
-        if lines[i].strip():
-            list_idx = i
-            break
-    if list_idx < 0:
-        raise EditError('anchor: Task Whitelist comma list not found')
-    toks = split_tokens(lines[list_idx])
-    if new_name in toks:
-        raise EditError(f'token already present in Task Whitelist: {new_name}')
-    lines[list_idx] = lines[list_idx].rstrip() + ', ' + new_name
-    return ''.join(lines), old_count
 
 
-def edit_distribution_add(text, agent, new_short):
-    """MCP '### Models Distribution': ADD branch.
-    Returns (new_text, shorts, row_created, new_count, warns)."""
-    warns = []
-    lines = split_lines_keep_eol(text)
-    span = find_section_span(lines, r'^### Models Distribution', r'^### ')
-    if not span:
-        raise EditError('anchor: ### Models Distribution section not found')
-
-    def parse_rows(bound_extra=0):
-        rows = []
-        bound = min(span[1] + bound_extra, len(lines))
-        for i in range(span[0], bound, 2):
-            m = DIST_ROW.match(lines[i])
-            if m and m.group(1).strip() != 'Model':
-                rows.append({'idx': i, 'short': m.group(1).strip(),
-                             'provider': m.group(2).strip(), 'count': int(m.group(3)),
-                             'agents': m.group(4).strip()})
-        return rows
-
-    rows = parse_rows()
-    if not rows:
-        raise EditError('anchor: Models Distribution data rows not found')
-    new_rows = [r for r in rows if r['short'] == new_short]
-    row_created = False
-    new_count = 0
-    if len(new_rows) == 1:
-        nr = new_rows[0]
-        toks = split_tokens(nr['agents'])
-        if agent not in toks:
-            toks.append(agent)
-        lines[nr['idx']] = (f"| `{nr['short']}` | {nr['provider']} | {len(toks)} "
-                            f"| {', '.join(toks)} |")
-        new_count = len(toks)
-    elif len(new_rows) == 0:
-        last = rows[-1]
-        eol = get_eol(lines, last['idx']) or '\r\n'
-        insert_at = last['idx'] + 2
-        lines[insert_at:insert_at] = [f'| `{new_short}` | bifrost-litellm | 1 | {agent} |', eol]
-        row_created = True
-        new_count = 1
-    else:
-        raise EditError(f"anchor: Distribution row for '{new_short}' found "
-                        f"{len(new_rows)} times (expected 1)")
-    shorts = [r['short'] for r in parse_rows(bound_extra=2)]
-    return ''.join(lines), shorts, row_created, new_count, warns
 
 
-def edit_summary_models_row(text, shorts):
-    """MCP Summary '| Models | N | ... |' regenerated from distribution shorts."""
-    lines = split_lines_keep_eol(text)
-    pat = re.compile(r'^\| Models \| \d+ \| bifrost-litellm \(.*\) \|$')
-    hits = [i for i in range(0, len(lines), 2) if pat.match(lines[i])]
-    if len(hits) != 1:
-        raise EditError(f'anchor: Summary Models row found {len(hits)} times (expected 1)')
-    lines[hits[0]] = f"| Models | {len(shorts)} | bifrost-litellm ({', '.join(shorts)}) |"
-    return ''.join(lines)
 
 
-def edit_full_table_append(text, new_row_content):
-    """MCP '### Subagents - Full Table': append row after the last **agent** row."""
-    lines = split_lines_keep_eol(text)
-    span = find_section_span(lines, r'^### Subagents \u2014 Full Table', r'^### ')
-    if not span:
-        raise EditError('anchor: ### Subagents Full Table section not found')
-    last_row = -1
-    for i in range(span[0] + 2, span[1], 2):
-        if lines[i].startswith('| **'):
-            last_row = i
-    if last_row < 0:
-        raise EditError('anchor: Full Table data rows not found')
-    eol = get_eol(lines, last_row) or detect_eol(text) or '\r\n'
-    lines.insert(last_row + 2, new_row_content)
-    lines.insert(last_row + 3, eol)
-    return ''.join(lines)
 
 
-def edit_alpha_insert(text, file_name):
-    """MCP '**Subagents (N):**': alphabetical insert of '- <name>.md'."""
-    lines = split_lines_keep_eol(text)
-    start = find_unique_line(lines, r'^\*\*Subagents \(\d+\):\*\*$')
-    end = start
-    for i in range(start + 2, len(lines), 2):
-        if re.match(r'^- .+\.md$', lines[i]):
-            end = i
-        else:
-            break
-    if end == start:
-        raise EditError('anchor: Subagents file list not found')
-    insert_at = -1
-    for i in range(start + 2, end + 2, 2):
-        cur = lines[i][2:]
-        if cur > file_name:
-            insert_at = i
-            break
-    eol = get_eol(lines, end) or detect_eol(text) or '\r\n'
-    new_content = '- ' + file_name
-    if insert_at < 0:
-        lines.insert(end + 2, new_content)
-        lines.insert(end + 3, eol)
-    else:
-        lines.insert(insert_at, new_content)
-        lines.insert(insert_at + 1, eol)
-    return ''.join(lines)
 
 
-def edit_tree_insert(text, file_name):
-    """MCP '### Agent Files List': insert a branch line before the last corner."""
-    lines = split_lines_keep_eol(text)
-    anchor = find_unique_line(lines, r'^### Agent Files List \((\d+) files\)$')
-    last_corner = -1
-    for i in range(anchor + 2, len(lines), 2):
-        if re.match(r'^\u2514\u2500\u2500 ', lines[i]):
-            last_corner = i
-            break
-    if last_corner < 0:
-        raise EditError('anchor: Agent Files List tree not found')
-    eol = get_eol(lines, last_corner) or detect_eol(text) or '\r\n'
-    branch = '\u251C\u2500\u2500'
-    lines.insert(last_corner, branch + ' ' + file_name)
-    lines.insert(last_corner + 1, eol)
-    return ''.join(lines)
 
 
 def edit_routing_line(text, new_name):
@@ -787,33 +613,16 @@ def main():
         sys.exit(2)
 
     live_agent_md = live_dir / 'agents' / f'{args.agent}.md'
-    deploy_agent_md = root / 'deploy-package' / 'agents' / f'{args.agent}.md'
     live_cfg_path = live_dir / 'opencode.json'
-    deploy_cfg_path = root / 'deploy-package' / 'opencode.json'
-    plugin_paths = [live_dir / 'plugins' / 'workflow-enforcement.ts',
-                    root / 'plugins' / 'workflow-enforcement.ts',
-                    root / 'deploy-package' / 'plugins' / 'workflow-enforcement.ts']
+    plugin_paths = [live_dir / 'plugins' / 'workflow-enforcement.ts']
     primary_live_md = live_dir / 'agents' / f'{args.primary}.md'
-    primary_deploy_md = root / 'deploy-package' / 'agents' / f'{args.primary}.md'
-    arch_paths = [root / 'ARCHITECTURE.md',
-                  root / 'opencode-config' / 'ARCHITECTURE.md',
-                  root / 'deploy-package' / 'project-files' / 'ARCHITECTURE.md']
-    agents_md_paths = [root / 'AGENTS.md',
-                       root / 'opencode-config' / 'AGENTS.md',
-                       root / 'deploy-package' / 'project-files' / 'AGENTS.md']
-    plugin_md_paths = [root / 'PLUGIN.md',
-                       root / 'opencode-config' / 'PLUGIN.md',
-                       root / 'deploy-package' / 'project-files' / 'PLUGIN.md']
-    mcp_paths = [root / 'MCP_SETUP.md',
-                 root / 'deploy-package' / 'project-files' / 'MCP_SETUP.md']
+    arch_paths = [root / 'ARCHITECTURE.md']
 
-    # New agent files must NOT exist; all 17 edit targets must exist.
-    if live_agent_md.is_file() or deploy_agent_md.is_file():
-        print(f'BLOCK:agent already exists: {args.agent} (live/deploy .md file present)')
+    # New agent file must NOT exist; all edit targets must exist.
+    if live_agent_md.is_file():
+        print(f'BLOCK:agent already exists: {args.agent} (live .md file present)')
         sys.exit(3)
-    edit_targets = [live_cfg_path, deploy_cfg_path] + plugin_paths + \
-        [primary_live_md, primary_deploy_md] + arch_paths + agents_md_paths + \
-        plugin_md_paths + mcp_paths
+    edit_targets = [live_cfg_path] + plugin_paths + [primary_live_md] + arch_paths
     for t in edit_targets:
         if not t.is_file():
             print(f'ERROR:target file not found: {t}')
@@ -897,7 +706,6 @@ def main():
     fm_perm_lines = []
     json_perm_lines = []
     task_entries = []
-    full_cells = None
     tpl_json_section = None
 
     if args.perm_template:
@@ -934,22 +742,6 @@ def main():
             if re.match(r'^---[ \t]*$', tpl_lines[i]):
                 break
             fm_perm_lines.append(re.sub(r'^  ', '', tpl_lines[i], count=1))
-        mcp_root_text, _ = read_raw(mcp_paths[0])
-        ft_row = re.search(r'(?m)^\| \*\*' + re.escape(args.perm_template)
-                           + r'\*\* \| subagent \| .+?\| .+?\| (.+?) \| (.+?) \| (.+?) \| (.+?) \|',
-                           mcp_root_text)
-        if ft_row:
-            full_cells = {'edit': ft_row.group(1).strip(), 'write': ft_row.group(2).strip(),
-                          'read': ft_row.group(3).strip(), 'bash': ft_row.group(4).strip()}
-        else:
-            warns.append(f"WARN:perm-template full-table row not found for "
-                         f"'{args.perm_template}' \u2014 deriving cells from JSON block")
-            full_cells = {
-                'edit': 'allow' if re.search(r'"edit":\s*"allow"', tpl_section) else 'deny',
-                'write': 'allow' if re.search(r'"write":\s*"allow"', tpl_section) else 'deny',
-                'read': 'allow' if re.search(r'"read":\s*"allow"', tpl_section) else 'deny',
-                'bash': '**allow**' if re.search(r'"bash":\s*"allow"', tpl_section) else 'deny',
-            }
         tpl_task = (((cfg.get('agent') or {}).get(args.perm_template) or {})
                     .get('permission') or {}).get('task')
         if isinstance(tpl_task, dict):
@@ -969,38 +761,12 @@ def main():
         for t in task_allow_list:
             if t not in task_entries:
                 task_entries.append(t)
-        full_cells = dict(preset['full_table'])
 
     # --- Read all targets ----------------------------------------------------------
     live_cfg_raw = read_raw(live_cfg_path)
-    deploy_cfg_raw = read_raw(deploy_cfg_path)
     plugin_raws = [read_raw(p) for p in plugin_paths]
-    primary_raws = [read_raw(primary_live_md), read_raw(primary_deploy_md)]
+    primary_raws = [read_raw(primary_live_md)]
     arch_raws = [read_raw(p) for p in arch_paths]
-    agents_md_raws = [read_raw(p) for p in agents_md_paths]
-    plugin_md_raws = [read_raw(p) for p in plugin_md_paths]
-    mcp_raws = [read_raw(p) for p in mcp_paths]
-
-    # --- Mirror pre-gates --------------------------------------------------------
-    drifts = []
-    if sha256_file(live_cfg_path) != sha256_file(deploy_cfg_path):
-        drifts.append('opencode.json pair')
-    if len({sha256_file(p) for p in plugin_paths}) > 1:
-        drifts.append('plugin x3')
-    if sha256_file(primary_live_md) != sha256_file(primary_deploy_md):
-        drifts.append('primary pair')
-    if len({sha256_file(p) for p in arch_paths}) > 1:
-        drifts.append('ARCHITECTURE.md x3')
-    if len({sha256_file(p) for p in agents_md_paths}) > 1:
-        drifts.append('AGENTS.md x3')
-    if len({sha256_file(p) for p in mcp_paths}) > 1:
-        drifts.append('MCP_SETUP.md x2')
-    if drifts:
-        if args.apply:
-            print(f"BLOCK:mirrors drifted \u2014 run config-sync first ({'; '.join(drifts)})")
-            sys.exit(3)
-        for d in drifts:
-            warns.append(f'WARN:mirror drift ({d}) \u2014 run config-sync before apply')
 
     # --- Counter cross-check (fail-closed) ------------------------------------------
     diff_lines = []
@@ -1009,174 +775,66 @@ def main():
         diff_lines.append(f'DIFF:{source} {id_} value={value} expected={expected}')
 
     wl_values = []  # (src, value)
-    for i in range(3):
-        v = count_routing_plugin(plugin_raws[i][0], args.primary)
-        if v is None:
-            add_diff(f'plugins[{i}]', 'routing_plugin', 'null', 'number')
-            continue
-        wl_values.append((f'plugin{i + 1}', v))
-    for i in range(2):
-        v = count_routing_line(primary_raws[i][0])
-        if v is None:
-            add_diff(f'primary_md[{i}]', 'opencode_routing_table', 'null', 'number')
-            continue
-        wl_values.append((f'primary_md{i + 1}', v))
+    v = count_routing_plugin(plugin_raws[0][0], args.primary)
+    if v is None:
+        add_diff('plugin', 'routing_plugin', 'null', 'number')
+    else:
+        wl_values.append(('plugin', v))
+    v = count_routing_line(primary_raws[0][0])
+    if v is None:
+        add_diff('primary_md', 'opencode_routing_table', 'null', 'number')
+    else:
+        wl_values.append(('primary_md', v))
     ta = count_task_allow(cfg, args.primary)
     if ta is None:
         add_diff('opencode.json', 'task_allow', 'null', 'number')
     else:
         wl_values.append(('json_task', ta))
-    for i in range(3):
-        wl = get_whitelist_count(arch_raws[i][0], args.primary)
-        if wl is None:
-            add_diff(f'arch[{i}]', 'whitelist_header', 'null', 'number')
-            continue
+    wl = get_whitelist_count(arch_raws[0][0], args.primary)
+    if wl is None:
+        add_diff('arch', 'whitelist_header', 'null', 'number')
+    else:
         if wl['header'] != wl['rows']:
-            add_diff(f'arch[{i}]', 'whitelist_rows', wl['rows'], wl['header'])
-        wl_values.append((f'arch{i + 1}', wl['header']))
-    for i in range(3):
-        wl = get_whitelist_count_unnumbered(agents_md_raws[i][0], args.primary)
-        if wl is None:
-            add_diff(f'agents_md[{i}]', 'whitelist_header', 'null', 'number')
-            continue
-        if wl['header'] != wl['rows']:
-            add_diff(f'agents_md[{i}]', 'whitelist_rows', wl['rows'], wl['header'])
-        wl_values.append((f'agents_md{i + 1}', wl['header']))
-    for i in range(3):
-        wl = get_whitelist_count_unnumbered(plugin_md_raws[i][0], args.primary)
-        if wl is None:
-            add_diff(f'plugin_md[{i}]', 'whitelist_header', 'null', 'number')
-            continue
-        if wl['header'] != wl['rows']:
-            add_diff(f'plugin_md[{i}]', 'whitelist_rows', wl['rows'], wl['header'])
-        wl_values.append((f'plugin_md{i + 1}', wl['header']))
-    for i in range(2):
-        wl = get_whitelist_count_unnumbered(mcp_raws[i][0], args.primary)
-        if wl is None:
-            add_diff(f'mcp[{i}]', 'whitelist_s6_header', 'null', 'number')
-            continue
-        if wl['header'] != wl['rows']:
-            add_diff(f'mcp[{i}]', 'whitelist_s6_rows', wl['rows'], wl['header'])
-        wl_values.append((f'mcp_s6_{i + 1}', wl['header']))
-        mcp_text = mcp_raws[i][0]
-        tw_headers = re.finditer(r'(?m)^\*\*Task Whitelist \((\d+) agents\):\*\*\r?$', mcp_text)
-        found = None
-        for h in tw_headers:
-            before = mcp_text[:h.start()]
-            last_h4 = re.findall(r'(?m)^#### (orchestrator|plankestrator)\r?$', before)
-            if last_h4 and last_h4[-1] == args.primary:
-                found = h
-        if found is None:
-            add_diff(f'mcp[{i}]', 'task_whitelist_header', 'missing', args.primary)
-        else:
-            after_line = re.search(r'(?m)^(\S[^\r\n]*)\r?$', mcp_text[found.end():])
-            if after_line:
-                n_comma = len(split_tokens(after_line.group(1)))
-                wl_values.append((f'mcp_taskwl_{i + 1}', int(found.group(1))))
-                if n_comma != int(found.group(1)):
-                    add_diff(f'mcp[{i}]', 'task_whitelist_list', n_comma, found.group(1))
-            else:
-                add_diff(f'mcp[{i}]', 'task_whitelist_list', 'missing', 'number')
-        sum_row = re.search(r'(?m)^\| Routing tables \| 2 \| orchestrator \((\d+)\), '
-                            r'plankestrator \((\d+)\) \|\r?$', mcp_text)
-        if sum_row:
-            g = 1 if args.primary == 'orchestrator' else 2
-            wl_values.append((f'mcp_summary_routing_{i + 1}', int(sum_row.group(g))))
-        else:
-            add_diff(f'mcp[{i}]', 'summary_routing_row', 'missing', 'number')
-    for i in range(3):
-        acs = re.search(r'(?m)^\| ' + re.escape(args.primary) + r' \| (\d+)', arch_raws[i][0])
-        if acs:
-            wl_values.append((f'arch_agent_count_{i + 1}', int(acs.group(1))))
-        else:
-            add_diff(f'arch[{i}]', 'agent_count_summary', 'missing', 'number')
+            add_diff('arch', 'whitelist_rows', wl['rows'], wl['header'])
+        wl_values.append(('arch', wl['header']))
+    acs = re.search(r'(?m)^\| ' + re.escape(args.primary) + r' \| (\d+)', arch_raws[0][0])
+    if acs:
+        wl_values.append(('arch_agent_count', int(acs.group(1))))
+    else:
+        add_diff('arch', 'agent_count_summary', 'missing', 'number')
 
     # --- global counters
-    g1_values = []  # unique subagents (35)
-    g2_values = []  # total agents (38)
-    for i in range(3):
-        gt = re.search(r'(?m)^\| \*\*Grand Total\*\* \| \*\*(\d+)\*\* \| \*\*(\d+)\*\* \|\r?$',
-                       arch_raws[i][0])
-        if gt:
-            g1_values.append((f'arch_grand_total_{i + 1}', int(gt.group(1))))
-            g2_values.append((f'arch_grand_total_{i + 1}', int(gt.group(2))))
-        else:
-            add_diff(f'arch[{i}]', 'grand_total', 'missing', 'number')
-        note = re.search(r'(?m)^Note: (\d+) whitelist entries[^\r\n]*?= (\d+) unique whitelisted '
-                         r'subagents[^\r\n]*?(\d+) unique subagents \+ 2 primary agents = '
-                         r'(\d+) unique agents total\.', arch_raws[i][0])
-        if note:
-            g1_values.append((f'arch_note_{i + 1}', int(note.group(3))))
-            g2_values.append((f'arch_note_{i + 1}', int(note.group(4))))
-        else:
-            add_diff(f'arch[{i}]', 'note_counters', 'missing', 'number')
-        kontrol = re.search(r'(?m)^\u041A\u043E\u043D\u0442\u0440\u043E\u043B\u044C \u0441\u0443\u043C\u043C\u044B: '
-                            r'2 primary \+ (\d+) subagents = (\d+) \u0430\u0433\u0435\u043D\u0442\u043E\u0432;',
-                            arch_raws[i][0])
-        if kontrol:
-            g1_values.append((f'arch_kontrol_{i + 1}', int(kontrol.group(1))))
-            g2_values.append((f'arch_kontrol_{i + 1}', int(kontrol.group(2))))
-        else:
-            add_diff(f'arch[{i}]', 'kontrol_summy', 'missing', 'number')
-        intro = re.search(r'(?m)\u043C\u043E\u0434\u0435\u043B\u0435\u0439 (\d+) '
-                          r'\u0430\u0433\u0435\u043D\u0442\u0430\u043C', arch_raws[i][0])
-        if intro:
-            g2_values.append((f'arch_intro_{i + 1}', int(intro.group(1))))
-        else:
-            add_diff(f'arch[{i}]', 'model_roles_intro', 'missing', 'number')
-    for i in range(3):
-        prose = re.search(r'(?m)\u0432\u0441\u0435\u043C (\d+) \u0430\u0433\u0435\u043D\u0442\u0430\u043C',
-                          agents_md_raws[i][0])
-        if prose:
-            g2_values.append((f'agents_md_prose_{i + 1}', int(prose.group(1))))
-        else:
-            add_diff(f'agents_md[{i}]', 'model_roles_prose', 'missing', 'number')
-    for i in range(2):
-        mcp_text = mcp_raws[i][0]
-        ac = re.search(r'(?m)^\| Subagents \| (\d+) \|\r?$', mcp_text)
-        if ac:
-            g1_values.append((f'mcp_agent_count_{i + 1}', int(ac.group(1))))
-        else:
-            add_diff(f'mcp[{i}]', 'agent_count_subagents', 'missing', 'number')
-        tu = re.search(r'(?m)^\| \*\*Total unique agents\*\* \| \*\*(\d+)\*\* \|\r?$', mcp_text)
-        if tu:
-            g2_values.append((f'mcp_total_unique_{i + 1}', int(tu.group(1))))
-        else:
-            add_diff(f'mcp[{i}]', 'total_unique_agents', 'missing', 'number')
-        all_sub = re.search(r'(?m)\u0432\u0441\u0435 (\d+) subagents', mcp_text)
-        if all_sub:
-            g1_values.append((f'mcp_prose_{i + 1}', int(all_sub.group(1))))
-        else:
-            add_diff(f'mcp[{i}]', 'vse_subagents_prose', 'missing', 'number')
-        sub_hdr = re.search(r'(?m)^\*\*Subagents \((\d+)\):\*\*\r?$', mcp_text)
-        if sub_hdr:
-            g1_values.append((f'mcp_subagents_hdr_{i + 1}', int(sub_hdr.group(1))))
-        else:
-            add_diff(f'mcp[{i}]', 'subagents_bold_header', 'missing', 'number')
-        af = re.search(r'(?m)^### Agent Files \((\d+) total\)\r?$', mcp_text)
-        if af:
-            g2_values.append((f'mcp_agent_files_{i + 1}', int(af.group(1))))
-        else:
-            add_diff(f'mcp[{i}]', 'agent_files_total', 'missing', 'number')
-        sum_sub = re.search(r'(?m)^\| Subagents \| (\d+) \| \S', mcp_text)
-        if sum_sub:
-            g1_values.append((f'mcp_summary_subagents_{i + 1}', int(sum_sub.group(1))))
-        else:
-            add_diff(f'mcp[{i}]', 'summary_subagents', 'missing', 'number')
-        if sub_hdr:
-            after = mcp_text[sub_hdr.end():]
-            dash = list(re.finditer(r'(?m)^- [^\r\n]+\.md\r?$', after))
-            stop = re.search(r'(?m)^(?!- )\S', after)
-            cnt = 0
-            for d in dash:
-                if stop and d.start() > stop.start():
-                    break
-                cnt += 1
-            g1_values.append((f'mcp_alpha_list_{i + 1}', cnt))
-        tree_hdr = re.search(r'(?m)^### Agent Files List \((\d+) files\)\r?$', mcp_text)
-        if tree_hdr and 'docs-planner.md' not in mcp_text[tree_hdr.end():]:
-            warns.append('WARN:mcp tree list pre-existing drift (docs-planner.md missing) '
-                         '\u2014 informational')
+    g1_values = []  # unique subagents
+    g2_values = []  # total agents
+    gt = re.search(r'(?m)^\| \*\*Grand Total\*\* \| \*\*(\d+)\*\* \| \*\*(\d+)\*\* \|\r?$',
+                   arch_raws[0][0])
+    if gt:
+        g1_values.append(('arch_grand_total', int(gt.group(1))))
+        g2_values.append(('arch_grand_total', int(gt.group(2))))
+    else:
+        add_diff('arch', 'grand_total', 'missing', 'number')
+    note = re.search(r'(?m)^Note: (\d+) whitelist entries[^\r\n]*?= (\d+) unique whitelisted '
+                     r'subagents[^\r\n]*?(\d+) unique subagents \+ 2 primary agents = '
+                     r'(\d+) unique agents total\.', arch_raws[0][0])
+    if note:
+        g1_values.append(('arch_note', int(note.group(3))))
+        g2_values.append(('arch_note', int(note.group(4))))
+    else:
+        add_diff('arch', 'note_counters', 'missing', 'number')
+    kontrol = re.search(r'(?m)^\u041A\u043E\u043D\u0442\u0440\u043E\u043B\u044C \u0441\u0443\u043C\u043C\u044B: '
+                        r'2 primary \+ (\d+) subagents = (\d+) \u0430\u0433\u0435\u043D\u0442\u043E\u0432;',
+                        arch_raws[0][0])
+    if kontrol:
+        g1_values.append(('arch_kontrol', int(kontrol.group(1))))
+        g2_values.append(('arch_kontrol', int(kontrol.group(2))))
+    else:
+        add_diff('arch', 'kontrol_summy', 'missing', 'number')
+    intro = re.search(r'(?m)\u043C\u043E\u0434\u0435\u043B\u0435\u0439 (\d+) '
+                      r'\u0430\u0433\u0435\u043D\u0442\u0430\u043C', arch_raws[0][0])
+    if intro:
+        g2_values.append(('arch_intro', int(intro.group(1))))
+    else:
+        add_diff('arch', 'model_roles_intro', 'missing', 'number')
 
     def assert_group(values, group_id):
         if not values:
@@ -1273,16 +931,6 @@ def main():
         sec_lines.append('    },')
         json_section = eol_j.join(sec_lines)
 
-    en_dash = '\u2013'
-    extras_cell = ', '.join(task_entries)
-    if not extras_cell:
-        extras_cell = en_dash
-    bash_cell = full_cells['bash']
-    if bash_cell == 'allow':
-        bash_cell = '**allow**'
-    full_table_row = ('| **' + args.agent + '** | subagent | ' + args.model + ' | ' + temp_str
-                      + ' | ' + full_cells['edit'] + ' | ' + full_cells['write'] + ' | '
-                      + full_cells['read'] + ' | ' + bash_cell + ' | ' + extras_cell + ' |')
     desc_cell = args.description
 
     # --- Compute ALL edits in memory (two-phase: zero writes on any error) ------------
@@ -1295,45 +943,34 @@ def main():
         sys.exit(3)
 
     try:
-        # groups 3-4: opencode.json live + deploy
+        # live opencode.json: agent section + primary task allow
         r_text = edit_json_agent_section(live_cfg_raw[0], json_section)
         r_text = edit_primary_task_allow(r_text, args.primary, args.agent)
         try:
             json.loads(r_text)
         except ValueError as e:
             block(f'new live opencode.json does not parse: {e}')
-        new_live_cfg = r_text
-        pending.append((live_cfg_path, new_live_cfg, live_cfg_raw[1], rel_path(live_cfg_path)))
+        pending.append((live_cfg_path, r_text, live_cfg_raw[1], rel_path(live_cfg_path)))
         plan_lines.append(f'PLAN:{rel_path(live_cfg_path)} agent_section+task_allow')
 
-        r_text = edit_json_agent_section(deploy_cfg_raw[0], json_section)
-        r_text = edit_primary_task_allow(r_text, args.primary, args.agent)
-        try:
-            json.loads(r_text)
-        except ValueError as e:
-            block(f'new deploy opencode.json does not parse: {e}')
-        pending.append((deploy_cfg_path, r_text, deploy_cfg_raw[1], rel_path(deploy_cfg_path)))
-        plan_lines.append(f'PLAN:{rel_path(deploy_cfg_path)} agent_section+task_allow')
-
-        # group 5: plugin x3
-        for i in range(3):
+        # live plugin: ROUTING_TABLES append
+        for i in range(len(plugin_paths)):
             new_text, old_count = edit_routing_array(plugin_raws[i][0], args.primary, args.agent)
             pending.append((plugin_paths[i], new_text, plugin_raws[i][1], rel_path(plugin_paths[i])))
             plan_lines.append(f"PLAN:{rel_path(plugin_paths[i])} "
                               f"routing_array[{args.primary}] old={old_count} new={old_count + 1}")
 
-        # group 6: primary .md x2
-        for i in range(2):
-            path = primary_live_md if i == 0 else primary_deploy_md
+        # live primary .md: OPENCODE_ROUTING_TABLE append
+        for i in range(len(primary_raws)):
+            path = primary_live_md
             new_text, old_count = edit_routing_line(primary_raws[i][0], args.agent)
             pending.append((path, new_text, primary_raws[i][1], rel_path(path)))
             plan_lines.append(f'PLAN:{rel_path(path)} opencode_routing_table '
                               f'old={old_count} new={old_count + 1}')
 
-        # group 7: ARCHITECTURE.md x3
+        # repo ARCHITECTURE.md (single canonical copy)
         numbered_row = f'| {wl_n + 1} | {args.agent} | {desc_cell} |'
-        plain_row = f'| {args.agent} | {desc_cell} |'
-        for i in range(3):
+        for i in range(len(arch_paths)):
             t = arch_raws[i][0]
             t, old_count = edit_whitelist_table(t, args.primary, numbered_row)
             plan_lines.append(f'PLAN:{rel_path(arch_paths[i])} whitelist header+row '
@@ -1375,72 +1012,6 @@ def main():
                               f"old={'/'.join(str(x) for x in old)} "
                               f"new={'/'.join(str(x) for x in new)}")
             pending.append((arch_paths[i], t, arch_raws[i][1], rel_path(arch_paths[i])))
-
-        # group 8: AGENTS.md x3
-        for i in range(3):
-            t = agents_md_raws[i][0]
-            t, old_count = edit_whitelist_table(t, args.primary, plain_row)
-            plan_lines.append(f'PLAN:{rel_path(agents_md_paths[i])} whitelist header+row '
-                              f'old={old_count} new={old_count + 1}')
-            t, old, new = edit_numbered_counter(
-                t, r'(?m)\u0432\u0441\u0435\u043C (\d+) \u0430\u0433\u0435\u043D\u0442\u0430\u043C', [1])
-            plan_lines.append(f'PLAN:{rel_path(agents_md_paths[i])} model_roles_prose '
-                              f'old={old[0]} new={new[0]}')
-            pending.append((agents_md_paths[i], t, agents_md_raws[i][1], rel_path(agents_md_paths[i])))
-
-        # group 9: PLUGIN.md x3
-        for i in range(3):
-            t = plugin_md_raws[i][0]
-            t, old_count = edit_whitelist_table(t, args.primary, plain_row)
-            plan_lines.append(f'PLAN:{rel_path(plugin_md_paths[i])} whitelist header+row '
-                              f'old={old_count} new={old_count + 1}')
-            t, old_count = edit_routing_array(t, args.primary, args.agent,
-                                              r'^### Routing Table Implementation')
-            plan_lines.append(f"PLAN:{rel_path(plugin_md_paths[i])} "
-                              f"routing_code_block[{args.primary}] "
-                              f"old={old_count} new={old_count + 1}")
-            pending.append((plugin_md_paths[i], t, plugin_md_raws[i][1], rel_path(plugin_md_paths[i])))
-
-        # group 10: MCP_SETUP.md x2
-        new_short = model_key
-        for i in range(2):
-            t = mcp_raws[i][0]
-            t, _, _ = edit_numbered_counter(t, r'(?m)^\| Subagents \| (\d+) \|\r?$', [1])
-            t, _, _ = edit_numbered_counter(
-                t, r'(?m)^\| \*\*Total unique agents\*\* \| \*\*(\d+)\*\* \|\r?$', [1])
-            t, _, _ = edit_numbered_counter(t, r'(?m)\u0432\u0441\u0435 (\d+) subagents', [1])
-            t, old_count = edit_task_whitelist(t, args.primary, args.agent)
-            plan_lines.append(f'PLAN:{rel_path(mcp_paths[i])} task_whitelist '
-                              f'old={old_count} new={old_count + 1}')
-            t, old_count = edit_whitelist_table(t, args.primary, plain_row)
-            plan_lines.append(f'PLAN:{rel_path(mcp_paths[i])} whitelist_s6 header+row '
-                              f'old={old_count} new={old_count + 1}')
-            t, old_count = edit_routing_array(t, args.primary, args.agent,
-                                              r'^### Routing Tables in Plugin')
-            plan_lines.append(f"PLAN:{rel_path(mcp_paths[i])} "
-                              f"routing_plugin_block[{args.primary}] "
-                              f"old={old_count} new={old_count + 1}")
-            t, shorts, row_created, new_count, w = edit_distribution_add(
-                t, args.agent, new_short)
-            warns += w
-            if row_created:
-                t = edit_summary_models_row(t, shorts)
-            plan_lines.append(f'PLAN:{rel_path(mcp_paths[i])} distribution short={new_short} '
-                              f'count={new_count} row_created={row_created}')
-            t = edit_full_table_append(t, full_table_row)
-            plan_lines.append(f'PLAN:{rel_path(mcp_paths[i])} full_table_row')
-            t, _, _ = edit_numbered_counter(t, r'(?m)^### Agent Files \((\d+) total\)\r?$', [1])
-            t, _, _ = edit_numbered_counter(t, r'(?m)^\*\*Subagents \((\d+)\):\*\*\r?$', [1])
-            t = edit_alpha_insert(t, args.agent + '.md')
-            t, _, _ = edit_numbered_counter(t, r'(?m)^### Agent Files List \((\d+) files\)\r?$', [1])
-            t = edit_tree_insert(t, args.agent + '.md')
-            t, _, _ = edit_numbered_counter(t, r'(?m)^\| Subagents \| (\d+) \| \S', [1])
-            routing_groups = [1] if args.primary == 'orchestrator' else [2]
-            t, _, _ = edit_numbered_counter(
-                t, r'(?m)^\| Routing tables \| 2 \| orchestrator \((\d+)\), '
-                r'plankestrator \((\d+)\) \|\r?$', routing_groups)
-            pending.append((mcp_paths[i], t, mcp_raws[i][1], rel_path(mcp_paths[i])))
-            plan_lines.append(f'PLAN:{rel_path(mcp_paths[i])} agent_files/list/tree/summary counters')
     except EditError as e:
         block(str(e))
 
@@ -1461,8 +1032,6 @@ def main():
     print('STATUS:APPLY_START')
     write_raw(live_agent_md, agent_file_text, False)
     print(f'CREATED:{rel_path(live_agent_md)}')
-    write_raw(deploy_agent_md, agent_file_text, False)
-    print(f'CREATED:{rel_path(deploy_agent_md)}')
     for path, new_text, bom, rel in pending:
         write_raw(path, new_text, bom)
         print(f'EDITED:{rel}')
@@ -1472,31 +1041,8 @@ def main():
         json.loads(read_raw(live_cfg_path)[0])
     except ValueError as e:
         print(f'ERROR:live opencode.json no longer parses: {e}')
-        print('WARN:partial state \u2014 restore from backup-snapshot / config-sync')
+        print('WARN:partial state \u2014 restore from backup-snapshot')
         sys.exit(3)
-    try:
-        json.loads(read_raw(deploy_cfg_path)[0])
-    except ValueError as e:
-        print(f'ERROR:deploy opencode.json no longer parses: {e}')
-        print('WARN:partial state \u2014 restore from backup-snapshot / config-sync')
-        sys.exit(3)
-    verify_groups = [
-        ('agent pair', [live_agent_md, deploy_agent_md]),
-        ('json pair', [live_cfg_path, deploy_cfg_path]),
-        ('plugin x3', plugin_paths),
-        ('primary pair', [primary_live_md, primary_deploy_md]),
-        ('architecture x3', arch_paths),
-        ('agents-md x3', agents_md_paths),
-        ('mcp-setup x2', mcp_paths),
-    ]
-    for name, paths in verify_groups:
-        hashes = {sha256_file(p) for p in paths}
-        if len(hashes) == 1:
-            print(f'VERIFY:{name} identical')
-        else:
-            print(f'ERROR:SHA256 mismatch: {name}')
-            print('WARN:partial state \u2014 restore from backup-snapshot / config-sync')
-            sys.exit(3)
     cfg2 = json.loads(read_raw(live_cfg_path)[0])
     ta2 = count_task_allow(cfg2, args.primary)
     if ta2 != wl_n + 1:
@@ -1517,45 +1063,28 @@ def main():
     if wl2 is None or wl2['header'] != wl_n + 1:
         print('ERROR:post-apply counter check failed: ARCH whitelist header')
         sys.exit(3)
-    mcp2 = read_raw(mcp_paths[0])[0]
-    ac2 = re.search(r'(?m)^\| Subagents \| (\d+) \|\r?$', mcp2)
-    if not ac2 or int(ac2.group(1)) != g1 + 1:
-        print('ERROR:post-apply counter check failed: MCP Agent Count Subagents')
-        sys.exit(3)
-    tu2 = re.search(r'(?m)^\| \*\*Total unique agents\*\* \| \*\*(\d+)\*\* \|\r?$', mcp2)
-    if not tu2 or int(tu2.group(1)) != g2 + 1:
-        print('ERROR:post-apply counter check failed: MCP Total unique agents')
-        sys.exit(3)
     print('VERIFY:counters re-parsed old+1')
-    for pp in plugin_paths:
-        ts3 = read_raw(pp)[0]
-        outer3 = re.search(r'(?s)const ROUTING_TABLES = \{(.*?)\r?\n\}', ts3)
-        inner3 = re.search(r'(?s)' + re.escape(args.primary) + r'\s*:\s*\[(.*?)\]',
-                           outer3.group(1))
-        tok_count = sum(1 for m in TOKEN_RX.finditer(inner3.group(1))
-                        if m.group(0).strip('"\'') == args.agent)
-        if tok_count != 1:
-            print(f'ERROR:post-apply routing token count != 1 in {pp}')
-            sys.exit(3)
+    ts3 = read_raw(plugin_paths[0])[0]
+    outer3 = re.search(r'(?s)const ROUTING_TABLES = \{(.*?)\r?\n\}', ts3)
+    inner3 = re.search(r'(?s)' + re.escape(args.primary) + r'\s*:\s*\[(.*?)\]',
+                       outer3.group(1))
+    tok_count = sum(1 for m in TOKEN_RX.finditer(inner3.group(1))
+                    if m.group(0).strip('"\'') == args.agent)
+    if tok_count != 1:
+        print(f'ERROR:post-apply routing token count != 1 in {plugin_paths[0]}')
+        sys.exit(3)
     print('VERIFY:routing token-exact once')
 
     # --- Manual follow-ups (always) --------------------------------------------------
     print('WARN:restart required (config is read at session start \u2014 the new agent '
           'is visible in a NEW opencode session)')
     print('WARN:CHANGELOG.md [Unreleased] entry is a manual step')
-    print('WARN:consistency-checker.md counts (26/10/38 in the prompt) \u2014 '
-          'manual edit live+deploy')
-    print('WARN:verify.ps1 requiredAgents \u2014 manual update')
-    print('WARN:deploy README.md/DEPLOYMENT_GUIDE.md counts \u2014 manual update')
-    print('WARN:integrity-check defaults (38/26/10) in check.ps1+check.py+SKILL.md \u2014 '
-          'manual update')
-    print('WARN:live AGENTS.md \u2014 run config-sync -Apply -Group agents-md')
+    print('WARN:run config-sync --save before commit (refreshes the repo mirror: '
+          'agents/, opencode.json, plugins/)')
     print('WARN:SEVERITY_AGENTS/CONTEXT_FILE_AGENTS \u2014 manual update '
           '(only if the new agent is a reviewer)')
-    print('WARN:MCP_SETUP unity-note prose \u2014 manual update '
-          '(only if unity-mcp is not allowed for the new agent)')
 
-    # --- Optional conventional commit of the 16 repo files -----------------------------
+    # --- Optional conventional commit of the repo files -----------------------------
     if args.commit:
         git_name = git(root, 'config', 'user.name').stdout.strip()
         git_email = git(root, 'config', 'user.email').stdout.strip()
@@ -1570,24 +1099,18 @@ def main():
         msg_file = tmp_dir / 'commit-msg-agents.txt'
         msg_file.write_text(commit_msg, encoding='utf-8')
         print('STATUS:COMMIT_START')
-        repo_rel_paths = [
-            f'deploy-package/agents/{args.agent}.md',
-            'deploy-package/opencode.json',
+        mirror_candidates = [
+            f'agents/{args.agent}.md',
+            f'agents/{args.primary}.md',
+            'opencode.json',
             'plugins/workflow-enforcement.ts',
-            'deploy-package/plugins/workflow-enforcement.ts',
-            'ARCHITECTURE.md',
-            'opencode-config/ARCHITECTURE.md',
-            'deploy-package/project-files/ARCHITECTURE.md',
-            'AGENTS.md',
-            'opencode-config/AGENTS.md',
-            'deploy-package/project-files/AGENTS.md',
-            'PLUGIN.md',
-            'opencode-config/PLUGIN.md',
-            'deploy-package/project-files/PLUGIN.md',
-            'MCP_SETUP.md',
-            'deploy-package/project-files/MCP_SETUP.md',
-            f'deploy-package/agents/{args.primary}.md',
         ]
+        repo_rel_paths = ['ARCHITECTURE.md'] + [m for m in mirror_candidates
+                                                if (root / m).is_file()]
+        missing_mirrors = [m for m in mirror_candidates if not (root / m).is_file()]
+        if missing_mirrors:
+            print(f"WARN:repo mirror not refreshed yet (run config-sync --save): "
+                  f"{', '.join(missing_mirrors)}")
         add_res = git(root, 'add', *repo_rel_paths)
         if add_res.returncode != 0:
             print('ERROR:git add failed')

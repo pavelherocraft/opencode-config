@@ -50,7 +50,7 @@ def find_secrets(text):
 def repo_root(script_dir):
     """<repo>/.opencode/skills/<skill>/scripts -> <repo>."""
     root = script_dir.resolve().parents[3]
-    if (root / 'deploy-package').exists():
+    if (root / '.opencode' / 'skills').is_dir():
         return root
     try:
         out = subprocess.check_output(
@@ -80,7 +80,7 @@ def main():
     root = repo_root(skill_dir)
 
     deployed = Path.home() / '.config' / 'opencode' / 'opencode.json'
-    package = root / 'deploy-package' / 'opencode.json'
+    package = root / 'opencode.json'
     diff_script = skill_dir / 'diff.js'
 
     # Validate inputs
@@ -93,7 +93,7 @@ def main():
         sys.exit(2)
 
     if not package.exists():
-        print(f"ERROR: deploy-package/opencode.json not found: {package}")
+        print(f"ERROR: repo opencode.json not found: {package}")
         sys.exit(2)
 
     # Gate: secret scan on the raw paste (BLOCK before any edit).
@@ -162,7 +162,7 @@ def main():
     shutil.copy2(merged_temp, deployed)
     print(f"EDITED:deployed={deployed}")
 
-    # Step 3: Sync to deploy-package
+    # Step 3: Sync to repo mirror
     shutil.copy2(deployed, package)
     print(f"SYNCED:package={package}")
 
@@ -206,7 +206,7 @@ def main():
     commit_msg_file = tmp_dir / 'commit-msg.txt'
     commit_msg_file.write_text(commit_msg, encoding='utf-8')
 
-    add_res = git(root, 'add', 'deploy-package/opencode.json')
+    add_res = git(root, 'add', 'opencode.json')
     if add_res.returncode != 0:
         print(f"ERROR:git add failed: {add_res.stderr}")
         sys.exit(3)

@@ -1,6 +1,6 @@
 # Architecture Requirements
 
-This file is the single source of truth for the OpenCode dual-primary-agent architecture. All other files must be consistent with this document.
+This file is the single source of truth for the OpenCode dual-primary-agent architecture. All other files must be consistent with this document. It exists ONLY here, in the repo (canonical project doc; it is NOT copied to the live config).
 
 ## 1. Routing Tables
 
@@ -123,7 +123,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 
 ## Model Roles (v5 — single source of truth, OMP model-roles analog)
 
-Роли централизуют назначение моделей 40 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Check 11), (3) документации. Квота-aware fallback-цепочки — платформенное требование (см. `PLAN_LLM_FALLBACK.md`; статус: НЕ реализовано, требует поддержки рантайма/proxy).
+Роли централизуют назначение моделей 40 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (§Validation, C4), (3) документации. Квота-aware fallback-цепочки — платформенное требование (статус: НЕ реализовано, требует поддержки рантайма/proxy).
 
 | Role | Model | Tier | Agents |
 |------|-------|------|--------|
@@ -150,7 +150,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 
 **Правила:**
 1. **Prewalk-принцип (OMP):** в паре planner→executor роль planner'а ДОЛЖНА быть tier ≥ executor'а: plan-bug (plan-flash, mid) → execute-bug (executor-cheap, low); dev-planner (plan-strong, top) → dev-professor (executor-strong, mid); docs-planner (docs-plan, low) → docs-writer (docs, low). Инверсия запрещена.
-2. Смена модели агента = правка этой таблицы + frontmatter `agents/*.md` + Subagent Models + MCP_SETUP Models Distribution (4 места; все — через consistency-checker Check 11).
+2. Смена модели агента = правка этой таблицы + frontmatter live `agents/*.md` + Subagent Models (эта таблица) — 2 синхронных места; после правки live выполнить `config-sync --save` (repo-зеркало). Валидация — consistency-checker (§Validation, C4).
 3. Новые агенты получают роль из таблицы; новая роль добавляется только с обоснованием в CHANGELOG.
 4. Миграция frontmatter на role-алиасы (`model: "@review-strong"`) — ЗАБЛОКИРОВАНА до поддержки рантаймом opencode (задокументированное платформенное требование, аналогично quota-aware fallback).
 
@@ -166,6 +166,8 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | docs-planner | `edit, write: allow` (`.md` only) | Documentation planning — writes plan to `docs_plan.md` for docs-writer to read |
 | devops-reviewer | `read: allow` in addition to `bash: allow` | DevOps review — needs bash for running commands, read for checking files |
 | devops-agent | `bash: allow` only | DevOps operations — needs bash for npm, docker, deployment commands |
+
+**View-Image Permission — build agents:** worker, bugfix, execute-bug and rework carry `task.view-image: allow` to delegate image analysis (UI screenshots, diagrams, error images) to the view-image agent via the Task tool.
 
 ### Worker Bash Permission Details
 
@@ -288,7 +290,7 @@ Both `orchestrator` and `plankestrator` are locked down to prevent them from doi
 
 `subagent_depth` — параметр opencode-core (top-level поле в `opencode.json`), ограничивающий максимальную глубину вложенности вызовов субагентов через Task tool. При превышении лимита ядро отклоняет попытку создать следующего субагента.
 
-**Текущее значение:** `3` (задаётся в `~/.config/opencode/opencode.json`, строка 3, сразу после `$schema`; продублировано в `deploy-package/opencode.json`). Документация: <https://opencode.ai/docs/config>.
+**Текущее значение:** `3` (задаётся в live `~/.config/opencode/opencode.json`, строка 3, сразу после `$schema`; repo-зеркало — `opencode.json` в корне репо). Документация: <https://opencode.ai/docs/config>.
 
 **Отличие от `activeTaskDepth` (плагин):**
 
@@ -383,7 +385,7 @@ bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.
 
 **Plan file:** `plan-bug` writes the bug fix plan to `bug_plan.md` in the project root. `execute-bug` reads this file before implementing. The orchestrator MUST include "Write the plan to bug_plan.md" in the plan-bug prompt and "Read bug_plan.md" in the execute-bug prompt.
 
-**Prewalk pattern (v5, OMP prewalk analog):** one-shot handoff expensive→cheap at the planning/implementation boundary. `plan-bug` runs on the MID-tier planner model (`GLM-5.3 (res)`, tier plan-flash) and writes a SELF-CONTAINED `bug_plan.md`; `execute-bug` runs on the CHEAP executor model (`MiniMax-M3`, tier executor-cheap) and mechanically applies the plan in a fresh context. Escape hatch: `execute-bug` sets `plan_gap: true` in its JSON when the plan turns out incomplete — downstream dev-reviewer/consistency-checker escalate (consistency-checker `escalate_to: "execute-bug"` remains available). Same philosophy in DEV COMPLEX: dev-planner (plan-strong) > dev-professor (executor-strong). Rationale and source: `RESEARCH_OMP_FEATURES.md` P0-2, OMP `docs/prewalk.md`.
+**Prewalk pattern (v5, OMP prewalk analog):** one-shot handoff expensive→cheap at the planning/implementation boundary. `plan-bug` runs on the MID-tier planner model (`GLM-5.3 (res)`, tier plan-flash) and writes a SELF-CONTAINED `bug_plan.md`; `execute-bug` runs on the CHEAP executor model (`MiniMax-M3`, tier executor-cheap) and mechanically applies the plan in a fresh context. Escape hatch: `execute-bug` sets `plan_gap: true` in its JSON when the plan turns out incomplete — downstream dev-reviewer/consistency-checker escalate (consistency-checker `escalate_to: "execute-bug"` remains available). Same philosophy in DEV COMPLEX: dev-planner (plan-strong) > dev-professor (executor-strong). Source: OMP prewalk pattern (`docs/prewalk.md`).
 
 **Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes. Loop repeats up to 3 iterations. If consistency-checker passes → utility. If max iterations reached → failure report.
 
@@ -407,7 +409,7 @@ Canonical classification rules for DEV tasks (SIMPLE / COMPLEX / SUPERCOMPLEX). 
 
 **PLAN EXISTS OVERRIDE:** `plan_exists=true` + not SUPERCOMPLEX → DEV is ALWAYS SIMPLE (with-plan variant). An existing plan replaces in-pipeline planning — never reclassify a planned ≤3-step task as COMPLEX. Consequently DEV COMPLEX always implies `plan_exists: false`.
 
-**Superseded (2026-09-22, `PLAN_DEV_CLASSIFICATION.md`):** the former rule that routed unplanned multi-step DEV tasks (no plan + COMPLEX) to plankestrator as out of scope is NO LONGER valid — they stay with the orchestrator: Q3 decomposition first, then SUPERCOMPLEX / COMPLEX / SIMPLE per the outcome. PLAN/RESEARCH requests themselves remain out of orchestrator's scope.
+**Superseded (2026-09-22):** the former rule that routed unplanned multi-step DEV tasks (no plan + COMPLEX) to plankestrator as out of scope is NO LONGER valid — they stay with the orchestrator: Q3 decomposition first, then SUPERCOMPLEX / COMPLEX / SIMPLE per the outcome. PLAN/RESEARCH requests themselves remain out of orchestrator's scope.
 
 ### DEV SIMPLE
 
@@ -603,7 +605,7 @@ else:
 
 ### Reviewer Severity Field (v5 — OMP emission-guard analog)
 
-Reviewer subagents (`dev-reviewer`, `consistency-checker`, `advisor` — см. §2 Advisor Step) tag their final JSON with a mandatory `severity` field. Source: `RESEARCH_OMP_FEATURES.md` P0-1 (OMP Advisor Watchdog severity semantics: nit = aside, concern = steer, blocker = triggered turn).
+Reviewer subagents (`dev-reviewer`, `consistency-checker`, `advisor` — см. §2 Advisor Step) tag their final JSON with a mandatory `severity` field. Source: OMP Advisor Watchdog severity semantics (nit = aside, concern = steer, blocker = triggered turn).
 
 | Severity | Канал (наш аналог) | Эффект в пайплайне |
 |----------|--------------------|--------------------|
@@ -651,6 +653,7 @@ All MCP servers are configured in `opencode.json` under the `mcp` section. Three
 - Use `zai_web_reader` for reading URL content — do NOT use `webfetch`
 - Use `zai_zread` tools for GitHub repositories — do NOT use `webfetch` or manual browsing
 - Use `media` MCP tools for image/video/audio generation and transcription — media agents: image-creator, video-generator, voice-synthesizer, voice-clone, voice-transcriber (all return hosted URLs, TTL 24 h — never base64 in context)
+- Image ANALYSIS is NOT an MCP tool: delegate to the `view-image` agent via Task tool (`subagent_type: "view-image"`); do NOT use MCP servers or other means for analyzing screenshots, diagrams, error images
 
 ### MCP Proxy Architecture
 
@@ -814,14 +817,39 @@ Agents do NOT call each other — the user must manually switch between them.
 
 ## 8. File Locations
 
-### Configuration
+### Live (runtime, единственное место правок)
+`C:\Users\Admin\.config\opencode\`
+- `opencode.json` — конфиг (провайдеры, модели, permissions)
+- `agents/*.md` — 40 определений агентов (frontmatter + промпт)
+- `plugins/workflow-enforcement.ts` — enforcement-плагин
+- `skills/git-commit/` — юзер-скилл
+- `AGENTS.md` — глобальные инструкции (lean)
+- `REVIEW_CONTEXT.md` — user-level контекст ревьюеров (намеренно отличается от проектного)
 
-| Item | Path |
-|------|------|
-| Main Config | `~/.config/opencode/opencode.json` |
-| Plugin | `~/.config/opencode/plugins/workflow-enforcement.ts` |
-| Agents | `~/.config/opencode/agents/*.md` |
-| Architecture (this file) | Project root `ARCHITECTURE.md` |
+### Repo (коммит-снапшот live)
+`P:\Programming\Рефакторинг\`
+- `agents/` — зеркало live agents/ (40 .md)
+- `opencode.json` — зеркало
+- `plugins/workflow-enforcement.ts` — зеркало
+- `skills/git-commit/` — зеркало
+- `AGENTS.global.md` — зеркало live AGENTS.md (имя ≠ AGENTS.md → opencode не грузит)
+- `.opencode/skills/` — 11 ПРОЕКТНЫХ скиллов (правятся здесь, НЕ синхронизируются)
+- `ARCHITECTURE.md` — канон проекта (этот файл; в live НЕ копируется)
+- `REVIEW_CONTEXT.md` — проектный контекст ревьюеров
+- `CHANGELOG.md`
+
+### Sync-механика (5 пар)
+| # | Live | Repo |
+|---|------|------|
+| 1 | `agents/*.md` | `agents/*.md` |
+| 2 | `opencode.json` | `opencode.json` |
+| 3 | `plugins/workflow-enforcement.ts` | `plugins/workflow-enforcement.ts` |
+| 4 | `skills/git-commit/*` | `skills/git-commit/*` |
+| 5 | `AGENTS.md` | `AGENTS.global.md` |
+
+**Направления:**
+- `save` (live → repo) — основной режим: правки делаются в live, перед коммитом снапшотим. Выполняется: config-sync `--save`, или механически consistency-checker'ом при обнаружении drift
+- `restore` (repo → live) — ТОЛЬКО явный аварийный откат: `config-sync --restore`. Никогда не выполняется автоматически
 
 ### Data Storage
 
@@ -832,17 +860,6 @@ Agents do NOT call each other — the user must manually switch between them.
 | Tool Outputs | `~/.local/share/opencode/tool-output/` | Various |
 | Todo Lists | `~/.local/share/opencode/storage/todo/` | JSON |
 | Logs | `~/.local/share/opencode/log/` | `.log` files |
-
-### Documentation
-
-| Item | Location |
-|------|----------|
-| Project Rules | `AGENTS.md` (project root) |
-| Plugin Docs | `PLUGIN.md` (project root) |
-| Identity Probes | `identity_probe_section.md` (project root) |
-| MCP Setup | `MCP_SETUP.md` (project root) |
-
-- Reviewer context (per-audience, OMP WATCHDOG.md analog): `REVIEW_CONTEXT.md` — project root + user-level `~/.config/opencode/REVIEW_CONTEXT.md`; loaded ONLY by reviewer agents (dev-reviewer, consistency-checker, devops-reviewer, plan-reviewer-*, research-reviewer, advisor); plugin v5 injects a pointer into their Task prompts
 
 ### Per-Audience Context Files (v5, OMP WATCHDOG.md analog)
 
@@ -908,3 +925,31 @@ The workflow-enforcement plugin detects the agent using multiple methods (priori
    - `detectAgentFromSubagent()` function in plugin
 
 This ensures correct agent identification even if session data is incorrect.
+
+## Validation (consistency checks)
+
+Исполняется генерик-агентом consistency-checker (находит этот файл и следует секциям ниже).
+
+### C1. Routing tables
+plugin `ROUTING_TABLES` (live plugins/workflow-enforcement.ts) ↔ `orchestrator.md` routing line (L26) ↔ `opencode.json` task-allowlist orchestrator — одни и те же агенты. plankestrator аналогично.
+
+### C2. Agent counts (выводные)
+- `agents/*.md` count == opencode.json agent entries count
+- orchestrator whitelist length == числу записей в plugin ROUTING_TABLES.orchestrator
+- Ожидания НЕ хардкодятся — выводятся из факта. Текущее фактическое: 40 агентов, whitelist 28/10.
+
+### C3. Sync-pair drift
+5 пар (см. File Locations): SHA256 live vs repo. Drift → MECHANICAL FIX: copy live → repo (save). Restore — запрещён автоматически.
+
+### C4. Model keys
+Каждый `model:` из agents/*.md существует в opencode.json provider models (префикс bifrost-litellm/).
+
+### C5. JSON validity
+opencode.json парсится (live и repo).
+
+### C6. Doc references
+ARCHITECTURE.md не ссылается на несуществующие файлы (удалённые артефакты старой структуры — запрещённые термины; эталон допустимых путей — §File Locations).
+
+## Infrastructure Export (on-demand)
+
+Инфраструктурная документация (MCP_SETUP-подобные мануалы для развёртывания на другой машине) НЕ поддерживается в репо. Генерируется с нуля по запросу из актуальных конфигов (opencode.json, agents/, plugins/, skills/). Не синхронизировать, не чинить консистентность.

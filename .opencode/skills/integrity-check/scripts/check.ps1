@@ -1,35 +1,25 @@
 <#
 .SYNOPSIS
-    Fast LLM-free integrity check of the agent orchestration config.
+    Fast LLM-free integrity check of the live<->repo orchestration config.
 
 .DESCRIPTION
-    SHA256 for all 40 agent pairs (live vs deploy), counters (agents, models in
-    use, routing tables across opencode.json + ARCHITECTURE.md + live
-    workflow-enforcement.ts), every frontmatter model: key validated for format
-    (provider/key, split on FIRST slash) and existence in opencode.json provider
-    models. PASS/FAIL report. STRICTLY READ-ONLY.
-
-.PARAMETER ExpectedAgents
-    Expected number of agent .md files in each mirror. Default 40.
-
-.PARAMETER ExpectedModels
-    Expected number of DISTINCT models in use (also MCP_SETUP Distribution rows
-    and Summary count). Default 10.
-
-.PARAMETER ExpectedOrch
-    Expected orchestrator routing-table size. Default 28.
-
-.PARAMETER ExpectedPlan
-    Expected plankestrator routing-table size. Default 10.
-
-.PARAMETER Config
-    Path to the live opencode.json. Default %USERPROFILE%\.config\opencode\opencode.json
+    Checks (all read-only, no hardcoded expectations — counters are DERIVED
+    from the fact and cross-checked against each other):
+      1. 5 sync pairs (live <-> repo) SHA256 — drift reported as DRIFT: lines
+         with the hint "config-sync --save"
+      2. JSON validity: live + repo opencode.json
+      3. Agent counts: live agents/*.md == repo agents/*.md == opencode.json
+         agent entries
+      4. Routing counts (derived): plugin ROUTING_TABLES vs opencode.json
+         task-allowlists vs ARCHITECTURE.md whitelist headers/rows
+      5. Frontmatter model key format + existence in opencode.json provider
+         models (prefix bifrost-litellm/)
 
 .PARAMETER Json
     Emit a single JSON document instead of token lines.
 
 .OUTPUTS
-    STATUS:/COUNT:/PAIR:/FORMAT:/EXISTS:/JSON:/WARN:/SUMMARY:/ERROR: lines
+    STATUS:/PAIR:/DRIFT:/JSON:/COUNT:/FORMAT:/EXISTS:/WARN:/SUMMARY:/ERROR: lines
 
 .NOTES
     Exit codes: 0 all pass (WARNs allowed), 2 usage/environment error,
@@ -38,27 +28,17 @@
 .EXAMPLE
     .\check.ps1
     .\check.ps1 -Json
-    .\check.ps1 -ExpectedAgents 40 -ExpectedModels 10 -ExpectedOrch 28 -ExpectedPlan 10
 #>
 
 param(
-    [int]$ExpectedAgents = 40,
-    [int]$ExpectedModels = 10,
-    [int]$ExpectedOrch = 28,
-    [int]$ExpectedPlan = 10,
-    [string]$Config = "",
     [switch]$Json
 )
-
-if (-not $Config) { $Config = Join-Path $env:USERPROFILE '.config\opencode\opencode.json' }
 
 $ErrorActionPreference = 'Stop'
 # git emits UTF-8; keep non-ASCII repo paths intact.
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 
 # --- Native command helper ----------------------------------------------
-# Native stderr combined with $ErrorActionPreference='Stop' throws a
-# terminating NativeCommandError before $LASTEXITCODE can be inspected.
 function Invoke-Native {
     param([string]$FilePath, [object[]]$Arguments)
     $prev = $ErrorActionPreference
@@ -79,12 +59,10 @@ function Read-RawText([string]$Path) {
     $bytes = [System.IO.File]::ReadAllBytes($Path)
     $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
     if ($hasBom) {
-        if ($bytes.Length -eq 3) { return @{ Text = ''; Bom = $true } }
-        $text = [System.Text.Encoding]::UTF8.GetString($bytes[3..($bytes.Length - 1)])
-    } else {
-        $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+        if ($bytes.Length -eq 3) { return '' }
+        return [System.Text.Encoding]::UTF8.GetString($bytes[3..($bytes.Length - 1)])
     }
-    return @{ Text = $text; Bom = $hasBom }
+    return [System.Text.Encoding]::UTF8.GetString($bytes)
 }
 
 function Get-Sha256([string]$Path) {
@@ -152,125 +130,183 @@ function Get-WhitelistCount([string]$ArchText, [string]$Primary) {
     return @{ Header = [int]$hm.Groups[1].Value; Rows = $rows }
 }
 
-function Get-DistributionRows([string]$Text) {
-    $lines = [regex]::Split($Text, '\r\n|\r|\n')
-    $start = -1
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -match '^### Models Distribution\s*$') { $start = $i; break }
-    }
-    if ($start -lt 0) { return $null }
-    $count = 0
-    for ($i = $start + 1; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -match '^### ') { break }
-        if ($lines[$i] -match '^\|\s*`') { $count++ }
-    }
-    return $count
-}
-
-function Get-SummaryModelsCount([string]$Text) {
-    $m = [regex]::Match($Text, '(?m)^\| Models \| (\d+) \| bifrost-litellm \(')
-    if (-not $m.Success) { return $null }
-    return [int]$m.Groups[1].Value
-}
-
 # --- Paths ----------------------------------------------------------------
 $skillDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $skillDir)))
-if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "deploy-package"))) {
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot '.opencode'))) {
     $gitRoot = Invoke-Native -FilePath "git" -Arguments @("-C", $skillDir, "rev-parse", "--show-toplevel")
     if ($LASTEXITCODE -eq 0 -and $gitRoot) { $repoRoot = ($gitRoot | Select-Object -First 1).Trim() }
 }
 
 $liveDir = Join-Path $env:USERPROFILE '.config\opencode'
 $liveAgentsDir = Join-Path $liveDir 'agents'
-$deployRoot = Join-Path $repoRoot 'deploy-package'
-$deployAgentsDir = Join-Path $deployRoot 'agents'
+$repoAgentsDir = Join-Path $repoRoot 'agents'
 
 if (-not (Test-Path -LiteralPath $liveAgentsDir -PathType Container)) {
     Write-Output "ERROR: live agents dir not found: $liveAgentsDir"
     exit 2
 }
-if (-not (Test-Path -LiteralPath $deployRoot -PathType Container)) {
-    Write-Output "ERROR: deploy-package not found: $deployRoot"
+if (-not (Test-Path -LiteralPath $repoAgentsDir -PathType Container)) {
+    Write-Output "ERROR: repo agents dir not found: $repoAgentsDir"
     exit 2
 }
-if (-not (Test-Path -LiteralPath $Config -PathType Leaf)) {
-    Write-Output "ERROR: opencode.json not found: $Config"
+$liveCfgPath = Join-Path $liveDir 'opencode.json'
+if (-not (Test-Path -LiteralPath $liveCfgPath -PathType Leaf)) {
+    Write-Output "ERROR: live opencode.json not found: $liveCfgPath"
     exit 2
 }
 
 if (-not $Json) { Write-Output 'STATUS:CHECK_START' }
 
-# --- 1. opencode.json validity -------------------------------------------
+# --- 1. JSON validity (live + repo) — C5 -----------------------------------
 $cfg = $null
-$jsonOk = $true
+$jsonLiveOk = $true
 try {
-    $raw = Read-RawText $Config
-    $cfg = $raw.Text | ConvertFrom-Json
+    $cfg = Read-RawText $liveCfgPath | ConvertFrom-Json
 } catch {
-    $jsonOk = $false
+    $jsonLiveOk = $false
 }
-Add-Check -Id 'JSON' -Target 'opencode.json' -Status $(if ($jsonOk) { 'PASS' } else { 'FAIL' }) -Detail $(if ($jsonOk) { 'parse ok' } else { 'invalid JSON' })
-
-# --- 2. Agent counts + name sets -----------------------------------------
-$liveFiles = @(Get-ChildItem -LiteralPath $liveAgentsDir -Filter '*.md' -File)
-$deployFiles = @(Get-ChildItem -LiteralPath $deployAgentsDir -Filter '*.md' -File)
-$liveNames = @($liveFiles | ForEach-Object { $_.BaseName })
-$deployNames = @($deployFiles | ForEach-Object { $_.BaseName })
-$extraLive = @($liveNames | Where-Object { $deployNames -notcontains $_ })
-$extraDeploy = @($deployNames | Where-Object { $liveNames -notcontains $_ })
-$namesEqual = ($extraLive.Count -eq 0 -and $extraDeploy.Count -eq 0)
-$countDetail = "agents_live=$($liveFiles.Count) agents_deploy=$($deployFiles.Count) expected=$ExpectedAgents"
-if (-not $namesEqual) {
-    $countDetail += " live_only=[$($extraLive -join ',')] deploy_only=[$($extraDeploy -join ',')]"
+Add-Check -Id 'JSON' -Target 'opencode.json live' -Status $(if ($jsonLiveOk) { 'PASS' } else { 'FAIL' }) -Detail $(if ($jsonLiveOk) { 'parse ok' } else { 'invalid JSON' })
+$jsonRepoOk = $true
+try {
+    Read-RawText (Join-Path $repoRoot 'opencode.json') | Out-Null
+    $repoCfg = Read-RawText (Join-Path $repoRoot 'opencode.json') | ConvertFrom-Json
+} catch {
+    $jsonRepoOk = $false
 }
-$countOk = ($liveFiles.Count -eq $ExpectedAgents -and $deployFiles.Count -eq $ExpectedAgents -and $namesEqual)
-Add-Check -Id 'COUNT' -Target '' -Status $(if ($countOk) { 'PASS' } else { 'FAIL' }) -Detail $countDetail
+Add-Check -Id 'JSON' -Target 'opencode.json repo' -Status $(if ($jsonRepoOk) { 'PASS' } else { 'FAIL' }) -Detail $(if ($jsonRepoOk) { 'parse ok' } else { 'invalid JSON' })
 
-# --- 3. Pairs (38 agents + opencode.json) ---------------------------------
-$union = @($liveNames + $deployNames | Select-Object -Unique)
-foreach ($n in $union) {
-    $lp = Join-Path $liveAgentsDir "$n.md"
-    $dp = Join-Path $deployAgentsDir "$n.md"
-    if ((Test-Path -LiteralPath $lp) -and (Test-Path -LiteralPath $dp)) {
-        $h1 = Get-Sha256 $lp
-        $h2 = Get-Sha256 $dp
-        if ($h1 -eq $h2) {
-            Add-Check -Id 'PAIR' -Target $n -Status 'PASS' -Detail ''
-        } else {
-            Add-Check -Id 'PAIR' -Target $n -Status 'FAIL' -Detail ("live={0} deploy={1}" -f $h1.Substring(0,8), $h2.Substring(0,8))
+# --- 2. Sync-pair drift (5 pairs) — C3 -------------------------------------
+$pairDefs = @(
+    @{ Name = 'agents';           Kind = 'agents'; Live = $liveAgentsDir;                                          Repo = $repoAgentsDir },
+    @{ Name = 'opencode.json';    Kind = 'file';   Live = $liveCfgPath;                                            Repo = (Join-Path $repoRoot 'opencode.json') },
+    @{ Name = 'plugin';           Kind = 'file';   Live = (Join-Path $liveDir 'plugins\workflow-enforcement.ts'); Repo = (Join-Path $repoRoot 'plugins\workflow-enforcement.ts') },
+    @{ Name = 'skills/git-commit'; Kind = 'dir';   Live = (Join-Path $liveDir 'skills\git-commit');               Repo = (Join-Path $repoRoot 'skills\git-commit') },
+    @{ Name = 'AGENTS.md';        Kind = 'file';   Live = (Join-Path $liveDir 'AGENTS.md');                       Repo = (Join-Path $repoRoot 'AGENTS.global.md') }
+)
+foreach ($p in $pairDefs) {
+    if ($p.Kind -eq 'agents') {
+        $liveFilesP = @(Get-ChildItem -LiteralPath $p.Live -Filter '*.md' -File)
+        $repoFilesP = @(Get-ChildItem -LiteralPath $p.Repo -Filter '*.md' -File)
+        $liveNamesP = @($liveFilesP | ForEach-Object { $_.Name })
+        $repoNamesP = @($repoFilesP | ForEach-Object { $_.Name })
+        $union = @($liveNamesP + $repoNamesP | Select-Object -Unique)
+        foreach ($n in $union) {
+            $lp = Join-Path $p.Live $n
+            $rp = Join-Path $p.Repo $n
+            if ((Test-Path -LiteralPath $lp) -and (Test-Path -LiteralPath $rp)) {
+                $h1 = Get-Sha256 $lp
+                $h2 = Get-Sha256 $rp
+                if ($h1 -eq $h2) {
+                    Add-Check -Id 'PAIR' -Target "agents/$n" -Status 'PASS' -Detail ''
+                } else {
+                    Add-Check -Id 'DRIFT' -Target "agents/$n" -Status 'FAIL' -Detail ("live={0} repo={1} (use: config-sync --save)" -f $h1.Substring(0,8), $h2.Substring(0,8))
+                }
+            } else {
+                Add-Check -Id 'DRIFT' -Target "agents/$n" -Status 'FAIL' -Detail 'side missing (use: config-sync --save)'
+            }
+        }
+    } elseif ($p.Kind -eq 'dir') {
+        $liveRels = @()
+        $repoRels = @()
+        if (Test-Path -LiteralPath $p.Live -PathType Container) {
+            $liveRels = @(Get-ChildItem -LiteralPath $p.Live -File -Recurse | ForEach-Object { $_.FullName.Substring($p.Live.Length).TrimStart('\','/') -replace '\\','/' } | Sort-Object)
+        }
+        if (Test-Path -LiteralPath $p.Repo -PathType Container) {
+            $repoRels = @(Get-ChildItem -LiteralPath $p.Repo -File -Recurse | ForEach-Object { $_.FullName.Substring($p.Repo.Length).TrimStart('\','/') -replace '\\','/' } | Sort-Object)
+        }
+        $unionRels = @($liveRels + $repoRels | Select-Object -Unique | Sort-Object)
+        foreach ($rel in $unionRels) {
+            $label = "$($p.Name)/$rel"
+            $lp = Join-Path $p.Live ($rel -replace '/', '\')
+            $rp = Join-Path $p.Repo ($rel -replace '/', '\')
+            if ((Test-Path -LiteralPath $lp) -and (Test-Path -LiteralPath $rp)) {
+                $h1 = Get-Sha256 $lp
+                $h2 = Get-Sha256 $rp
+                if ($h1 -eq $h2) {
+                    Add-Check -Id 'PAIR' -Target $label -Status 'PASS' -Detail ''
+                } else {
+                    Add-Check -Id 'DRIFT' -Target $label -Status 'FAIL' -Detail ("live={0} repo={1} (use: config-sync --save)" -f $h1.Substring(0,8), $h2.Substring(0,8))
+                }
+            } else {
+                Add-Check -Id 'DRIFT' -Target $label -Status 'FAIL' -Detail 'side missing (use: config-sync --save)'
+            }
         }
     } else {
-        Add-Check -Id 'PAIR' -Target $n -Status 'FAIL' -Detail 'side missing'
+        if ((Test-Path -LiteralPath $p.Live -PathType Leaf) -and (Test-Path -LiteralPath $p.Repo -PathType Leaf)) {
+            $h1 = Get-Sha256 $p.Live
+            $h2 = Get-Sha256 $p.Repo
+            if ($h1 -eq $h2) {
+                Add-Check -Id 'PAIR' -Target $p.Name -Status 'PASS' -Detail ''
+            } else {
+                Add-Check -Id 'DRIFT' -Target $p.Name -Status 'FAIL' -Detail ("live={0} repo={1} (use: config-sync --save)" -f $h1.Substring(0,8), $h2.Substring(0,8))
+            }
+        } else {
+            Add-Check -Id 'DRIFT' -Target $p.Name -Status 'FAIL' -Detail 'side missing (use: config-sync --save)'
+        }
     }
-}
-$deployCfgPath = Join-Path $deployRoot 'opencode.json'
-if (Test-Path -LiteralPath $deployCfgPath -PathType Leaf) {
-    $hc1 = Get-Sha256 $Config
-    $hc2 = Get-Sha256 $deployCfgPath
-    if ($hc1 -eq $hc2) {
-        Add-Check -Id 'PAIR' -Target 'opencode.json' -Status 'PASS' -Detail ''
-    } else {
-        Add-Check -Id 'PAIR' -Target 'opencode.json' -Status 'FAIL' -Detail ("live={0} deploy={1}" -f $hc1.Substring(0,8), $hc2.Substring(0,8))
-    }
-} else {
-    Add-Check -Id 'PAIR' -Target 'opencode.json' -Status 'FAIL' -Detail 'deploy copy missing'
 }
 
-# --- 4. FORMAT / EXISTS per live agent ------------------------------------
-$modelsUsed = @{}
+# --- 3. Agent counts (derived) — C2 ----------------------------------------
+$liveFiles = @(Get-ChildItem -LiteralPath $liveAgentsDir -Filter '*.md' -File)
+$repoFiles = @(Get-ChildItem -LiteralPath $repoAgentsDir -Filter '*.md' -File)
+$cfgAgentCount = $null
+if ($jsonLiveOk -and $cfg) { $cfgAgentCount = @($cfg.agent.PSObject.Properties).Count }
+$liveNames = @($liveFiles | ForEach-Object { $_.BaseName })
+$repoNames = @($repoFiles | ForEach-Object { $_.BaseName })
+$onlyLive = @($liveNames | Where-Object { $repoNames -notcontains $_ })
+$onlyRepo = @($repoNames | Where-Object { $liveNames -notcontains $_ })
+$countDetail = "agents_live=$($liveFiles.Count) agents_repo=$($repoFiles.Count) opencode_json=$cfgAgentCount (derived, no hardcoded expectation)"
+if ($onlyLive.Count -or $onlyRepo.Count) {
+    $countDetail += " live_only=[$($onlyLive -join ',')] repo_only=[$($onlyRepo -join ',')]"
+}
+$countOk = ($liveFiles.Count -eq $repoFiles.Count)
+if ($null -ne $cfgAgentCount) { $countOk = $countOk -and ($cfgAgentCount -eq $liveFiles.Count) }
+$countOk = $countOk -and ($onlyLive.Count -eq 0) -and ($onlyRepo.Count -eq 0)
+Add-Check -Id 'COUNT' -Target '' -Status $(if ($countOk) { 'PASS' } else { 'FAIL' }) -Detail $countDetail
+
+# --- 4. Routing counts (derived cross-check) — C1/C2 ------------------------
+$archPath = Join-Path $repoRoot 'ARCHITECTURE.md'
+$archText = $null
+if (Test-Path -LiteralPath $archPath -PathType Leaf) { $archText = Read-RawText $archPath }
+else { Add-Check -Id 'WARN' -Target 'ARCHITECTURE.md' -Status 'WARN' -Detail 'not found — whitelist cross-check skipped' }
+
+$tsPath = Join-Path $liveDir 'plugins\workflow-enforcement.ts'
+$tsText = $null
+if (Test-Path -LiteralPath $tsPath -PathType Leaf) { $tsText = Read-RawText $tsPath }
+
+foreach ($primary in @('orchestrator', 'plankestrator')) {
+    $jsonN = $null
+    if ($jsonLiveOk) { $jsonN = Count-TaskAllow $cfg $primary }
+    $plugN = $null
+    if ($null -ne $tsText) { $plugN = Count-RoutingPlugin $tsText $primary }
+    $archH = $null; $archR = $null
+    if ($null -ne $archText) {
+        $wl = Get-WhitelistCount $archText $primary
+        if ($null -ne $wl) { $archH = $wl.Header; $archR = $wl.Rows }
+    }
+    $values = @($jsonN, $plugN, $archH, $archR | Where-Object { $null -ne $_ })
+    $ok = ($values.Count -ge 2 -and (@($values | Select-Object -Unique).Count -eq 1))
+    Add-Check -Id 'COUNT' -Target '' -Status $(if ($ok) { 'PASS' } else { 'FAIL' }) -Detail "routing_$primary json=$jsonN plugin=$plugN arch_header=$archH arch_rows=$archR (derived cross-check)"
+    if ($null -eq $plugN) {
+        Add-Check -Id 'WARN' -Target 'routing' -Status 'WARN' -Detail "$primary plugin anchor not parsed (skipped plugin source)"
+    }
+    if ($null -eq $archH -and $null -ne $archText) {
+        Add-Check -Id 'WARN' -Target 'routing' -Status 'WARN' -Detail "$primary ARCHITECTURE whitelist anchor not parsed"
+    }
+}
+
+# --- 5. Model key format + existence — C4 -----------------------------------
 foreach ($f in $liveFiles) {
     $name = $f.BaseName
-    $text = (Read-RawText $f.FullName).Text
-    $m = Get-FmModel $text
+    $m = Get-FmModel (Read-RawText $f.FullName)
     if (-not $m) {
-        Add-Check -Id 'FORMAT' -Target $name -Status 'FAIL' -Detail 'model=<missing> frontmatter without model line'
+        Add-Check -Id 'FORMAT' -Target $name -Status 'FAIL' -Detail 'frontmatter without model line'
         continue
     }
-    $modelsUsed[$m] = $true
     $fmtOk = $m -match '^[A-Za-z0-9._-]+/.+$'
     Add-Check -Id 'FORMAT' -Target $name -Status $(if ($fmtOk) { 'PASS' } else { 'FAIL' }) -Detail "model=$m"
-    if ($jsonOk) {
+    if ($jsonLiveOk) {
         $exists = $false
         if ($fmtOk -and $cfg) {
             $slash = $m.IndexOf('/')
@@ -284,69 +320,11 @@ foreach ($f in $liveFiles) {
         Add-Check -Id 'EXISTS' -Target $name -Status $(if ($exists) { 'PASS' } else { 'FAIL' }) -Detail $m
     }
 }
-if (-not $jsonOk) {
+if (-not $jsonLiveOk) {
     Add-Check -Id 'EXISTS' -Target '' -Status 'WARN' -Detail 'checks skipped (opencode.json parse failed)'
 }
 
-# --- 5. Models-in-use counter ---------------------------------------------
-$muOk = ($modelsUsed.Count -eq $ExpectedModels)
-Add-Check -Id 'COUNT' -Target '' -Status $(if ($muOk) { 'PASS' } else { 'FAIL' }) -Detail "models_used=$($modelsUsed.Count) expected=$ExpectedModels"
-
-# --- 6. MCP_SETUP.md cross-checks -----------------------------------------
-$mcpPath = Join-Path $repoRoot 'MCP_SETUP.md'
-if (Test-Path -LiteralPath $mcpPath -PathType Leaf) {
-    $mcpText = (Read-RawText $mcpPath).Text
-    $distRows = Get-DistributionRows $mcpText
-    if ($null -ne $distRows) {
-        Add-Check -Id 'COUNT' -Target '' -Status $(if ($distRows -eq $ExpectedModels) { 'PASS' } else { 'FAIL' }) -Detail "mcp_distribution rows=$distRows expected=$ExpectedModels"
-    } else {
-        Add-Check -Id 'COUNT' -Target '' -Status 'FAIL' -Detail 'mcp_distribution anchor not found (### Models Distribution)'
-    }
-    $sumCount = Get-SummaryModelsCount $mcpText
-    if ($null -ne $sumCount) {
-        Add-Check -Id 'COUNT' -Target '' -Status $(if ($sumCount -eq $ExpectedModels) { 'PASS' } else { 'FAIL' }) -Detail "mcp_summary_models count=$sumCount expected=$ExpectedModels"
-    } else {
-        Add-Check -Id 'COUNT' -Target '' -Status 'FAIL' -Detail 'mcp_summary_models anchor not found (| Models | N | bifrost-litellm ()'
-    }
-} else {
-    Add-Check -Id 'COUNT' -Target '' -Status 'FAIL' -Detail 'MCP_SETUP.md not found'
-}
-
-# --- 7. Routing counters (3 sources) --------------------------------------
-$archPath = Join-Path $repoRoot 'ARCHITECTURE.md'
-$archText = $null
-if (Test-Path -LiteralPath $archPath -PathType Leaf) { $archText = (Read-RawText $archPath).Text }
-
-$tsPath = Join-Path $liveDir 'plugins\workflow-enforcement.ts'
-$tsText = $null
-if (Test-Path -LiteralPath $tsPath -PathType Leaf) { $tsText = (Read-RawText $tsPath).Text }
-
-$routingSpec = @(
-    @{ Primary = 'orchestrator'; Expected = $ExpectedOrch },
-    @{ Primary = 'plankestrator'; Expected = $ExpectedPlan }
-)
-foreach ($rs in $routingSpec) {
-    $p = $rs.Primary
-    $exp = $rs.Expected
-    $jsonN = $null
-    if ($jsonOk) { $jsonN = Count-TaskAllow $cfg $p }
-    $archH = $null; $archR = $null
-    if ($null -ne $archText) {
-        $wl = Get-WhitelistCount $archText $p
-        if ($null -ne $wl) { $archH = $wl.Header; $archR = $wl.Rows }
-    }
-    $plugN = $null
-    if ($null -ne $tsText) { $plugN = Count-RoutingPlugin $tsText $p }
-    $ok = ($null -ne $jsonN -and $jsonN -eq $exp -and $null -ne $archH -and $archH -eq $exp -and $null -ne $archR -and $archR -eq $exp)
-    if ($null -ne $plugN -and $plugN -ne $exp) { $ok = $false }
-    $plugStr = if ($null -ne $plugN) { "$plugN" } else { '-' }
-    Add-Check -Id 'COUNT' -Target '' -Status $(if ($ok) { 'PASS' } else { 'FAIL' }) -Detail "routing_$p json=$jsonN arch_header=$archH arch_rows=$archR plugin=$plugStr expected=$exp"
-    if ($null -eq $plugN) {
-        Add-Check -Id 'WARN' -Target 'routing' -Status 'WARN' -Detail "$p plugin anchor not parsed (skipped plugin source)"
-    }
-}
-
-# --- 8. Summary ------------------------------------------------------------
+# --- 6. Summary --------------------------------------------------------------
 $total = $script:Checks.Count
 $pass = $script:Counts.pass
 $fail = $script:Counts.fail

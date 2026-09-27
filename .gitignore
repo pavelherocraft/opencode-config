@@ -15,3 +15,9 @@ tool-output/
 __pycache__/
 *.pyc
 
+# Secrets / generated output / local backups
+ключики.txt
+output/
+backup/
+
+

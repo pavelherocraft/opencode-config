@@ -7,14 +7,14 @@
     opencode.json provider catalog: format provider/model-key (split on FIRST
     slash), existence in provider models, Did-you-mean suggestions via
     Levenshtein for every invalid key, unused-model report (catalog keys
-    referenced by zero agents). -Both additionally validates the deploy
-    mirror + live<->deploy SHA256 PAIRs. STRICTLY READ-ONLY.
+    referenced by zero agents). -Both additionally validates the repo
+    mirror + live<->repo SHA256 PAIRs. STRICTLY READ-ONLY.
 
 .PARAMETER Agents
     Agents dir to validate. Default %USERPROFILE%\.config\opencode\agents
 
 .PARAMETER Both
-    Also validate deploy-package/agents + PAIR hashes.
+    Also validate the repo agents/ mirror + PAIR hashes.
 
 .PARAMETER Config
     Path to opencode.json. Default %USERPROFILE%\.config\opencode\opencode.json
@@ -158,7 +158,7 @@ function Get-Suggestions([string]$BadKey, [string[]]$Catalog, [string[]]$Provide
 # --- Paths ----------------------------------------------------------------
 $skillDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $skillDir)))
-if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "deploy-package"))) {
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot '.opencode'))) {
     $gitRoot = Invoke-Native -FilePath "git" -Arguments @("-C", $skillDir, "rev-parse", "--show-toplevel")
     if ($LASTEXITCODE -eq 0 -and $gitRoot) { $repoRoot = ($gitRoot | Select-Object -First 1).Trim() }
 }
@@ -264,11 +264,11 @@ foreach ($f in $liveFiles) {
     }
 }
 
-# --- Deploy mirrors (-Both) ------------------------------------------------------
+# --- Repo mirror (-Both) ------------------------------------------------------
 if ($Both) {
-    $deployDir = Join-Path $repoRoot 'deploy-package\agents'
+    $deployDir = Join-Path $repoRoot 'agents'
     if (-not (Test-Path -LiteralPath $deployDir -PathType Container)) {
-        Write-Output "ERROR:deploy agents dir not found: $deployDir"
+        Write-Output "ERROR:repo agents dir not found: $deployDir"
         exit 2
     }
     $deployFiles = @(Get-ChildItem -LiteralPath $deployDir -Filter '*.md' -File | Sort-Object Name)
@@ -280,27 +280,27 @@ if ($Both) {
         if (Test-Path -LiteralPath $dp -PathType Leaf) {
             $r = Test-AgentFile -Path $dp
             if ($r.Status -eq 'PASS') { $valid++ } elseif ($r.Status -eq 'FAIL') { $invalid++; if ($r.Suggestions.Count -gt 0) { $suggestions++ } }
-            $keysReport += @{ agent = "deploy/$n"; model = $r.Model; status = $r.Status; reason = $r.Reason; suggestions = $r.Suggestions }
+            $keysReport += @{ agent = "repo/$n"; model = $r.Model; status = $r.Status; reason = $r.Reason; suggestions = $r.Suggestions }
             if (-not $Json) {
                 if ($r.Status -eq 'SKIP') {
-                    Write-Output "SKIP:deploy/$n $($r.Model) ($($r.Reason))"
+                    Write-Output "SKIP:repo/$n $($r.Model) ($($r.Reason))"
                 } else {
                     $modelPart = if ($r.Status -eq 'FAIL' -and $r.Reason -eq 'frontmatter without model line') { "model=<missing>" } else { $r.Model }
                     $reasonPart = if ($r.Reason) { " ($($r.Reason))" } else { '' }
-                    Write-Output "KEY:deploy/$n $modelPart -> $($r.Status)$reasonPart"
+                    Write-Output "KEY:repo/$n $modelPart -> $($r.Status)$reasonPart"
                 }
                 if ($r.Suggestions.Count -gt 0) {
-                    Write-Output "SUGGEST:deploy/$n did_you_mean=$($r.Suggestions -join ', ')"
+                    Write-Output "SUGGEST:repo/$n did_you_mean=$($r.Suggestions -join ', ')"
                 }
             }
         }
-        # PAIR per agent (live vs deploy SHA256).
+        # PAIR per agent (live vs repo SHA256).
         $lp = Join-Path $Agents "$n.md"
         $pairOk = $false; $pairDetail = ''
         if ((Test-Path -LiteralPath $lp) -and (Test-Path -LiteralPath $dp)) {
             $h1 = Get-Sha256 $lp
             $h2 = Get-Sha256 $dp
-            if ($h1 -eq $h2) { $pairOk = $true } else { $pairDetail = " live=$($h1.Substring(0,8)) deploy=$($h2.Substring(0,8))" }
+            if ($h1 -eq $h2) { $pairOk = $true } else { $pairDetail = " live=$($h1.Substring(0,8)) repo=$($h2.Substring(0,8))" }
         } else {
             $pairDetail = ' side missing'
         }

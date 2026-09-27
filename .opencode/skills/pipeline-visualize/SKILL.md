@@ -22,7 +22,7 @@ These skills are project-level: invoke them from the repo root via
 
 ## When NOT to use
 
-- Tier compliance validation (Check 11) — use the `consistency-checker` agent
+- Tier compliance validation (§Validation C4) — use the `consistency-checker` agent
 - Fleet data (routing, permissions) — use `agent-report`
 - Counters/pairs/integrity gating — use `integrity-check`
 - Editing pipelines — ARCHITECTURE.md is edited manually via text anchors
@@ -43,8 +43,8 @@ These skills are project-level: invoke them from the repo root via
 | Waves | `[a ∥ b ∥ c]` (U+2225 inside brackets) → WAVE node (parallel members) |
 | Steps | exact agent name → AGENT node; `name-*` with >=1 prefix match → WILDCARD node; anything else (barrier, decompose, synthesis, RESEARCH.md) → PSEUDO node |
 
-Models come from agent frontmatter (live by default; `-Source deploy` for
-deploy-package); role/tier from root ARCHITECTURE.md `## Model Roles`.
+Models come from agent frontmatter (live by default; `-Source repo` for the
+repo agents/ mirror); role/tier from root ARCHITECTURE.md `## Model Roles`.
 Expected labels (WARN:PIPELINE_NOT_FOUND when absent, case-insensitive
 substring over parsed labels): `BUGFIX (SIMPLE)`, `BUGFIX DEEP`, `DEV SIMPLE`,
 `DEV COMPLEX`, `DEV SUPERCOMPLEX`, `DEVOPS`, `DOCS`, `PLAN`, `RESEARCH`.
@@ -65,7 +65,7 @@ interiors not analyzed):
 | otherwise tierRank(A) > tierRank(B) | `INFO:TIER_DROP` | `~->` |
 | otherwise | — | `-->` |
 
-Compliance enforcement stays with consistency-checker Check 11 — markers here
+Compliance enforcement stays with consistency-checker (ARCHITECTURE.md §Validation) — markers here
 are advisory. Canonical expected pairs: plan-bug ==> execute-bug (BUGFIX DEEP),
 dev-planner ==> dev-professor (DEV COMPLEX), docs-planner ==> docs-writer
 (DOCS DEEP, equal tier).
@@ -90,13 +90,13 @@ dev-planner ==> dev-professor (DEV COMPLEX), docs-planner ==> docs-writer
 & ".opencode\skills\pipeline-visualize\scripts\visualize.ps1" -Pipeline "DEV COMPLEX"
 & ".opencode\skills\pipeline-visualize\scripts\visualize.ps1" -Format markdown
 & ".opencode\skills\pipeline-visualize\scripts\visualize.ps1" -Format json
-& ".opencode\skills\pipeline-visualize\scripts\visualize.ps1" -Source deploy -NoModels
+& ".opencode\skills\pipeline-visualize\scripts\visualize.ps1" -Source repo -NoModels
 ```
 
 ### POSIX mirror
 
 ```bash
-python .opencode/skills/pipeline-visualize/scripts/visualize.py [--pipeline SUBSTR] [--format ascii|markdown|json] [--source live|deploy] [--no-models]
+python .opencode/skills/pipeline-visualize/scripts/visualize.py [--pipeline SUBSTR] [--format ascii|markdown|json] [--source live|repo] [--no-models]
 ```
 
 ## Parameters
@@ -105,7 +105,7 @@ python .opencode/skills/pipeline-visualize/scripts/visualize.py [--pipeline SUBS
 |-------|---------|
 | `-Pipeline <substr>` | render only pipelines whose label contains substr (case-insensitive); zero matches → exit 2 |
 | `-Format ascii\|markdown\|json` | output format (default ascii) |
-| `-Source live\|deploy` | agents dir for models (default live) |
+| `-Source live\|repo` | agents dir for models (default live; repo = repo `agents/` mirror) |
 | `-AgentsDir <dir>` | explicit agents dir (overrides `-Source`) |
 | `-NoModels` | compact boxes: index+name and tier only |
 | `-Arch <path>` | ARCHITECTURE.md (default: repo root) |
@@ -145,7 +145,7 @@ markdown mode: per pipeline `### <LABEL>` + fenced ```text block (same ASCII)
 
 | Gate | Effect |
 |------|--------|
-| `-Source deploy` + `-AgentsDir` together | BLOCK (exit 2) |
+| `-Source repo` + `-AgentsDir` together | BLOCK (exit 2) |
 | `-Format` / `-Source` value outside the allowed set | BLOCK (exit 2) |
 | ARCHITECTURE.md missing or unreadable | BLOCK (exit 2) |
 | Anchors `## 2. Pipelines` / `## Model Roles` absent | BLOCK (exit 2) |
@@ -161,7 +161,7 @@ markdown mode: per pipeline `### <LABEL>` + fenced ```text block (same ASCII)
 | 2 | Usage/environment error (bad flags, ARCHITECTURE.md or agents dir missing, `## 2. Pipelines` / `## Model Roles` anchors absent, `-Pipeline` matched nothing) |
 
 No exit 3 — visualization does not gate (WARN:PREWALK_INVERSION is advisory;
-authoritative enforcement is consistency-checker Check 11).
+authoritative enforcement is consistency-checker, ARCHITECTURE.md §Validation).
 
 ## Hard rules
 

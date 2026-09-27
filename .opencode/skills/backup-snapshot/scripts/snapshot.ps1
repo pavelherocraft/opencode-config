@@ -30,7 +30,7 @@
     With -Compare: differences (changed/missing/new/corrupt) -> exit 3.
 
 .PARAMETER ExpectedAgents
-    Informational WARN threshold for the live agents count. Default 38.
+    Informational WARN threshold for the live agents count. Default 40.
 
 .PARAMETER Json
     JSON report instead of token lines.
@@ -122,7 +122,7 @@ if ($Compare -ne '') {
 # --- Paths ----------------------------------------------------------------
 $skillDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $skillDir)))
-if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "deploy-package"))) {
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot '.opencode'))) {
     $gitRoot = Invoke-Native -FilePath "git" -Arguments @("-C", $skillDir, "rev-parse", "--show-toplevel")
     if ($LASTEXITCODE -eq 0 -and $gitRoot) { $repoRoot = ($gitRoot | Select-Object -First 1).Trim() }
 }
@@ -155,11 +155,24 @@ function Get-Scope([string]$Mode) {
     if ($Mode -eq 'full') {
         $scope += @{ Src = (Join-Path $liveDir 'opencode.json'); Rel = 'live/opencode.json' }
         $scope += @{ Src = (Join-Path $liveDir 'plugins\workflow-enforcement.ts'); Rel = 'live/plugins/workflow-enforcement.ts' }
-        foreach ($f in @('AGENTS', 'ARCHITECTURE', 'MCP_SETUP', 'PLUGIN', 'REVIEW_CONTEXT')) {
-            $scope += @{ Src = (Join-Path $liveDir ($f + '.md')); Rel = ('live/docs/' + $f + '.md') }
+        $liveSkillDir = Join-Path $liveDir 'skills\git-commit'
+        if (Test-Path -LiteralPath $liveSkillDir -PathType Container) {
+            foreach ($f in @(Get-ChildItem -LiteralPath $liveSkillDir -File -Recurse | Sort-Object FullName)) {
+                $rel = $f.FullName.Substring($liveSkillDir.Length).TrimStart('\', '/') -replace '\\', '/'
+                $scope += @{ Src = $f.FullName; Rel = ('live/skills/git-commit/' + $rel) }
+            }
         }
-        foreach ($f in @('ARCHITECTURE', 'AGENTS', 'PLUGIN', 'MCP_SETUP', 'REVIEW_CONTEXT', 'CHANGELOG')) {
-            $scope += @{ Src = (Join-Path $repoRoot ($f + '.md')); Rel = ('repo/docs/' + $f + '.md') }
+        # Optional docs: included only when present (may not exist yet).
+        $optional = @()
+        foreach ($f in @('AGENTS', 'REVIEW_CONTEXT')) {
+            $optional += @{ Src = (Join-Path $liveDir ($f + '.md')); Rel = ('live/docs/' + $f + '.md') }
+        }
+        foreach ($f in @('ARCHITECTURE', 'REVIEW_CONTEXT', 'CHANGELOG', 'AGENTS.global')) {
+            $optional += @{ Src = (Join-Path $repoRoot ($f + '.md')); Rel = ('repo/docs/' + $f + '.md') }
+        }
+        $optional += @{ Src = (Join-Path $repoRoot 'opencode.json'); Rel = 'repo/opencode.json' }
+        foreach ($e in $optional) {
+            if (Test-Path -LiteralPath $e.Src -PathType Leaf) { $scope += $e }
         }
     }
     return $scope

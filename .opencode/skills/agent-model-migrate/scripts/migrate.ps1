@@ -1,14 +1,15 @@
 <#
 .SYNOPSIS
-    Migrate ONE agent to a new model across all 7 synchronized places.
+    Migrate ONE agent to a new model (live-first, 2 synchronized places).
 
 .DESCRIPTION
-    Updates live+deploy frontmatter, ARCHITECTURE.md x3 (Subagent Models row +
-    Model Roles agent move) and MCP_SETUP.md x2 (Models Distribution + Subagents
-    Full Table Model cell + Summary Models row) in one all-or-nothing operation.
-    Validates the model key against opencode.json provider models, SHA256-verifies
-    all mirrors before and after, optional conventional commit + push.
-    Two-phase write: any failed gate/anchor -> zero files written.
+    Edits are made in LIVE (the runtime source of truth): the agent frontmatter
+    model: line + ARCHITECTURE.md (single root copy: Subagent Models row +
+    Model Roles agent move) in one all-or-nothing operation. Validates the
+    model key against opencode.json provider models; optional conventional
+    commit + push. The repo agents/ mirror is refreshed afterwards via
+    `config-sync --save`, NOT by this script. Two-phase write: any failed
+    gate/anchor -> zero files written.
 
 .PARAMETER Agent
     Agent name (file stem), e.g. utility.
@@ -24,7 +25,7 @@
     Apply the edits (mutually exclusive with -PlanOnly).
 
 .PARAMETER Commit
-    After apply: conventional commit of the 6 repo files (live files are outside git).
+    After apply: conventional commit of the repo files (live files are outside git).
 
 .PARAMETER Push
     After commit: push to origin (requires -Commit).
@@ -267,117 +268,6 @@ function Edit-ModelRoles([string]$Text, [string]$AgentName, [string]$NewModel, [
     return @{ Text = ($lines -join ''); Error = $null; Warns = $warns; OldRole = $oldRole; NewRole = $newRoleName; TierMap = $tierMap }
 }
 
-# --- MCP_SETUP.md: Models Distribution --------------------------------------
-# Returns @{ Text; Error; Warns; Shorts; OldCount; NewCount; OldShort; NewShort; RowDeleted }
-function Edit-Distribution([string]$Text, [string]$AgentName, [string]$OldShort, [string]$NewShort) {
-    $warns = @()
-    $lines = [System.Collections.Generic.List[string]](Split-LinesKeepEol $Text)
-    $span = Find-SectionSpan $lines '^### Models Distribution' '^### '
-    if (-not $span) { return @{ Text = $null; Error = 'anchor: ### Models Distribution section not found'; Warns = $warns } }
-    $rowPat = '^\| `(.+?)` \| (.+?) \| (\d+) \| (.*?) \|$'
-    $rows = @()
-    for ($i = $span.Start; $i -lt $span.End; $i += 2) {
-        $m = [regex]::Match($lines[$i], $rowPat)
-        if ($m.Success -and $m.Groups[1].Value.Trim() -ne 'Model') {
-            $rows += @{ Idx = $i; Short = $m.Groups[1].Value.Trim(); Provider = $m.Groups[2].Value.Trim(); Count = [int]$m.Groups[3].Value; Agents = $m.Groups[4].Value.Trim() }
-        }
-    }
-    if ($rows.Count -eq 0) { return @{ Text = $null; Error = 'anchor: Models Distribution data rows not found'; Warns = $warns } }
-
-    # OLD row: remove the agent token; count -> new token count; 0 -> row deleted.
-    $oldRows = @($rows | Where-Object { $_.Short -eq $OldShort })
-    if ($oldRows.Count -ne 1) { return @{ Text = $null; Error = "anchor: Distribution row for '$OldShort' found $($oldRows.Count) times (expected 1)"; Warns = $warns } }
-    $oldRow = $oldRows[0]
-    $oldToks = @(Split-Tokens $oldRow.Agents)
-    if ($oldToks -notcontains $AgentName) { $warns += "WARN:distribution drift (agent '$AgentName' not in row '$OldShort')" }
-    $rest = @($oldToks | Where-Object { $_ -ne $AgentName })
-    $rowDeleted = $false
-    if ($rest.Count -eq 0) {
-        # delete the whole line (content + EOL element)
-        if ($oldRow.Idx + 1 -lt $lines.Count) { $lines.RemoveAt($oldRow.Idx + 1) }
-        $lines.RemoveAt($oldRow.Idx)
-        $rowDeleted = $true
-        # indices above shifted by 2 — re-parse (bound +2: harmless, header lines never match)
-        $rows = @()
-        $bound = [Math]::Min($span.End + 2, $lines.Count)
-        for ($i = $span.Start; $i -lt $bound; $i += 2) {
-            $m = [regex]::Match($lines[$i], $rowPat)
-            if ($m.Success -and $m.Groups[1].Value.Trim() -ne 'Model') {
-                $rows += @{ Idx = $i; Short = $m.Groups[1].Value.Trim(); Provider = $m.Groups[2].Value.Trim(); Count = [int]$m.Groups[3].Value; Agents = $m.Groups[4].Value.Trim() }
-            }
-        }
-    } else {
-        $lines[$oldRow.Idx] = "| ``$($oldRow.Short)`` | $($oldRow.Provider) | $($rest.Count) | $($rest -join ', ') |"
-    }
-    $oldCountAfter = $rest.Count
-    if ($rows.Count -eq 0) { return @{ Text = $null; Error = 'anchor: Models Distribution has no remaining rows after edit'; Warns = $warns } }
-
-    # NEW row: append token / create the row.
-    $newRows = @($rows | Where-Object { $_.Short -eq $NewShort })
-    if ($newRows.Count -eq 1) {
-        $nr = $newRows[0]
-        $toks = @(Split-Tokens $nr.Agents)
-        if ($toks -notcontains $AgentName) { $toks += $AgentName }
-        $lines[$nr.Idx] = "| ``$($nr.Short)`` | $($nr.Provider) | $($toks.Count) | $($toks -join ', ') |"
-        $newCountAfter = $toks.Count
-    } elseif ($newRows.Count -eq 0) {
-        $last = $rows[$rows.Count - 1]
-        $eol = Get-Eol $lines $last.Idx
-        if (-not $eol) { $eol = "`r`n" }
-        $insertAt = $last.Idx + 2
-        $lines.Insert($insertAt, "| ``$NewShort`` | bifrost-litellm | 1 | $AgentName |")
-        $lines.Insert($insertAt + 1, $eol)
-        $newCountAfter = 1
-    } else {
-        return @{ Text = $null; Error = "anchor: Distribution row for '$NewShort' found $($newRows.Count) times (expected 1)"; Warns = $warns }
-    }
-
-    # Final ordered short list (from the edited lines; bound +2 covers an inserted row).
-    $shorts = @()
-    $bound = [Math]::Min($span.End + 2, $lines.Count)
-    for ($i = $span.Start; $i -lt $bound; $i += 2) {
-        $m = [regex]::Match($lines[$i], $rowPat)
-        if ($m.Success -and $m.Groups[1].Value.Trim() -ne 'Model') { $shorts += $m.Groups[1].Value.Trim() }
-    }
-    return @{ Text = ($lines -join ''); Error = $null; Warns = $warns; Shorts = $shorts; OldCount = $oldCountAfter; NewCount = $newCountAfter; RowDeleted = $rowDeleted }
-}
-
-# --- MCP_SETUP.md: Subagents Full Table Model cell ---------------------------
-function Edit-FullTableRow([string]$Text, [string]$AgentName, [string]$OldModel, [string]$NewModel) {
-    $warns = @()
-    $lines = [System.Collections.Generic.List[string]](Split-LinesKeepEol $Text)
-    $pat = '^\| \*\*' + [regex]::Escape($AgentName) + '\*\* \|'
-    $hits = @()
-    for ($i = 0; $i -lt $lines.Count; $i += 2) {
-        if ($lines[$i] -match $pat) { $hits += $i }
-    }
-    if ($hits.Count -ne 1) { return @{ Text = $null; Error = "anchor: Full Table row for '$AgentName' found $($hits.Count) times (expected 1)"; Warns = $warns } }
-    $idx = $hits[0]
-    $content = $lines[$idx]
-    $cells = $content -split '\|'
-    if ($cells.Count -lt 5) { return @{ Text = $null; Error = "anchor: Full Table row for '$AgentName' has too few cells"; Warns = $warns } }
-    $cur = $cells[3].Trim()
-    if ($cur -ne $OldModel) { $warns += "WARN:full-table model drift (cell=$cur expected=$OldModel)" }
-    $cells[3] = " $NewModel "
-    $lines[$idx] = ($cells -join '|')
-    return @{ Text = ($lines -join ''); Error = $null; Warns = $warns }
-}
-
-# --- MCP_SETUP.md: Summary Models row ----------------------------------------
-function Edit-SummaryModelsRow([string]$Text, [string[]]$Shorts) {
-    $lines = [System.Collections.Generic.List[string]](Split-LinesKeepEol $Text)
-    $pat = '^\| Models \| \d+ \| bifrost-litellm \(.*\) \|$'
-    $hits = @()
-    for ($i = 0; $i -lt $lines.Count; $i += 2) {
-        if ($lines[$i] -match $pat) { $hits += $i }
-    }
-    if ($hits.Count -ne 1) { return @{ Text = $null; Error = "anchor: Summary Models row found $($hits.Count) times (expected 1)" } }
-    $idx = $hits[0]
-    $newLine = "| Models | $($Shorts.Count) | bifrost-litellm ($($Shorts -join ', ')) |"
-    $lines[$idx] = $newLine
-    return @{ Text = ($lines -join ''); Error = $null }
-}
-
 # ============================================================================
 # Main flow
 # ============================================================================
@@ -404,23 +294,14 @@ if ($Push -and -not $Commit) {
 # 2. Paths
 $skillDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $skillDir)))
-if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "deploy-package"))) {
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot '.opencode'))) {
     $gitRoot = Invoke-Native -FilePath "git" -Arguments @("-C", $skillDir, "rev-parse", "--show-toplevel")
     if ($LASTEXITCODE -eq 0 -and $gitRoot) { $repoRoot = ($gitRoot | Select-Object -First 1).Trim() }
 }
 $liveDir = Join-Path $env:USERPROFILE '.config\opencode'
 $liveFm = Join-Path $liveDir "agents\$Agent.md"
-$deployFm = Join-Path $repoRoot "deploy-package\agents\$Agent.md"
-$archPaths = @(
-    (Join-Path $repoRoot 'ARCHITECTURE.md'),
-    (Join-Path $repoRoot 'opencode-config\ARCHITECTURE.md'),
-    (Join-Path $repoRoot 'deploy-package\project-files\ARCHITECTURE.md')
-)
-$mcpPaths = @(
-    (Join-Path $repoRoot 'MCP_SETUP.md'),
-    (Join-Path $repoRoot 'deploy-package\project-files\MCP_SETUP.md')
-)
-$allTargets = @($liveFm, $deployFm) + $archPaths + $mcpPaths
+$archPath = Join-Path $repoRoot 'ARCHITECTURE.md'
+$allTargets = @($liveFm, $archPath)
 foreach ($t in $allTargets) {
     if (-not (Test-Path -LiteralPath $t -PathType Leaf)) {
         Write-Output "ERROR:agent target file not found: $t"
@@ -479,11 +360,9 @@ if (-not $modelExists) {
     exit 3
 }
 
-# 6. Read all 7 files; OLD model from live frontmatter
+# 6. Read the 2 target files; OLD model from live frontmatter
 $liveFmRaw = Read-RawText $liveFm
-$deployFmRaw = Read-RawText $deployFm
-$archRaws = @($archPaths | ForEach-Object { Read-RawText $_ })
-$mcpRaws = @($mcpPaths | ForEach-Object { Read-RawText $_ })
+$archRaw = Read-RawText $archPath
 $oldModel = Get-FmModel $liveFmRaw.Text
 if (-not $oldModel) {
     Write-Output 'BLOCK:frontmatter without model: line'
@@ -499,83 +378,36 @@ if (-not $oldParts) {
     Write-Output "BLOCK:existing frontmatter model key malformed: '$oldModel'"
     exit 3
 }
-$oldShort = $oldParts.Key
-$newShort = $Key
 
 Write-Output "STATUS:MIGRATE_START agent=$Agent old=$oldModel new=$Model"
 
-# 7. Pre-gate: target FM pair + ARCHITECTURE x3 + MCP_SETUP x2 must be in sync
-$drifts = @()
-if ((Get-Sha256 $liveFm) -ne (Get-Sha256 $deployFm)) { $drifts += 'frontmatter pair (live vs deploy)' }
-$archHashes = @($archPaths | ForEach-Object { Get-Sha256 $_ })
-if (@($archHashes | Select-Object -Unique).Count -gt 1) { $drifts += 'ARCHITECTURE.md x3' }
-$mcpHashes = @($mcpPaths | ForEach-Object { Get-Sha256 $_ })
-if (@($mcpHashes | Select-Object -Unique).Count -gt 1) { $drifts += 'MCP_SETUP.md x2' }
-if ($drifts.Count -gt 0) {
-    if ($Apply) {
-        Write-Output "BLOCK:mirrors drifted — run config-sync first ($($drifts -join '; '))"
-        exit 3
-    } else {
-        foreach ($d in $drifts) { Write-Output "WARN:mirror drift ($d) — run config-sync before apply" }
-    }
-}
-
-# 8. Compute ALL edits in memory (two-phase: zero writes on any error)
+# 7. Compute ALL edits in memory (two-phase: zero writes on any error)
 $pending = [ordered]@{}
 $warns = @()
 $planLines = @()
 
-# 8a. Frontmatter (live + deploy)
+# 7a. Frontmatter (LIVE)
 $newLiveFm = Set-FmModel $liveFmRaw.Text $Model
 if (-not $newLiveFm) { Write-Output 'BLOCK:anchor: frontmatter model: line not found (live)'; exit 3 }
 $pending[$liveFm] = @{ Text = $newLiveFm; Bom = $liveFmRaw.Bom; Rel = (Get-RelPath $liveFm) }
 $planLines += "PLAN:$(Get-RelPath $liveFm) old=$oldModel new=$Model"
-$newDeployFm = Set-FmModel $deployFmRaw.Text $Model
-if (-not $newDeployFm) { Write-Output 'BLOCK:anchor: frontmatter model: line not found (deploy)'; exit 3 }
-$pending[$deployFm] = @{ Text = $newDeployFm; Bom = $deployFmRaw.Bom; Rel = (Get-RelPath $deployFm) }
-$planLines += "PLAN:$(Get-RelPath $deployFm) old=$oldModel new=$Model"
 
-# 8b. ARCHITECTURE.md x3
+# 7b. ARCHITECTURE.md (single root copy)
 $archEditInfo = $null
-for ($i = 0; $i -lt $archPaths.Count; $i++) {
-    $text = $archRaws[$i].Text
-    $r1 = Edit-SubagentModelsRow $text $Agent $Model
-    if ($r1.Error) { Write-Output "BLOCK:$($r1.Error)"; exit 3 }
-    $warns += $r1.Warns
-    $r2 = Edit-ModelRoles $r1.Text $Agent $Model $Role $Tier
-    if ($r2.Error) { Write-Output "BLOCK:$($r2.Error)"; exit 3 }
-    $warns += $r2.Warns
-    $pending[$archPaths[$i]] = @{ Text = $r2.Text; Bom = $archRaws[$i].Bom; Rel = (Get-RelPath $archPaths[$i]) }
-    $planLines += "PLAN:$(Get-RelPath $archPaths[$i]) subagent_models_row old=$($r1.Old) new=$Model"
-    $archEditInfo = $r2
-}
+$r1 = Edit-SubagentModelsRow $archRaw.Text $Agent $Model
+if ($r1.Error) { Write-Output "BLOCK:$($r1.Error)"; exit 3 }
+$warns += $r1.Warns
+$r2 = Edit-ModelRoles $r1.Text $Agent $Model $Role $Tier
+if ($r2.Error) { Write-Output "BLOCK:$($r2.Error)"; exit 3 }
+$warns += $r2.Warns
+$pending[$archPath] = @{ Text = $r2.Text; Bom = $archRaw.Bom; Rel = (Get-RelPath $archPath) }
+$planLines += "PLAN:$(Get-RelPath $archPath) subagent_models_row old=$($r1.Old) new=$Model"
+$archEditInfo = $r2
 if ($archEditInfo) {
     $planLines += "PLAN:role $Agent $($archEditInfo.OldRole) -> $($archEditInfo.NewRole)"
 }
 
-# 8c. MCP_SETUP.md x2
-$distInfo = $null
-for ($i = 0; $i -lt $mcpPaths.Count; $i++) {
-    $text = $mcpRaws[$i].Text
-    $r1 = Edit-Distribution $text $Agent $oldShort $newShort
-    if ($r1.Error) { Write-Output "BLOCK:$($r1.Error)"; exit 3 }
-    $warns += $r1.Warns
-    $r2 = Edit-FullTableRow $r1.Text $Agent $oldModel $Model
-    if ($r2.Error) { Write-Output "BLOCK:$($r2.Error)"; exit 3 }
-    $warns += $r2.Warns
-    $r3 = Edit-SummaryModelsRow $r2.Text $r1.Shorts
-    if ($r3.Error) { Write-Output "BLOCK:$($r3.Error)"; exit 3 }
-    $pending[$mcpPaths[$i]] = @{ Text = $r3.Text; Bom = $mcpRaws[$i].Bom; Rel = (Get-RelPath $mcpPaths[$i]) }
-    $planLines += "PLAN:$(Get-RelPath $mcpPaths[$i]) distribution/full_table/summary"
-    $distInfo = $r1
-}
-if ($distInfo) {
-    $detail = "PLAN:distribution $oldShort count->$($distInfo.OldCount); $newShort count->$($distInfo.NewCount)"
-    if ($distInfo.RowDeleted) { $detail += " (row '$oldShort' deleted)" }
-    $planLines += $detail
-}
-
-# 8d. Prewalk tier-inversion warnings (from the NEW Model Roles state)
+# 7c. Prewalk tier-inversion warnings (from the NEW Model Roles state)
 if ($archEditInfo -and $archEditInfo.TierMap) {
     $rank = @{ top = 3; mid = 2; low = 1 }
     foreach ($pair in @(@('plan-bug', 'execute-bug'), @('dev-planner', 'dev-professor'), @('docs-planner', 'docs-writer'))) {
@@ -610,18 +442,17 @@ try { $null = ((Read-RawText $liveCfgPath).Text) | ConvertFrom-Json } catch {
     Write-Output "ERROR:opencode.json no longer parses: $_"
     exit 3
 }
-$fmOk = ((Get-Sha256 $liveFm) -eq (Get-Sha256 $deployFm))
-if ($fmOk) { Write-Output 'VERIFY:frontmatter identical' } else { Write-Output 'ERROR:SHA256 mismatch: frontmatter pair'; exit 3 }
-$archHashes2 = @($archPaths | ForEach-Object { Get-Sha256 $_ })
-if (@($archHashes2 | Select-Object -Unique).Count -eq 1) { Write-Output 'VERIFY:architecture identical' } else { Write-Output 'ERROR:SHA256 mismatch: ARCHITECTURE.md x3'; exit 3 }
-$mcpHashes2 = @($mcpPaths | ForEach-Object { Get-Sha256 $_ })
-if (@($mcpHashes2 | Select-Object -Unique).Count -eq 1) { Write-Output 'VERIFY:mcp-setup identical' } else { Write-Output 'ERROR:SHA256 mismatch: MCP_SETUP.md x2'; exit 3 }
+$fmModelAfter = Get-FmModel (Read-RawText $liveFm).Text
+if ($fmModelAfter -eq $Model) { Write-Output 'VERIFY:frontmatter model applied' } else { Write-Output 'ERROR:frontmatter model was not applied'; exit 3 }
+$archTextAfter = (Read-RawText $archPath).Text
+if ($archTextAfter.Contains($Model)) { Write-Output 'VERIFY:architecture updated' } else { Write-Output 'ERROR:ARCHITECTURE.md was not updated'; exit 3 }
 
 # 13. Manual follow-ups
 Write-Output 'WARN:restart required (config is read at session start — new model takes effect in a NEW opencode session)'
 Write-Output 'WARN:CHANGELOG.md [Unreleased] entry is a manual step'
+Write-Output 'WARN:run config-sync --save before commit (refreshes the repo agents/ mirror)'
 
-# 14. Optional conventional commit of the 6 repo files
+# 14. Optional conventional commit of the repo files
 if ($Commit) {
     $gitName = (Invoke-Native -FilePath "git" -Arguments @("-C", $repoRoot, "config", "user.name") | Select-Object -First 1)
     $gitEmail = (Invoke-Native -FilePath "git" -Arguments @("-C", $repoRoot, "config", "user.email") | Select-Object -First 1)
@@ -635,14 +466,7 @@ if ($Commit) {
     $commitMsgFile = Join-Path $tempDir 'commit-msg-models.txt'
     [System.IO.File]::WriteAllText($commitMsgFile, $commitMsg, (New-Object System.Text.UTF8Encoding($false)))
     Write-Output 'STATUS:COMMIT_START'
-    $repoRelPaths = @(
-        "deploy-package/agents/$Agent.md",
-        'ARCHITECTURE.md',
-        'opencode-config/ARCHITECTURE.md',
-        'deploy-package/project-files/ARCHITECTURE.md',
-        'MCP_SETUP.md',
-        'deploy-package/project-files/MCP_SETUP.md'
-    )
+    $repoRelPaths = @('ARCHITECTURE.md', "agents/$Agent.md")
     Invoke-Native -FilePath "git" -Arguments (@('-C', $repoRoot, 'add') + $repoRelPaths) | Out-Null
     if ($LASTEXITCODE -ne 0) { Write-Output 'ERROR:git add failed'; exit 3 }
     Invoke-Native -FilePath "git" -Arguments @('-C', $repoRoot, 'commit', '-F', $commitMsgFile) | Out-Null

@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Project restructure: repo is now a committable snapshot of live config** (5 sync pairs, save/restore via config-sync)
+- **ARCHITECTURE.md is the single canonical doc** (+ Validation section for generic consistency-checker; + Infrastructure Export on-demand policy)
+- **consistency-checker rewritten as generic agent** (follows per-project ARCHITECTURE.md; no hardcoded paths/counters)
+- Skills re-targeted to the live↔repo model: config-sync (--save/--restore/--plan over the 5 pairs), integrity-check (5 sync pairs, derived counters/routing cross-checks), agent-add / agent-model-migrate (live-first edits + `config-sync --save` reminder), agent-report / pipeline-visualize / model-key-validate (`-Source repo` = repo agents/ mirror), backup-snapshot (live+repo scope), bifrost-config-apply (syncs to repo opencode.json)
+
+### Removed
+
+- deploy-package/ (2946 files), opencode-config/, all doc mirror copies (incl. MCP_SETUP.md, PLUGIN.md — infra docs are generated on demand, not maintained in the repo)
+- 22 historical PLAN/RESEARCH docs; root AGENTS.md (double injection ended)
+- skills: audio-synthesize, audio-transcribe, image-gen, deploy-package-build
+
 - **voice-synthesizer: миграция со скилла audio-synthesize на media MCP** (media_media-synthesize_speech; 3 TTS-модели — MiMo TTS, MiMo VoiceDesign, MiniMax Speech-2.8-HD; 17 голосов; style-инструкции; audio-теги; wav/mp3; режим клонирования вынесен в отдельный агент voice-clone; permissions ужаты — bash/write/read denied)
 - **voice-synthesizer: TTS-модель заменена на доступную LLM (bifrost-litellm/MiniMax-M3)**: каталожная модель `bifrost-litellm/voice/xiaomi/mimo-v2.5-tts` недоступна через bifrost-litellm (`Param Incorrect`) — TTS-модели работают через специализированный TTS API, а не как обычные LLM. voice-synthesizer стал LLM-агентом (MiniMax-M3, tier executor-cheap), оркестрирующим skill audio-synthesize через bash (TTS-модели вызываются только скриптами скилла). Синхронно: frontmatter voice-synthesizer.md (live + deploy) + IMPORTANT-инструкция; ARCHITECTURE.md ×4 (Subagent Models, Model Roles: executor-cheap +voice-synthesizer, роль voice-synth удалена); MCP_SETUP.md ×3 (Models Distribution: MiniMax-M3 10→11, строка voice/xiaomi/mimo-v2.5-tts удалена; Subagents Full Table; Models 11→10); opencode.json ×2 (секция provider `voice/xiaomi/mimo-v2.5-tts` удалена; asr/voiceclone/voicedesign сохранены для скилла); pipelines_and_models.md (11→10 моделей); integrity-check (ExpectedModels 11→10). Restart required.
 

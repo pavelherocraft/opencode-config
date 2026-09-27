@@ -5,8 +5,8 @@ validate.py - POSIX mirror of validate.ps1
 Fast LLM-free validation of every frontmatter model key against the
 opencode.json provider catalog: format provider/model-key (split on FIRST
 slash), existence in provider models, Did-you-mean suggestions via
-Levenshtein, unused-model report. --both also validates the deploy mirror +
-live<->deploy SHA256 PAIRs. STRICTLY READ-ONLY.
+Levenshtein, unused-model report. --both also validates the repo mirror +
+live<->repo SHA256 PAIRs. STRICTLY READ-ONLY.
 
 Usage:
     python validate.py [--agents DIR] [--both] [--config PATH]
@@ -60,7 +60,7 @@ def get_fm_model(text):
 def repo_root(script_dir):
     """<repo>/.opencode/skills/<skill>/scripts -> <repo>."""
     root = script_dir.resolve().parents[3]
-    if (root / 'deploy-package').exists():
+    if (root / '.opencode' / 'skills').is_dir():
         return root
     try:
         out = subprocess.check_output(
@@ -237,11 +237,11 @@ def main():
                             'suggestions': r['suggestions']})
         emit_key(f.stem, r)
 
-    # Deploy mirrors (--both)
+    # Repo mirror (--both)
     if args.both:
-        deploy_dir = root / 'deploy-package' / 'agents'
+        deploy_dir = root / 'agents'
         if not deploy_dir.is_dir():
-            print(f'ERROR:deploy agents dir not found: {deploy_dir}')
+            print(f'ERROR:repo agents dir not found: {deploy_dir}')
             sys.exit(2)
         deploy_files = sorted(deploy_dir.glob('*.md'))
         live_names = [f.stem for f in live_files]
@@ -255,10 +255,10 @@ def main():
                     valid += 1
                 elif r['status'] == 'FAIL':
                     invalid += 1
-                keys_report.append({'agent': f'deploy/{n}', 'model': r['model'],
+                keys_report.append({'agent': f'repo/{n}', 'model': r['model'],
                                     'status': r['status'], 'reason': r['reason'],
                                     'suggestions': r['suggestions']})
-                emit_key(f'deploy/{n}', r)
+                emit_key(f'repo/{n}', r)
             lp = agents_dir / f'{n}.md'
             pair_ok = False
             pair_detail = ''
@@ -268,7 +268,7 @@ def main():
                 if h1 == h2:
                     pair_ok = True
                 else:
-                    pair_detail = f' live={h1[:8]} deploy={h2[:8]}'
+                    pair_detail = f' live={h1[:8]} repo={h2[:8]}'
             else:
                 pair_detail = ' side missing'
             if pair_ok:

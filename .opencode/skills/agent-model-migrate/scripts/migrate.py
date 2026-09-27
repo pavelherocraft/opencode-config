@@ -2,11 +2,12 @@
 """
 migrate.py - POSIX mirror of migrate.ps1
 
-Migrate ONE agent to a new model across all 7 synchronized places:
-live+deploy frontmatter, ARCHITECTURE.md x3 (Subagent Models + Model Roles),
-MCP_SETUP.md x2 (Models Distribution + Full Table + Summary row).
+Migrate ONE agent to a new model. Edits are made in LIVE (the runtime source
+of truth): the agent frontmatter `model:` line + ARCHITECTURE.md (single root
+copy: Subagent Models row + Model Roles move). The repo agents/ mirror is
+refreshed afterwards via `config-sync --save`, NOT by this script.
 Two-phase all-or-nothing write; validates the model key against live
-opencode.json provider models; SHA256-verifies mirrors; optional commit+push.
+opencode.json provider models; optional commit+push.
 
 Usage:
     python migrate.py --agent utility --model bifrost-litellm/qwen3.8-max --plan-only
@@ -23,7 +24,6 @@ Exit codes:
 """
 
 import argparse
-import hashlib
 import json
 import re
 import subprocess
@@ -32,7 +32,6 @@ from pathlib import Path
 
 LINE_SPLIT = re.compile(r'(\r\n|\r|\n)')
 ROLE_ROW = re.compile(r'^\| (.+?) \| (.+?) \| (.+?) \| (.*?) \|$')
-DIST_ROW = re.compile(r'^\| `(.+?)` \| (.+?) \| (\d+) \| (.*?) \|$')
 SECTION_END_KONTROL = r'^\u041A\u043E\u043D\u0442\u0440\u043E\u043B\u044C \u0441\u0443\u043C\u043C\u044B:'
 
 
@@ -46,21 +45,10 @@ def write_raw(p, text, bom):
     Path(p).write_bytes(text.encode('utf-8-sig' if bom else 'utf-8'))
 
 
-def sha256_file(p):
-    h = hashlib.sha256()
-    with open(p, 'rb') as f:
-        while True:
-            chunk = f.read(65536)
-            if not chunk:
-                break
-            h.update(chunk)
-    return h.hexdigest().upper()
-
-
 def repo_root(script_dir):
     """<repo>/.opencode/skills/<skill>/scripts -> <repo>."""
     root = script_dir.resolve().parents[3]
-    if (root / 'deploy-package').exists():
+    if (root / '.opencode' / 'skills').is_dir():
         return root
     try:
         out = subprocess.check_output(
@@ -245,103 +233,6 @@ def edit_model_roles(text, agent, new_model, role, tier):
     return ''.join(lines), old_role, new_role_name, tier_map, warns
 
 
-def edit_distribution(text, agent, old_short, new_short):
-    """Returns (new_text, shorts, old_count_after, new_count_after, row_deleted, warns)."""
-    warns = []
-    lines = split_lines_keep_eol(text)
-    span = find_section_span(lines, r'^### Models Distribution', r'^### ')
-    if not span:
-        raise EditError('anchor: ### Models Distribution section not found')
-
-    def parse_rows(bound_extra=0):
-        rows = []
-        bound = min(span[1] + bound_extra, len(lines))
-        for i in range(span[0], bound, 2):
-            m = DIST_ROW.match(lines[i])
-            if m and m.group(1).strip() != 'Model':
-                rows.append({'idx': i, 'short': m.group(1).strip(), 'provider': m.group(2).strip(),
-                             'count': int(m.group(3)), 'agents': m.group(4).strip()})
-        return rows
-
-    rows = parse_rows()
-    if not rows:
-        raise EditError('anchor: Models Distribution data rows not found')
-
-    old_rows = [r for r in rows if r['short'] == old_short]
-    if len(old_rows) != 1:
-        raise EditError(f"anchor: Distribution row for '{old_short}' found {len(old_rows)} times (expected 1)")
-    old_row = old_rows[0]
-    old_toks = split_tokens(old_row['agents'])
-    if agent not in old_toks:
-        warns.append(f"WARN:distribution drift (agent '{agent}' not in row '{old_short}')")
-    rest = [t for t in old_toks if t != agent]
-    row_deleted = False
-    if not rest:
-        del lines[old_row['idx']:old_row['idx'] + 2]
-        row_deleted = True
-        rows = parse_rows(bound_extra=2)
-    else:
-        lines[old_row['idx']] = (f"| `{old_row['short']}` | {old_row['provider']} | {len(rest)} "
-                                 f"| {', '.join(rest)} |")
-    old_count_after = len(rest)
-
-    if not rows:
-        raise EditError('anchor: Models Distribution has no remaining rows after edit')
-
-    new_rows = [r for r in rows if r['short'] == new_short]
-    if len(new_rows) == 1:
-        nr = new_rows[0]
-        toks = split_tokens(nr['agents'])
-        if agent not in toks:
-            toks.append(agent)
-        lines[nr['idx']] = (f"| `{nr['short']}` | {nr['provider']} | {len(toks)} "
-                            f"| {', '.join(toks)} |")
-        new_count_after = len(toks)
-    elif len(new_rows) == 0:
-        last = rows[-1]
-        eol = get_eol(lines, last['idx']) or '\r\n'
-        insert_at = last['idx'] + 2
-        lines[insert_at:insert_at] = [f'| `{new_short}` | bifrost-litellm | 1 | {agent} |', eol]
-        new_count_after = 1
-    else:
-        raise EditError(f"anchor: Distribution row for '{new_short}' found {len(new_rows)} times (expected 1)")
-
-    shorts = [r['short'] for r in parse_rows(bound_extra=2)]
-    return ''.join(lines), shorts, old_count_after, new_count_after, row_deleted, warns
-
-
-def edit_full_table_row(text, agent, old_model, new_model):
-    """Returns (new_text, warns)."""
-    warns = []
-    lines = split_lines_keep_eol(text)
-    pat = re.compile(r'^\| \*\*' + re.escape(agent) + r'\*\* \|')
-    hits = [i for i in range(0, len(lines), 2) if pat.match(lines[i])]
-    if len(hits) != 1:
-        raise EditError(f"anchor: Full Table row for '{agent}' found {len(hits)} times (expected 1)")
-    idx = hits[0]
-    cells = lines[idx].split('|')
-    if len(cells) < 5:
-        raise EditError(f"anchor: Full Table row for '{agent}' has too few cells")
-    cur = cells[3].strip()
-    if cur != old_model:
-        warns.append(f'WARN:full-table model drift (cell={cur} expected={old_model})')
-    cells[3] = f' {new_model} '
-    lines[idx] = '|'.join(cells)
-    return ''.join(lines), warns
-
-
-def edit_summary_models_row(text, shorts):
-    """Returns new_text."""
-    lines = split_lines_keep_eol(text)
-    pat = re.compile(r'^\| Models \| \d+ \| bifrost-litellm \(.*\) \|$')
-    hits = [i for i in range(0, len(lines), 2) if pat.match(lines[i])]
-    if len(hits) != 1:
-        raise EditError(f'anchor: Summary Models row found {len(hits)} times (expected 1)')
-    idx = hits[0]
-    lines[idx] = f"| Models | {len(shorts)} | bifrost-litellm ({', '.join(shorts)}) |"
-    return ''.join(lines)
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--agent', required=True)
@@ -373,14 +264,9 @@ def main():
     root = repo_root(skill_dir)
     live_dir = Path.home() / '.config' / 'opencode'
     live_fm = live_dir / 'agents' / f'{args.agent}.md'
-    deploy_fm = root / 'deploy-package' / 'agents' / f'{args.agent}.md'
-    arch_paths = [root / 'ARCHITECTURE.md',
-                  root / 'opencode-config' / 'ARCHITECTURE.md',
-                  root / 'deploy-package' / 'project-files' / 'ARCHITECTURE.md']
-    mcp_paths = [root / 'MCP_SETUP.md',
-                 root / 'deploy-package' / 'project-files' / 'MCP_SETUP.md']
+    arch_path = root / 'ARCHITECTURE.md'
 
-    for t in [live_fm, deploy_fm] + arch_paths + mcp_paths:
+    for t in [live_fm, arch_path]:
         if not t.is_file():
             print(f'ERROR:agent target file not found: {t}')
             sys.exit(2)
@@ -427,9 +313,7 @@ def main():
         sys.exit(3)
 
     live_fm_text, live_fm_bom = read_raw(live_fm)
-    deploy_fm_text, deploy_fm_bom = read_raw(deploy_fm)
-    arch_raws = [read_raw(p) for p in arch_paths]
-    mcp_raws = [read_raw(p) for p in mcp_paths]
+    arch_text, arch_bom = read_raw(arch_path)
 
     old_model = get_fm_model(live_fm_text)
     if not old_model:
@@ -442,25 +326,8 @@ def main():
     if not old_parts:
         print(f"BLOCK:existing frontmatter model key malformed: '{old_model}'")
         sys.exit(3)
-    old_short = old_parts[1]
-    new_short = key
 
     print(f'STATUS:MIGRATE_START agent={args.agent} old={old_model} new={args.model}')
-
-    # Pre-gate: target FM pair + ARCHITECTURE x3 + MCP_SETUP x2 in sync
-    drifts = []
-    if sha256_file(live_fm) != sha256_file(deploy_fm):
-        drifts.append('frontmatter pair (live vs deploy)')
-    if len({sha256_file(p) for p in arch_paths}) > 1:
-        drifts.append('ARCHITECTURE.md x3')
-    if len({sha256_file(p) for p in mcp_paths}) > 1:
-        drifts.append('MCP_SETUP.md x2')
-    if drifts:
-        if args.apply:
-            print(f"BLOCK:mirrors drifted — run config-sync first ({'; '.join(drifts)})")
-            sys.exit(3)
-        for d in drifts:
-            print(f'WARN:mirror drift ({d}) — run config-sync before apply')
 
     # Compute ALL edits in memory (two-phase: zero writes on any error)
     pending = []   # (path, new_text, bom, rel)
@@ -474,43 +341,17 @@ def main():
         pending.append((live_fm, new_live, live_fm_bom, rel_path(live_fm)))
         plan_lines.append(f'PLAN:{rel_path(live_fm)} old={old_model} new={args.model}')
 
-        new_deploy = set_fm_model(deploy_fm_text, args.model)
-        if new_deploy is None:
-            raise EditError('anchor: frontmatter model: line not found (deploy)')
-        pending.append((deploy_fm, new_deploy, deploy_fm_bom, rel_path(deploy_fm)))
-        plan_lines.append(f'PLAN:{rel_path(deploy_fm)} old={old_model} new={args.model}')
-
         roles_info = None
-        for i, path in enumerate(arch_paths):
-            text = arch_raws[i][0]
-            t1, row_old, w = edit_subagent_models_row(text, args.agent, args.model, old_model)
-            warns += w
-            t2, old_role, new_role_name, tier_map, w = edit_model_roles(
-                t1, args.agent, args.model, args.role, args.tier)
-            warns += w
-            pending.append((path, t2, arch_raws[i][1], rel_path(path)))
-            plan_lines.append(f'PLAN:{rel_path(path)} subagent_models_row old={row_old} new={args.model}')
-            roles_info = (old_role, new_role_name, tier_map)
+        t1, row_old, w = edit_subagent_models_row(arch_text, args.agent, args.model, old_model)
+        warns += w
+        t2, old_role, new_role_name, tier_map, w = edit_model_roles(
+            t1, args.agent, args.model, args.role, args.tier)
+        warns += w
+        pending.append((arch_path, t2, arch_bom, rel_path(arch_path)))
+        plan_lines.append(f'PLAN:{rel_path(arch_path)} subagent_models_row old={row_old} new={args.model}')
+        roles_info = (old_role, new_role_name, tier_map)
         if roles_info:
             plan_lines.append(f'PLAN:role {args.agent} {roles_info[0]} -> {roles_info[1]}')
-
-        dist_info = None
-        for i, path in enumerate(mcp_paths):
-            text = mcp_raws[i][0]
-            t1, shorts, old_cnt, new_cnt, row_deleted, w = edit_distribution(
-                text, args.agent, old_short, new_short)
-            warns += w
-            t2, w = edit_full_table_row(t1, args.agent, old_model, args.model)
-            warns += w
-            t3 = edit_summary_models_row(t2, shorts)
-            pending.append((path, t3, mcp_raws[i][1], rel_path(path)))
-            plan_lines.append(f'PLAN:{rel_path(path)} distribution/full_table/summary')
-            dist_info = (shorts, old_cnt, new_cnt, row_deleted)
-        if dist_info:
-            detail = f'PLAN:distribution {old_short} count->{dist_info[1]}; {new_short} count->{dist_info[2]}'
-            if dist_info[3]:
-                detail += f" (row '{old_short}' deleted)"
-            plan_lines.append(detail)
 
         if roles_info and roles_info[2]:
             rank = {'top': 3, 'mid': 2, 'low': 1}
@@ -547,24 +388,22 @@ def main():
     except (ValueError, OSError) as e:
         print(f'ERROR:opencode.json no longer parses: {e}')
         sys.exit(3)
-    if sha256_file(live_fm) == sha256_file(deploy_fm):
-        print('VERIFY:frontmatter identical')
+    live_fm_text2, _ = read_raw(live_fm)
+    if get_fm_model(live_fm_text2) == args.model:
+        print('VERIFY:frontmatter model applied')
     else:
-        print('ERROR:SHA256 mismatch: frontmatter pair')
+        print('ERROR:frontmatter model was not applied')
         sys.exit(3)
-    if len({sha256_file(p) for p in arch_paths}) == 1:
-        print('VERIFY:architecture identical')
+    arch_text2, _ = read_raw(arch_path)
+    if args.model in arch_text2:
+        print('VERIFY:architecture updated')
     else:
-        print('ERROR:SHA256 mismatch: ARCHITECTURE.md x3')
-        sys.exit(3)
-    if len({sha256_file(p) for p in mcp_paths}) == 1:
-        print('VERIFY:mcp-setup identical')
-    else:
-        print('ERROR:SHA256 mismatch: MCP_SETUP.md x2')
+        print('ERROR:ARCHITECTURE.md was not updated')
         sys.exit(3)
 
     print('WARN:restart required (config is read at session start — new model takes effect in a NEW opencode session)')
     print('WARN:CHANGELOG.md [Unreleased] entry is a manual step')
+    print('WARN:run config-sync --save before commit (refreshes the repo agents/ mirror)')
 
     if args.commit:
         name_res = git(root, 'config', 'user.name')
@@ -582,12 +421,7 @@ def main():
         msg_file = tmp_dir / 'commit-msg-models.txt'
         msg_file.write_text(commit_msg, encoding='utf-8')
         print('STATUS:COMMIT_START')
-        repo_rel = [f'deploy-package/agents/{args.agent}.md',
-                    'ARCHITECTURE.md',
-                    'opencode-config/ARCHITECTURE.md',
-                    'deploy-package/project-files/ARCHITECTURE.md',
-                    'MCP_SETUP.md',
-                    'deploy-package/project-files/MCP_SETUP.md']
+        repo_rel = ['ARCHITECTURE.md', f'agents/{args.agent}.md']
         add_res = git(root, 'add', *repo_rel)
         if add_res.returncode != 0:
             print(f'ERROR:git add failed: {add_res.stderr}')

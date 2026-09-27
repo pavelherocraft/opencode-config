@@ -10,7 +10,7 @@ parallel waves as grouped nodes.
 
 Usage:
     python visualize.py [--pipeline SUBSTR] [--format ascii|markdown|json]
-                        [--source live|deploy] [--agents-dir DIR] [--no-models]
+                        [--source live|repo] [--agents-dir DIR] [--no-models]
                         [--arch PATH]
 
 Output:
@@ -75,7 +75,7 @@ def split_tokens(cell):
 def repo_root(script_dir):
     """<repo>/.opencode/skills/<skill>/scripts -> <repo>."""
     root = script_dir.resolve().parents[3]
-    if (root / 'deploy-package').exists():
+    if (root / '.opencode' / 'skills').is_dir():
         return root
     try:
         out = subprocess.check_output(
@@ -341,7 +341,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--pipeline', default='')
     parser.add_argument('--format', choices=['ascii', 'markdown', 'json'], default='ascii')
-    parser.add_argument('--source', choices=['live', 'deploy'], default='live')
+    parser.add_argument('--source', choices=['live', 'repo'], default='live')
     parser.add_argument('--agents-dir', default='')
     parser.add_argument('--no-models', action='store_true')
     parser.add_argument('--arch', default='')
@@ -375,8 +375,8 @@ def main():
         agents_dir = Path(args.agents_dir)
         if not agents_dir.is_absolute():
             agents_dir = root / agents_dir
-    elif args.source == 'deploy':
-        agents_dir = root / 'deploy-package' / 'agents'
+    elif args.source == 'repo':
+        agents_dir = root / 'agents'
     else:
         agents_dir = live_dir / 'agents'
     if not agents_dir.is_dir():

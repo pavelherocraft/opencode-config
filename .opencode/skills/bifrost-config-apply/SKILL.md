@@ -1,6 +1,6 @@
 ---
 name: bifrost-config-apply
-description: 'Apply user-pasted bifrost-litellm provider config (JSON) — diff vs current, per-model merge into opencode.json with JSON validation, sync to deploy-package/, SHA256 verify, conventional commit + push.'
+description: 'Apply user-pasted bifrost-litellm provider config (JSON) — diff vs current, per-model merge into live opencode.json with JSON validation, sync to the repo mirror (repo opencode.json), SHA256 verify, conventional commit + push.'
 ---
 
 # Bifrost Config Apply
@@ -32,10 +32,10 @@ These skills are project-level: invoke them from the repo root via
      `provider.bifrost-litellm.models` is rewritten; `agent`, `plugin`, `mcp`,
      `permission` and every other section are preserved
    - Write `~/.config/opencode/opencode.json` (merged JSON validated before replace)
-   - `Copy-Item` → `deploy-package/opencode.json`
+   - `Copy-Item` → repo `opencode.json` (mirror)
    - SHA256 verify identical
    - Generate conventional commit message from diff
-   - `git add deploy-package/opencode.json`
+   - `git add opencode.json`
    - `git commit -F <message>` (NOT push unless `-Push`)
 5. **Report**: model count, files changed, commit hash, push status
 
@@ -78,7 +78,7 @@ python .opencode/skills/bifrost-config-apply/scripts/apply.py --paste-json /path
 | Invalid JSON paste | BLOCK |
 | Paste missing `provider.bifrost-litellm.models` | BLOCK |
 | Secret pattern in paste (mirror git-commit gates) | BLOCK |
-| deploy-package/opencode.json missing | BLOCK |
+| repo opencode.json missing | BLOCK |
 | git identity (user.name/user.email) missing | BLOCK |
 | SHA256 mismatch after sync | BLOCK |
 
@@ -87,7 +87,7 @@ python .opencode/skills/bifrost-config-apply/scripts/apply.py --paste-json /path
 | Code | Meaning |
 |------|---------|
 | 0 | Success (or dry-run / no changes) |
-| 2 | Usage/environment error (missing args/files incl. missing deploy-package, diff failure incl. invalid JSON) |
+| 2 | Usage/environment error (missing args/files incl. missing repo opencode.json, diff failure incl. invalid JSON) |
 | 3 | Gate block (secret pattern, paste missing `provider.bifrost-litellm.models`, merge failure, merged JSON invalid, SHA256 mismatch, git identity/commit/push failure) |
 
 ## Hard rules
@@ -96,5 +96,5 @@ python .opencode/skills/bifrost-config-apply/scripts/apply.py --paste-json /path
 - Never overwrite non-model config sections (merge only `provider.bifrost-litellm.models`)
 - Never push without explicit `-Push` flag
 - Never edit user-level skills
-- Never modify deploy-package/ directly (only via sync)
+- Never modify the repo mirror directly (only via the post-apply sync from live)
 - Never force a git identity — use the user's configured `user.name`/`user.email`

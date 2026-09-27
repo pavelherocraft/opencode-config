@@ -5,7 +5,7 @@
 .DESCRIPTION
     Reads a JSON paste, diffs vs current opencode.json, applies a per-model
     merge (preserving every other config section), validates the merged JSON,
-    syncs to deploy-package/, verifies SHA256, generates a conventional commit
+    syncs to the repo mirror , verifies SHA256, generates a conventional commit
     message, commits (and optionally pushes).
 
 .PARAMETER PasteJson
@@ -70,13 +70,13 @@ $skillDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $skillDir)))
 
 # Fall back to git root detection if the relative layout does not resolve.
-if (-not (Test-Path -LiteralPath (Join-Path $repoRoot "deploy-package"))) {
+if (-not (Test-Path -LiteralPath (Join-Path $repoRoot '.opencode'))) {
     $gitRoot = Invoke-Native -FilePath "git" -Arguments @("-C", $skillDir, "rev-parse", "--show-toplevel")
     if ($LASTEXITCODE -eq 0 -and $gitRoot) { $repoRoot = ($gitRoot | Select-Object -First 1).Trim() }
 }
 
 $deployed = "$env:USERPROFILE\.config\opencode\opencode.json"
-$package = Join-Path $repoRoot "deploy-package\opencode.json"
+$package = Join-Path $repoRoot 'opencode.json'
 $diffScript = Join-Path $skillDir "diff.js"
 $tempDir = Join-Path $env:TEMP "opencode"
 $mergedTemp = Join-Path $tempDir "merged-opencode.json"
@@ -116,7 +116,7 @@ if (-not (Test-Path -LiteralPath $deployed)) {
 }
 
 if (-not (Test-Path -LiteralPath $package)) {
-    Write-Output "ERROR: deploy-package/opencode.json not found: $package"
+    Write-Output "ERROR: repo opencode.json not found: $package"
     exit 2
 }
 
@@ -187,7 +187,7 @@ try {
 Copy-Item -LiteralPath $mergedTemp -Destination $deployed -Force
 Write-Output "EDITED:deployed=$deployed"
 
-# --- Step 3: Sync to deploy-package --------------------------------------
+# --- Step 3: Sync to repo mirror -------------------------------------------
 Copy-Item -LiteralPath $deployed -Destination $package -Force
 Write-Output "SYNCED:package=$package"
 
@@ -223,7 +223,7 @@ if (-not (Test-Path -LiteralPath $tempDir)) {
 }
 $commitMsg | Set-Content -LiteralPath $commitMsgFile -Encoding UTF8
 
-Invoke-Native -FilePath "git" -Arguments @("-C", $repoRoot, "add", "deploy-package/opencode.json") | Out-Null
+Invoke-Native -FilePath "git" -Arguments @("-C", $repoRoot, "add", "opencode.json") | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Output "ERROR:git add failed"
     exit 3

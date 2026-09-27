@@ -7,7 +7,7 @@ role/tier, mode, flattened permissions, routing membership orch/plan/both/
 none) plus model-distribution and role-distribution summaries.
 
 Usage:
-    python report.py [--source live|deploy] [--format table|markdown|json]
+    python report.py [--source live|repo] [--format table|markdown|json]
                      [--agent NAME] [--role ROLE] [--model SUBSTR]
                      [--agents-dir DIR] [--arch PATH] [--config PATH]
 
@@ -56,7 +56,7 @@ def split_tokens(cell):
 def repo_root(script_dir):
     """<repo>/.opencode/skills/<skill>/scripts -> <repo>."""
     root = script_dir.resolve().parents[3]
-    if (root / 'deploy-package').exists():
+    if (root / '.opencode' / 'skills').is_dir():
         return root
     try:
         out = subprocess.check_output(
@@ -183,7 +183,7 @@ def format_agent_table(rows):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--source', choices=['live', 'deploy'], default='live')
+    parser.add_argument('--source', choices=['live', 'repo'], default='live')
     parser.add_argument('--format', choices=['table', 'markdown', 'json'], default='table')
     parser.add_argument('--agent', default='')
     parser.add_argument('--role', default='')
@@ -208,8 +208,8 @@ def main():
         agents_dir = Path(args.agents_dir)
         if not agents_dir.is_absolute():
             agents_dir = root / agents_dir
-    elif args.source == 'deploy':
-        agents_dir = root / 'deploy-package' / 'agents'
+    elif args.source == 'repo':
+        agents_dir = root / 'agents'
     else:
         agents_dir = live_dir / 'agents'
     if not agents_dir.is_dir():

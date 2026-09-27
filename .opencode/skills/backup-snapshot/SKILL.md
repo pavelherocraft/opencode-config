@@ -6,10 +6,10 @@ description: 'Pre-change snapshot of the live config — copies all live agent .
 # Backup Snapshot
 
 Deterministic point-in-time snapshot of the files that live OUTSIDE git
-(live agents, live opencode.json, live plugin, live docs) plus the root
-documentation — so any change (agent-add, agent-model-migrate, config-sync
--Apply -Reverse, manual plugin edits) can be rolled back. Copy + SHA256 only —
-no content parsing, no LLM.
+(live agents, live opencode.json, live plugin, live git-commit skill, live
+AGENTS.md) plus the canonical repo docs — so any change (agent-add,
+agent-model-migrate, config-sync restore, manual plugin edits) can be rolled
+back. Copy + SHA256 only — no content parsing, no LLM.
 
 These skills are project-level: invoke them from the repo root via
 `.opencode\skills\...` (not the user-level `~/.config/opencode/skills/...` root).
@@ -17,25 +17,25 @@ These skills are project-level: invoke them from the repo root via
 ## When to use
 
 - BEFORE any mutating skill/operation (agent-add, agent-model-migrate,
-  config-sync -Apply -Reverse, plugin upgrades) — recommended first step
+  config-sync restore, plugin upgrades) — recommended first step
 - Before risky manual edits of the live config
 - AFTER a change — `-Compare <snapshot>` shows exactly what the change touched
 - Auditing: prove the live config did not drift since a known point
 
 ## When NOT to use
 
-- Backing up git-recoverable files (deploy-package, repo scripts) — `-Full`
-  includes root docs only for snapshot self-sufficiency
+- Backing up git-recoverable files (repo mirror files) — `-Full`
+  includes the canonical repo docs only for snapshot self-sufficiency
 - Restoring files (copy back manually from the snapshot dir, or use
-  `config-sync -Apply -Reverse` for live<->deploy restoration)
+  `config-sync --restore` for repo→live restoration)
 - Syncing mirrors (use `config-sync`); integrity audit (use `integrity-check`)
 
 ## Modes
 
 | Mode | Scope | Files |
 |------|-------|-------|
-| `-Agents` (default) | live `agents/*.md` | ~38 |
-| `-Full` | live agents + live opencode.json + live plugins/workflow-enforcement.ts + live docs (AGENTS/ARCHITECTURE/MCP_SETUP/PLUGIN/REVIEW_CONTEXT .md) + repo root docs (ARCHITECTURE/AGENTS/PLUGIN/MCP_SETUP/REVIEW_CONTEXT/CHANGELOG .md) | ~50 |
+| `-Agents` (default) | live `agents/*.md` | ~40 |
+| `-Full` | live agents + live opencode.json + live plugins/workflow-enforcement.ts + live skills/git-commit/ + live docs (AGENTS, REVIEW_CONTEXT .md) + repo docs (ARCHITECTURE/REVIEW_CONTEXT/CHANGELOG/AGENTS.global .md) + repo opencode.json | ~50 |
 | `-Compare <dir>` | re-hash current state vs snapshot `<dir>` | — |
 
 ## Snapshot layout
@@ -46,8 +46,11 @@ backup/<yyyy-MM-dd_HHmmss>[_<label>]/
 │   ├── agents/*.md                       # both modes
 │   ├── opencode.json                     # Full only
 │   ├── plugins/workflow-enforcement.ts   # Full only
-│   └── docs/*.md                         # Full only (live doc copies)
-├── repo/docs/*.md                        # Full only (root documentation)
+│   ├── skills/git-commit/*               # Full only
+│   └── docs/*.md                         # Full only (AGENTS, REVIEW_CONTEXT)
+├── repo/
+│   ├── docs/*.md                         # Full only (ARCHITECTURE, REVIEW_CONTEXT, CHANGELOG, AGENTS.global)
+│   └── opencode.json                     # Full only (repo mirror)
 ├── HASHES.txt                            # <SHA256-UPPER>␣␣<rel/path> per copied file, sorted
 └── MANIFEST.json                         # mode, label, created_utc, status, per-file {src,rel,sha256,bytes}
 ```
@@ -65,7 +68,7 @@ backup/<yyyy-MM-dd_HHmmss>[_<label>]/
    failure -> exit 3
 4. **Report**: `SUMMARY:mode=<m> files=<n> bytes=<n> dest=<rel>` +
    `STATUS:SUCCESS`; WARN if the live agents count != `-ExpectedAgents`
-   (default 38 — informational, snapshot is still taken)
+   (default 40 — informational, snapshot is still taken)
 
 ### Compare
 
@@ -115,7 +118,7 @@ python .opencode/skills/backup-snapshot/scripts/snapshot.py --compare backup/202
 | `-Dest <dir>` | explicit snapshot dir (must not exist; relative -> repo root) |
 | `-Compare <dir>` | compare mode: current state vs an existing snapshot |
 | `-Strict` | with -Compare: differences (changed/missing/new/corrupt) -> exit 3 |
-| `-ExpectedAgents <n>` | informational WARN threshold (default 38) |
+| `-ExpectedAgents <n>` | informational WARN threshold (default 40) |
 | `-Json` | JSON report instead of token lines |
 
 ## Gates
@@ -148,8 +151,7 @@ python .opencode/skills/backup-snapshot/scripts/snapshot.py --compare backup/202
 - HASHES.txt format: `<SHA256-UPPER>␣␣<rel/path>` (two spaces, forward slashes,
   sorted, LF) — stable for diffing between snapshots
 - Snapshots live in repo `backup/`; the skill never runs git
-- Live doc copies (~/.config/opencode/*.md) are included in -Full despite known
-  pre-existing drift — a snapshot must capture reality as-is
+- Live doc copies are snapshotted as-is (a snapshot must capture reality)
 - -Compare never re-creates or repairs anything — report only
 - NEW detection covers the agents scope only (documented limitation)
 - Never edit user-level skills
