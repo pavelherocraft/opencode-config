@@ -136,7 +136,7 @@ try {
             $sens = Test-SensitiveName ($f -replace '\\', '/')
             if ($sens) { Block ("sensitive filename: $f (matches $sens)") }
         }
-        $stagedDiff = git diff --cached
+        $stagedDiff = (git diff --cached) -join "`n"
         foreach ($hit in (Find-Secrets $stagedDiff)) { Block ("secret pattern in staged diff: $hit") }
         if ($stagedDiff -match '(?m)^(<{7}|>{7}) ') { Block 'conflict markers in staged diff' }
         Write-Output '=== END ANALYZE ==='
@@ -177,7 +177,7 @@ try {
         if ($size -and $size -gt 5MB) { Warn ("large staged file: {0} = {1:N1} MB" -f $f, ($size / 1MB)) }
     }
 
-    $diff = git diff --cached
+    $diff = (git diff --cached) -join "`n"
     if ($diff.Length -gt 200000) { $diff = $diff.Substring(0, 200000); Warn 'staged diff truncated at 200k chars for scanning' }
     foreach ($hit in (Find-Secrets $diff)) { Block ("secret pattern in staged diff: $hit") }
     if ($diff -match '(?m)^(<{7}|>{7}) ') { Block 'conflict markers in staged diff' }
