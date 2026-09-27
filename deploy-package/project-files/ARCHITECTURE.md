@@ -4,7 +4,7 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 
 ## 1. Routing Tables
 
-### orchestrator Whitelist (26 agents)
+### orchestrator Whitelist (28 agents)
 
 | # | Agent Name | Role |
 |---|------------|------|
@@ -29,11 +29,13 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 | 19 | consistency-checker | Architecture consistency validation |
 | 20 | view-image | Image analysis |
 | 21 | docs-planner | Documentation planning (DOCS DEEP) |
-| 22 | generate-image | Image generation (Gemini) |
-| 23 | generate-image-gpt | Image generation (GPT/DALL-E) |
+| 22 | image-creator | Image creation (MCP media: generation + editing) |
+| 23 | video-generator | Video generation (MCP media: MiniMax Hailuo, async) |
 | 24 | git-commit | Gated conventional git commits |
 | 25 | advisor | Step-boundary advisory reviewer (severity-tagged, read-only) |
-| 26 | voice-synthesizer | Voice synthesis (TTS) |
+| 26 | voice-synthesizer | Voice synthesis (TTS, MCP media) |
+| 27 | voice-transcriber | Speech-to-text (MCP media ASR) |
+| 28 | voice-clone | Voice cloning TTS (MCP media) |
 
 ### plankestrator Whitelist (10 agents)
 
@@ -54,15 +56,15 @@ This file is the single source of truth for the OpenCode dual-primary-agent arch
 
 | Primary Agent | Whitelist Count | Total (primary + whitelist) |
 |---------------|-----------------|-----------------------------|
-| orchestrator | 26 | 27 (orchestrator + 26 subagents) |
+| orchestrator | 28 | 29 (orchestrator + 28 subagents) |
 | plankestrator | 10 | 11 (plankestrator + 10 subagents) |
-| **Grand Total** | **36** | **38** |
+| **Grand Total** | **38** | **40** |
 
-Note: 36 whitelist entries (view-image shared by both primaries) = 35 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 36 unique subagents + 2 primary agents = 38 unique agents total.
+Note: 38 whitelist entries (view-image shared by both primaries) = 37 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 38 unique subagents + 2 primary agents = 40 unique agents total.
 
 ### Shared Utility Agents
 
-view-image is a shared utility agent available to BOTH primary agents. It is listed in BOTH routing tables (orchestrator: position 20 of 26; plankestrator: position 10 of 10) and granted `task.view-image: allow` in both permission blocks in opencode.json. It is used for image analysis (screenshots, diagrams, error images) via the Task tool.
+view-image is a shared utility agent available to BOTH primary agents. It is listed in BOTH routing tables (orchestrator: position 20 of 28; plankestrator: position 10 of 10) and granted `task.view-image: allow` in both permission blocks in opencode.json. It is used for image analysis (screenshots, diagrams, error images) via the Task tool.
 
 ## Subagent Models
 
@@ -99,26 +101,29 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | research-reviewer | bifrost-litellm/GLM-5.3 (res) |
 | devops-readonly | bifrost-litellm/MiniMax-M3 |
 | git-commit | bifrost-litellm/MiniMax-M3 |
-| generate-image | bifrost-litellm/mimo-v2.5 |
-| generate-image-gpt | bifrost-litellm/mimo-v2.5 |
+| image-creator | bifrost-litellm/MiniMax-M3 |
+| video-generator | bifrost-litellm/MiniMax-M3 |
 | view-image | bifrost-litellm/MiniMax-M3 |
 | scout | bifrost-litellm/mimo-v2.5 |
 | voice-synthesizer | bifrost-litellm/MiniMax-M3 |
+| voice-transcriber | bifrost-litellm/MiniMax-M3 |
+| voice-clone | bifrost-litellm/MiniMax-M3 |
 
 Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3.7-plus` and are documented in §Identity Lock Mechanism (v3), item 5 — not duplicated in the Subagent Models table.
 
-### Skill-only models
+### Media models (via media MCP — not agent LLMs)
 
 | Model | Provider | Agents | Usage |
 |-------|----------|--------|-------|
-| voice/xiaomi/mimo-v2.5-tts | bifrost-litellm | 0 | Used by audio-synthesize skill (not agent model) |
-| voice/xiaomi/mimo-v2.5-asr | bifrost-litellm | 0 | Used by audio-transcribe skill (speech-to-text) |
-| voice/xiaomi/mimo-v2.5-tts-voiceclone | bifrost-litellm | 0 | Used by audio-synthesize skill (voice cloning) |
-| voice/xiaomi/mimo-v2.5-tts-voicedesign | bifrost-litellm | 0 | Used by audio-synthesize skill (voice design) |
+| voice/xiaomi/mimo-v2.5-tts | bifrost-litellm | 0 | Via media MCP — voice-synthesizer (preset-voice TTS) |
+| voice/xiaomi/mimo-v2.5-asr | bifrost-litellm | 0 | Via media MCP — voice-transcriber (speech-to-text) |
+| voice/xiaomi/mimo-v2.5-tts-voiceclone | bifrost-litellm | 0 | Via media MCP — voice-clone (voice cloning) |
+| voice/xiaomi/mimo-v2.5-tts-voicedesign | bifrost-litellm | 0 | Via media MCP — voice-synthesizer (VoiceDesign mode) |
+| minimax/speech-2.8-hd | bifrost-litellm | 0 | Via media MCP — voice-synthesizer (MiniMax system voices) |
 
 ## Model Roles (v5 — single source of truth, OMP model-roles analog)
 
-Роли централизуют назначение моделей 38 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Check 11), (3) документации. Квота-aware fallback-цепочки — платформенное требование (см. `PLAN_LLM_FALLBACK.md`; статус: НЕ реализовано, требует поддержки рантайма/proxy).
+Роли централизуют назначение моделей 40 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Check 11), (3) документации. Квота-aware fallback-цепочки — платформенное требование (см. `PLAN_LLM_FALLBACK.md`; статус: НЕ реализовано, требует поддержки рантайма/proxy).
 
 | Role | Model | Tier | Agents |
 |------|-------|------|--------|
@@ -135,13 +140,13 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | triage-flash | bifrost-litellm/openrouter/deepseek-v4.1-flash | low | bugfix-triage |
 | advisory | bifrost-litellm/tencent/Hy4 | mid | advisor |
 | executor-strong | bifrost-litellm/GLM-5.3 (res) | mid | dev-professor |
-| executor-cheap | bifrost-litellm/MiniMax-M3 | low | execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image, git-commit, voice-synthesizer |
+| executor-cheap | bifrost-litellm/MiniMax-M3 | low | execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image, git-commit, voice-synthesizer, image-creator, video-generator, voice-transcriber, voice-clone |
 | executor-step5 | bifrost-litellm/stepfun/step-5-preview | low | worker |
 | docs | bifrost-litellm/xiaomi/mimo-v2.6-pro | low | docs-writer, research-writer-simple |
 | docs-plan | bifrost-litellm/openrouter/deepseek-v4.1-flash | low | docs-planner |
-| micro | bifrost-litellm/mimo-v2.5 | low | generate-image, generate-image-gpt, scout |
+| micro | bifrost-litellm/mimo-v2.5 | low | scout |
 
-Контроль суммы: 2 primary + 36 subagents = 38 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.
+Контроль суммы: 2 primary + 38 subagents = 40 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.
 
 **Правила:**
 1. **Prewalk-принцип (OMP):** в паре planner→executor роль planner'а ДОЛЖНА быть tier ≥ executor'а: plan-bug (plan-flash, mid) → execute-bug (executor-cheap, low); dev-planner (plan-strong, top) → dev-professor (executor-strong, mid); docs-planner (docs-plan, low) → docs-writer (docs, low). Инверсия запрещена.
@@ -629,7 +634,7 @@ Writer subagents that write their work product to a file MUST report a file poin
 
 ## 4. MCP Servers
 
-All MCP servers are configured in `opencode.json` under the `mcp` section. Three Z.AI servers are proxied through Bifrost LiteLLM.
+All MCP servers are configured in `opencode.json` under the `mcp` section. Three Z.AI servers and the media server are proxied through Bifrost LiteLLM.
 
 | Server Name | MCP Tool Prefix | Purpose |
 |-------------|-----------------|---------|
@@ -638,16 +643,18 @@ All MCP servers are configured in `opencode.json` under the `mcp` section. Three
 | zai_web_reader | `zai_web_reader_` | URL content reading: `zai_web_reader_webReader` |
 | serena | `serena_` | Code symbol operations: `find_symbol`, `rename_symbol`, etc. |
 | unity-mcp | `unity-mcp.*` | Unity Editor operations: `manage_gameobject`, `manage_scene`, etc. |
+| media | `media_` | Media generation (remote via Bifrost): `media_media-generate_image`, `media_media-edit_image`, `media_media-generate_video`, `media_media-video_status`, `media_media-synthesize_speech`, `media_media-clone_speech`, `media_media-transcribe_audio`, `media_media-list_media_models` — consumed by image-creator, video-generator, voice-synthesizer, voice-clone, voice-transcriber |
 
 ### Usage Rules
 
 - Use `zai_web_search` for all web searches — do NOT use `webfetch`
 - Use `zai_web_reader` for reading URL content — do NOT use `webfetch`
 - Use `zai_zread` tools for GitHub repositories — do NOT use `webfetch` or manual browsing
+- Use `media` MCP tools for image/video/audio generation and transcription — media agents: image-creator, video-generator, voice-synthesizer, voice-clone, voice-transcriber (all return hosted URLs, TTL 24 h — never base64 in context)
 
 ### MCP Proxy Architecture
 
-All three Z.AI MCP servers (`zai_zread`, `zai_web_search`, `zai_web_reader`) are routed through Bifrost LiteLLM at `https://hcbifrost.herocraft.com/litellm/`. Authentication uses a single `LITELLM_API_KEY` environment variable shared with the LLM provider.
+All three Z.AI MCP servers (`zai_zread`, `zai_web_search`, `zai_web_reader`) are routed through Bifrost LiteLLM at `https://hcbifrost.herocraft.com/litellm/`. Authentication uses a single `LITELLM_API_KEY` environment variable shared with the LLM provider. The `media` server is likewise remote via Bifrost (`https://hcbifrost.herocraft.com/litellm/media/mcp`) with the same `LITELLM_API_KEY`.
 
 ### Serena MCP Rules
 
@@ -693,7 +700,7 @@ All three Z.AI MCP servers (`zai_zread`, `zai_web_search`, `zai_web_reader`) are
 
 ## unity-mcp Permissions
 
-### ALL Agents Have unity-mcp Access (exceptions: scout, advisor, voice-synthesizer)
+### ALL Agents Have unity-mcp Access (exceptions: scout, advisor, voice-synthesizer, image-creator, video-generator, voice-transcriber, voice-clone)
 
 unity-mcp is available for ALL agents, not just orchestrator and plankestrator.
 
@@ -708,6 +715,7 @@ unity-mcp is available for ALL agents, not just orchestrator and plankestrator.
 | Planning agents | `unity-mcp.*: allow` | plan-writer-*, plan-reviewer-*, research-writer-*, research-reviewer plan Unity features |
 | Read-only agents | `unity-mcp.*: allow` | devops-readonly reads Unity DevOps info |
 | Advisory agent | ❌ deny | advisor is strictly read-only (read/grep/glob + read-only serena); unity-mcp tools are mutating — excluded like scout |
+| Media agents | ❌ deny | image-creator, video-generator, voice-synthesizer, voice-clone, voice-transcriber work exclusively through the media MCP server — unity-mcp and all other MCP servers are denied in their frontmatter and opencode.json entries |
 
 ### unity-mcp Tools Available
 
@@ -791,6 +799,9 @@ These terms must NOT appear in any agent .md files, plugin code, or configuratio
 | `ensemble` | REMOVE | Use `pipeline` or `workflow` |
 | `team_*` (any team-prefixed name) | REMOVE | No replacement — legacy concept |
 | `4747` | REMOVE | No replacement — debug artifact |
+| `generate-image` / `generate-image-gpt` | REMOVE | Use `image-creator` (media MCP) |
+| `audio-synthesize` / `audio-transcribe` skills | REMOVE | Use media MCP tools via voice-synthesizer / voice-clone / voice-transcriber |
+| `image-gen` skill | REMOVE | Use `media_media-generate_image` / `media_media-edit_image` |
 
 ## 7. Primary Agent Roles
 

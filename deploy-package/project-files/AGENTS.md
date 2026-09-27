@@ -182,7 +182,7 @@ The consistency-checker agent reads ARCHITECTURE.md to validate all configuratio
 
 ## Model Roles
 
-Назначение моделей всем 38 агентам централизовано в ARCHITECTURE.md §Model Roles (единственный источник правды; frontmatter `model:` литерален — рантайм не поддерживает алиасы). Prewalk-принцип: tier(planner) ≥ tier(executor). Валидация — consistency-checker Check 11. Смена модели = 4 синхронных места (roles table, frontmatter, Subagent Models, MCP_SETUP Distribution).
+Назначение моделей всем 40 агентам централизовано в ARCHITECTURE.md §Model Roles (единственный источник правды; frontmatter `model:` литерален — рантайм не поддерживает алиасы). Prewalk-принцип: tier(planner) ≥ tier(executor). Валидация — consistency-checker Check 11. Смена модели = 4 синхронных места (roles table, frontmatter, Subagent Models, MCP_SETUP Distribution).
 
 ## Dual Primary Agents Architecture
 
@@ -218,7 +218,7 @@ Handles planning and research tasks:
 
 ## Routing Tables
 
-### orchestrator Whitelist (26 agents)
+### orchestrator Whitelist (28 agents)
 
 | Agent Name | Role |
 |------------|------|
@@ -243,11 +243,13 @@ Handles planning and research tasks:
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
 | docs-planner | Documentation planning (DOCS DEEP) |
-| generate-image | Image generation (Gemini) |
-| generate-image-gpt | Image generation (GPT/DALL-E) |
+| image-creator | Image creation (MCP media: generation + editing) |
+| video-generator | Video generation (MCP media: MiniMax Hailuo, async) |
 | git-commit | Gated conventional git commits |
 | advisor | Step-boundary advisory reviewer (severity-tagged, read-only) |
-| voice-synthesizer | Voice synthesis (TTS) |
+| voice-synthesizer | Voice synthesis (TTS, MCP media) |
+| voice-transcriber | Speech-to-text (MCP media ASR) |
+| voice-clone | Voice cloning TTS (MCP media) |
 
 ### plankestrator Whitelist (10 agents)
 

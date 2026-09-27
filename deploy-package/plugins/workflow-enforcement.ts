@@ -26,11 +26,13 @@ const ROUTING_TABLES = {
     "consistency-checker",
     "view-image",
     "docs-planner",
-    "generate-image",
-    "generate-image-gpt",
+    "image-creator",
+    "video-generator",
     "git-commit",
     "advisor",
-    "voice-synthesizer"
+    "voice-synthesizer",
+    "voice-transcriber",
+    "voice-clone"
   ],
   plankestrator: [
     "plankestrator-identity-probe",

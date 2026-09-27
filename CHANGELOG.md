@@ -9,10 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **voice-synthesizer: миграция со скилла audio-synthesize на media MCP** (media_media-synthesize_speech; 3 TTS-модели — MiMo TTS, MiMo VoiceDesign, MiniMax Speech-2.8-HD; 17 голосов; style-инструкции; audio-теги; wav/mp3; режим клонирования вынесен в отдельный агент voice-clone; permissions ужаты — bash/write/read denied)
 - **voice-synthesizer: TTS-модель заменена на доступную LLM (bifrost-litellm/MiniMax-M3)**: каталожная модель `bifrost-litellm/voice/xiaomi/mimo-v2.5-tts` недоступна через bifrost-litellm (`Param Incorrect`) — TTS-модели работают через специализированный TTS API, а не как обычные LLM. voice-synthesizer стал LLM-агентом (MiniMax-M3, tier executor-cheap), оркестрирующим skill audio-synthesize через bash (TTS-модели вызываются только скриптами скилла). Синхронно: frontmatter voice-synthesizer.md (live + deploy) + IMPORTANT-инструкция; ARCHITECTURE.md ×4 (Subagent Models, Model Roles: executor-cheap +voice-synthesizer, роль voice-synth удалена); MCP_SETUP.md ×3 (Models Distribution: MiniMax-M3 10→11, строка voice/xiaomi/mimo-v2.5-tts удалена; Subagents Full Table; Models 11→10); opencode.json ×2 (секция provider `voice/xiaomi/mimo-v2.5-tts` удалена; asr/voiceclone/voicedesign сохранены для скилла); pipelines_and_models.md (11→10 моделей); integrity-check (ExpectedModels 11→10). Restart required.
 
 ### Added
 
+- **image-creator** agent (media MCP: generate_image/edit_image; объединяет generate-image + generate-image-gpt; 7 gen + 7 edit моделей — Gemini Flash/Pro, GPT Image 1.5/2/2.5-sunburst/2.5-flare, MiniMax image-01; dialog-выбор модели, aspect ratio, chaining generate→edit→video)
+- **video-generator** agent (media MCP: generate_video/video_status; MiniMax Hailuo 2.3/02, T2V-01; async-поллинг task_id; 5/6/10 с; 768P/1080P; image-to-video через first_frame_url)
+- **voice-transcriber** agent (media MCP: transcribe_audio; ASR zh/en auto-detect, диалекты, code-switch, песни, шум, multi-speaker)
+- **voice-clone** agent (media MCP: clone_speech; voice/xiaomi/mimo-v2.5-tts-voiceclone; sample — URL/upload:<name>/base64, wav/mp3 ≤10 МБ)
+- **media MCP server** задокументирован: ARCHITECTURE.md §4 (таблица серверов + proxy), MCP_SETUP.md §11 (полный блок с 8 инструментами)
+- orchestrator whitelist: 26 → 28 агентов (image-creator, video-generator, voice-transcriber, voice-clone)
+- Total agents: 38 → 40; subagents: 36 → 38
 - **audio-transcribe** skill: speech-to-text via MiMo-V2.5-ASR (Chinese/English, dialects, code-switch, song recognition, noisy environments, multi-speaker)
 - **audio-synthesize** skill updates: voice table (9 voices), limitations documentation, WAV/10MB validation for voice clone
 - **voice-synthesizer** agent (MiMo-V2.5-TTS: standard/clone/design modes)
@@ -191,6 +199,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`plugins/package.json`**: added `"type": "module"` to silence Node.js
   `[MODULE_TYPELESS_PACKAGE_JSON]` warning emitted by
   `workflow-enforcement.ts` (was being reparsed as ES module on every load).
+
+### Removed
+
+- **Агенты generate-image, generate-image-gpt** — заменены объединённым image-creator (media MCP вместо скилла image-gen)
+- **Скиллы audio-synthesize, audio-transcribe** (`.opencode/skills/` + `~/.config/opencode/skills/`) — заменены media MCP (voice-synthesizer / voice-clone / voice-transcriber)
+- **Скилл image-gen** (`~/.config/opencode/skills/` + `skills/`) — заменён media MCP (image-creator: generate_image/edit_image)
 
 ### Fixed
 

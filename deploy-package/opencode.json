@@ -1111,32 +1111,135 @@
       "temperature": 0.3,
       "permission": {
         "edit": "deny",
-        "write": "allow",
-        "bash": "allow",
-        "read": "allow",
-        "glob": "allow",
-        "grep": "allow",
+        "write": "deny",
+        "bash": "deny",
+        "read": "deny",
+        "glob": "deny",
+        "grep": "deny",
+        "webfetch": "deny",
+        "patch": "deny",
+        "todowrite": "deny",
+        "question": "deny",
         "task": {
           "*": "deny"
-        }
+        },
+        "serena.*": "deny",
+        "unity-mcp.*": "deny",
+        "zread.*": "deny",
+        "webSearchPrime.*": "deny",
+        "webReader.*": "deny",
+        "zai-mcp-server.*": "deny",
+        "media.*": "allow"
       },
       "options": {}
     },
-    "generate-image": {
+    "image-creator": {
+      "mode": "subagent",
+      "temperature": 0.3,
       "permission": {
-        "skill": {
-          "*": "deny",
-          "image-gen": "allow"
-        }
-      }
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "read": "deny",
+        "glob": "deny",
+        "grep": "deny",
+        "webfetch": "deny",
+        "patch": "deny",
+        "todowrite": "deny",
+        "question": "deny",
+        "task": {
+          "*": "deny"
+        },
+        "serena.*": "deny",
+        "unity-mcp.*": "deny",
+        "zread.*": "deny",
+        "webSearchPrime.*": "deny",
+        "webReader.*": "deny",
+        "zai-mcp-server.*": "deny",
+        "media.*": "allow"
+      },
+      "options": {}
     },
-    "generate-image-gpt": {
+    "video-generator": {
+      "mode": "subagent",
+      "temperature": 0.3,
       "permission": {
-        "skill": {
-          "*": "deny",
-          "image-gen": "allow"
-        }
-      }
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "read": "deny",
+        "glob": "deny",
+        "grep": "deny",
+        "webfetch": "deny",
+        "patch": "deny",
+        "todowrite": "deny",
+        "question": "deny",
+        "task": {
+          "*": "deny"
+        },
+        "serena.*": "deny",
+        "unity-mcp.*": "deny",
+        "zread.*": "deny",
+        "webSearchPrime.*": "deny",
+        "webReader.*": "deny",
+        "zai-mcp-server.*": "deny",
+        "media.*": "allow"
+      },
+      "options": {}
+    },
+    "voice-transcriber": {
+      "mode": "subagent",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "read": "deny",
+        "glob": "deny",
+        "grep": "deny",
+        "webfetch": "deny",
+        "patch": "deny",
+        "todowrite": "deny",
+        "question": "deny",
+        "task": {
+          "*": "deny"
+        },
+        "serena.*": "deny",
+        "unity-mcp.*": "deny",
+        "zread.*": "deny",
+        "webSearchPrime.*": "deny",
+        "webReader.*": "deny",
+        "zai-mcp-server.*": "deny",
+        "media.*": "allow"
+      },
+      "options": {}
+    },
+    "voice-clone": {
+      "mode": "subagent",
+      "temperature": 0.3,
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "read": "deny",
+        "glob": "deny",
+        "grep": "deny",
+        "webfetch": "deny",
+        "patch": "deny",
+        "todowrite": "deny",
+        "question": "deny",
+        "task": {
+          "*": "deny"
+        },
+        "serena.*": "deny",
+        "unity-mcp.*": "deny",
+        "zread.*": "deny",
+        "webSearchPrime.*": "deny",
+        "webReader.*": "deny",
+        "zai-mcp-server.*": "deny",
+        "media.*": "allow"
+      },
+      "options": {}
     },
     "git-commit": {
       "permission": {
@@ -1598,11 +1701,13 @@
           "consistency-checker": "allow",
           "view-image": "allow",
           "docs-planner": "allow",
-          "generate-image": "allow",
-          "generate-image-gpt": "allow",
+          "image-creator": "allow",
+          "video-generator": "allow",
           "git-commit": "allow",
           "advisor": "allow",
-          "voice-synthesizer": "allow"
+          "voice-synthesizer": "allow",
+          "voice-transcriber": "allow",
+          "voice-clone": "allow"
         }
       },
       "options": {}

@@ -127,7 +127,7 @@ The plugin implements 3 top-level hooks (plus internal event handling):
 
 ## 4. Routing Tables
 
-### orchestrator Whitelist (26 agents)
+### orchestrator Whitelist (28 agents)
 
 orchestrator can only call these agents:
 
@@ -154,11 +154,13 @@ orchestrator can only call these agents:
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
 | docs-planner | Documentation planning (DOCS DEEP) |
-| generate-image | Image generation (Gemini) |
-| generate-image-gpt | Image generation (GPT/DALL-E) |
+| image-creator | Image creation (MCP media: generation + editing) |
+| video-generator | Video generation (MCP media: MiniMax Hailuo, async) |
 | git-commit | Gated conventional git commits |
 | advisor | Step-boundary advisory reviewer (severity-tagged, read-only) |
-| voice-synthesizer | Voice synthesis (TTS) |
+| voice-synthesizer | Voice synthesis (TTS, MCP media) |
+| voice-transcriber | Speech-to-text (MCP media ASR) |
+| voice-clone | Voice cloning TTS (MCP media) |
 
 ### plankestrator Whitelist (10 agents)
 
@@ -203,11 +205,13 @@ const ROUTING_TABLES = {
     'consistency-checker',
     'view-image',
     'docs-planner',
-    'generate-image',
-    'generate-image-gpt',
+    'image-creator',
+    'video-generator',
     'git-commit',
     'advisor',
-    'voice-synthesizer'
+    'voice-synthesizer',
+    'voice-transcriber',
+    'voice-clone'
   ],
   plankestrator: [
     'plankestrator-identity-probe',
@@ -1023,11 +1027,13 @@ const ROUTING_TABLES = {
     'consistency-checker',
     'view-image',
     'docs-planner',
-    'generate-image',
-    'generate-image-gpt',
+    'image-creator',
+    'video-generator',
     'git-commit',
     'advisor',
-    'voice-synthesizer'
+    'voice-synthesizer',
+    'voice-transcriber',
+    'voice-clone'
   ],
   plankestrator: [
     'plankestrator-identity-probe',

@@ -10,7 +10,7 @@
 2. [Prerequisites](#2-prerequisites)
 3. [Installation Steps](#3-installation-steps)
 4. [opencode.json — Full Configuration](#4-opencodejson--full-configuration)
-5. [Agent Definitions — All 38 Agents](#5-agent-definitions--all-38-agents)
+5. [Agent Definitions — All 40 Agents](#5-agent-definitions--all-40-agents)
 6. [Routing Tables](#6-routing-tables)
 7. [Pipelines](#7-pipelines)
 8. [ARCHITECTURE.md Integration](#8-architecturemd-integration)
@@ -40,31 +40,32 @@ OpenCode использует архитектуру с двумя primary-аг�
 | Category | Count |
 |----------|-------|
 | Primary agents | 2 |
-| Subagents | 36 |
-| **Total unique agents** | **38** |
+| Subagents | 38 |
+| **Total unique agents** | **40** |
 
 ### Models Distribution
 
 | Model | Provider | Agents Count | Agents |
 |-------|----------|--------------|-------|
 | `QWEN3.7-plus` | bifrost-litellm | 6 | orchestrator, plankestrator, orchestrator-identity-probe, plankestrator-identity-probe, bugfix, plan-writer-simple |
-| `MiniMax-M3` | bifrost-litellm | 11 | execute-bug, devops-agent, devops-readonly, view-image, utility, mcp-github, mcp-read, mcp-search, summarizer, git-commit, voice-synthesizer |
+| `MiniMax-M3` | bifrost-litellm | 15 | execute-bug, devops-agent, devops-readonly, view-image, utility, mcp-github, mcp-read, mcp-search, summarizer, git-commit, voice-synthesizer, image-creator, video-generator, voice-transcriber, voice-clone |
 | `stepfun/step-5-preview` | bifrost-litellm | 1 | worker |
 | `GLM-5.3 (res)` | bifrost-litellm | 4 | dev-professor, plan-reviewer-simple, research-reviewer, plan-bug |
 | `Kimi K3` | bifrost-litellm | 3 | dev-reviewer, plan-reviewer-complex, research-writer-complex |
-| `mimo-v2.5` | bifrost-litellm | 3 | generate-image, generate-image-gpt, scout |
+| `mimo-v2.5` | bifrost-litellm | 1 | scout |
 | `qwen3.8-max` | bifrost-litellm | 3 | dev-planner, devops-reviewer, plan-writer-complex |
 | `xiaomi/mimo-v2.6-pro` | bifrost-litellm | 3 | consistency-checker, docs-writer, research-writer-simple |
 | `openrouter/deepseek-v4.1-flash` | bifrost-litellm | 3 | bugfix-triage, docs-planner, rework |
 | `tencent/Hy4` | bifrost-litellm | 1 | advisor |
 
-> **Skill-only models (0 агентов, used by skills, not agents):**
-> - `voice/xiaomi/mimo-v2.5-tts` → `audio-synthesize` (standard TTS)
-> - `voice/xiaomi/mimo-v2.5-tts-voiceclone` → `audio-synthesize` (voice cloning)
-> - `voice/xiaomi/mimo-v2.5-tts-voicedesign` → `audio-synthesize` (voice design)
-> - `voice/xiaomi/mimo-v2.5-asr` → `audio-transcribe` (speech-to-text)
+> **Media models (0 LLM-агентов — вызываются через media MCP, не являются моделями агентов):**
+> - `voice/xiaomi/mimo-v2.5-tts` → media MCP — `voice-synthesizer` (standard TTS, preset voices)
+> - `voice/xiaomi/mimo-v2.5-tts-voiceclone` → media MCP — `voice-clone` (voice cloning)
+> - `voice/xiaomi/mimo-v2.5-tts-voicedesign` → media MCP — `voice-synthesizer` (voice design)
+> - `voice/xiaomi/mimo-v2.5-asr` → media MCP — `voice-transcriber` (speech-to-text)
+> - `minimax/speech-2.8-hd` → media MCP — `voice-synthesizer` (MiniMax system voices)
 >
-> Все — bifrost-litellm, не модели агентов: вызываются скриптами скиллов. В счётчик Models Distribution (10 моделей агентов) не входят.
+> Все — bifrost-litellm, не модели агентов: вызываются инструментами media MCP-сервера (remote, `https://hcbifrost.herocraft.com/litellm/media/mcp`). В счётчик Models Distribution (10 моделей агентов) не входят.
 
 ### MCP Servers
 
@@ -75,6 +76,7 @@ OpenCode использует архитектуру с двумя primary-аг�
 | zai_web_reader | Remote (Bifrost) | URL content reading |
 | serena | Local | Code symbol operations |
 | unity-mcp | Remote (localhost) | Unity Editor operations |
+| media | Remote (Bifrost) | Media generation (image/video/audio) |
 
 **Note:** All Z.AI MCP servers (`zai_zread`, `zai_web_search`, `zai_web_reader`) are proxied through Bifrost LiteLLM at `https://hcbifrost.herocraft.com/litellm/`. Authentication uses a single `LITELLM_API_KEY` environment variable.
 
@@ -279,7 +281,7 @@ Copy-Item "agents\*.md" "$env:USERPROFILE\.config\opencode\agents\" -Force
 
 ---
 
-## 5. Agent Definitions — All 38 Agents
+## 5. Agent Definitions — All 40 Agents
 
 ### Primary Agents
 
@@ -378,8 +380,8 @@ DO NOT call execute-bug without this prefix. execute-bug MUST read bug_plan.md b
 | serena_* | allow | Все Serena инструменты |
 | task | { "*": "deny", ... } | Whitelist ниже |
 
-**Task Whitelist (26 agents):**
-orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bugfix, rework, mcp-read, utility, bugfix-triage, plan-bug, devops-agent, devops-reviewer, dev-planner, mcp-search, docs-writer, summarizer, execute-bug, consistency-checker, view-image, docs-planner, generate-image, generate-image-gpt, git-commit, advisor, voice-synthesizer
+**Task Whitelist (28 agents):**
+orchestrator-identity-probe, dev-reviewer, dev-professor, mcp-github, worker, bugfix, rework, mcp-read, utility, bugfix-triage, plan-bug, devops-agent, devops-reviewer, dev-planner, mcp-search, docs-writer, summarizer, execute-bug, consistency-checker, view-image, docs-planner, image-creator, video-generator, git-commit, advisor, voice-synthesizer, voice-transcriber, voice-clone
 
 #### plankestrator
 
@@ -440,11 +442,13 @@ plankestrator-identity-probe, plan-writer-simple, plan-writer-complex, plan-revi
 | **consistency-checker** | subagent | bifrost-litellm/xiaomi/mimo-v2.6-pro | 0.1 | allow | - | allow | deny | dev-reviewer, utility, view-image |
 | **view-image** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | deny | **NO MCP servers** |
 | **git-commit** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | allow | **allow** | - | Only agent allowed to run git commit/push (gated via git-commit skill) |
-| **generate-image** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (default Gemini image model); git commit/push denied |
-| **generate-image-gpt** | subagent | bifrost-litellm/mimo-v2.5 | 0.5 | deny | deny | deny | **allow** | - | Delegates to image-gen skill (GPT/DALL-E path, on explicit user request only); git commit/push denied |
+| **image-creator** | subagent | bifrost-litellm/MiniMax-M3 | 0.3 | deny | deny | deny | deny | – | Image generation/editing via media MCP (7 gen + 7 edit models, dialog model selection, aspect ratio, chaining); only media.* MCP allowed |
+| **video-generator** | subagent | bifrost-litellm/MiniMax-M3 | 0.3 | deny | deny | deny | deny | – | Async video via media MCP (Hailuo 2.3/02, T2V-01; 5/6/10 s; 768P/1080P; first-frame i2v); polls video_status; only media.* MCP allowed |
 | **scout** | subagent | bifrost-litellm/mimo-v2.5 | 0.1 | deny | deny | allow | deny | – | Local FS recon: read/glob/grep only; task: deny; no opencode.json section (frontmatter-only); never a pipeline step |
 | **advisor** | subagent | bifrost-litellm/tencent/Hy4 | 0.1 | deny | deny | allow | deny | – | Step-boundary advisory reviewer (DEV COMPLEX, BUGFIX DEEP); read-only (read/grep/glob + read-only serena); severity-tagged notes; unity-mcp deny |
-| **voice-synthesizer** | subagent | bifrost-litellm/MiniMax-M3 | 0.3 | deny | **allow** | allow | **allow** | – | TTS via audio-synthesize skill (standard/clone/design modes); edit denied, task deny |
+| **voice-synthesizer** | subagent | bifrost-litellm/MiniMax-M3 | 0.3 | deny | deny | deny | deny | – | TTS via media MCP (MiMo TTS + VoiceDesign + MiniMax Speech-2.8-HD; 17 voices; styles; audio tags; wav/mp3); cloning moved to voice-clone; only media.* MCP allowed |
+| **voice-transcriber** | subagent | bifrost-litellm/MiniMax-M3 | 0.1 | deny | deny | deny | deny | – | ASR via media MCP (zh/en auto-detect, dialects, code-switch, songs, noisy, multi-speaker); only media.* MCP allowed |
+| **voice-clone** | subagent | bifrost-litellm/MiniMax-M3 | 0.3 | deny | deny | deny | deny | – | Voice-clone TTS via media MCP (sample — URL / upload:<name> / base64; wav/mp3 ≤ 10 MB); only media.* MCP allowed |
 
 ### Primary Agent Permissions
 
@@ -534,7 +538,7 @@ view-image анализирует изображения **напрямую че
 
 ### unity-mcp Permissions — All Agents
 
-Все 38 агентов, кроме `scout`, `advisor` и `voice-synthesizer`, имеют `"unity-mcp.*": "allow"` — полный доступ ко всем инструментам Unity MCP. Исключения: scout — локальный read-only FS-разведчик (read/glob/grep), определённый только frontmatter `agents/scout.md` (без секции в opencode.json); advisor — step-boundary reviewer, строго read-only, определён frontmatter + секцией opencode.json без unity-mcp.
+Все 40 агентов, кроме `scout`, `advisor`, `voice-synthesizer`, `image-creator`, `video-generator`, `voice-transcriber` и `voice-clone`, имеют `"unity-mcp.*": "allow"` — полный доступ ко всем инструментам Unity MCP. Исключения: scout — локальный read-only FS-разведчик (read/glob/grep); advisor — step-boundary reviewer, строго read-only; медиа-агенты (voice-synthesizer, image-creator, video-generator, voice-transcriber, voice-clone) работают исключительно через media MCP — unity-mcp и остальные MCP-серверы для них denied, все файловые инструменты и bash denied.
 
 ### Key Agent Permissions Details
 
@@ -655,7 +659,7 @@ A glob restriction (`{ "*.md": "allow", "*": "deny" }`) narrows the tool to matc
 
 ## 6. Routing Tables
 
-### orchestrator Whitelist (26 agents)
+### orchestrator Whitelist (28 agents)
 
 | Agent | Role |
 |-------|------|
@@ -680,11 +684,13 @@ A glob restriction (`{ "*.md": "allow", "*": "deny" }`) narrows the tool to matc
 | consistency-checker | Architecture consistency validation |
 | view-image | Image analysis |
 | docs-planner | Documentation planning (DOCS DEEP) |
-| generate-image | Image generation (Gemini) |
-| generate-image-gpt | Image generation (GPT/DALL-E) |
+| image-creator | Image creation (MCP media: generation + editing) |
+| video-generator | Video generation (MCP media: MiniMax Hailuo, async) |
 | git-commit | Gated conventional git commits |
 | advisor | Step-boundary advisory reviewer (severity-tagged, read-only) |
-| voice-synthesizer | Voice synthesis (TTS) |
+| voice-synthesizer | Voice synthesis (TTS, MCP media) |
+| voice-transcriber | Speech-to-text (MCP media ASR) |
+| voice-clone | Voice cloning TTS (MCP media) |
 
 ### plankestrator Whitelist (10 agents)
 
@@ -905,8 +911,8 @@ const ROUTING_TABLES = {
     "bugfix-triage", "plan-bug", "devops-agent", "devops-reviewer",
     "dev-planner", "mcp-search", "docs-writer", "summarizer",
     "execute-bug", "consistency-checker", "view-image", "docs-planner",
-    "generate-image", "generate-image-gpt", "git-commit",
-    "advisor", "voice-synthesizer"
+    "image-creator", "video-generator", "git-commit",
+    "advisor", "voice-synthesizer", "voice-transcriber", "voice-clone"
   ],
   plankestrator: [
     "plankestrator-identity-probe", "plan-writer-simple", "plan-writer-complex",
@@ -1028,6 +1034,32 @@ const REQUIRED_JSON_FIELDS = {
 - `unity_docs` — Unity documentation lookup
 - `unity_reflect` — Unity API reflection
 
+### media               — Remote (proxied via Bifrost)
+
+| Field | Value |
+|-------|-------|
+| Type | Remote (proxied via Bifrost) |
+| URL | `https://hcbifrost.herocraft.com/litellm/media/mcp` |
+| Auth | `Authorization: Bearer {env:LITELLM_API_KEY}` |
+| Enabled | true |
+
+**Tools:**
+
+| Tool | Purpose |
+|------|---------|
+| `media_media-generate_image` | Text → image (7 models: Gemini Flash/Pro, GPT Image 1.5/2/2.5-sunburst/2.5-flare, MiniMax image-01); `size` = `WxH` (OpenAI) или aspect ratio (MiniMax) |
+| `media_media-edit_image` | Image → edited image (i2i, те же 7 моделей; MiniMax subject_reference) |
+| `media_media-generate_video` | Async text/image → video (Hailuo 2.3/02, T2V-01; 5/6/10 s; 768P/1080P) → `{task_id}` |
+| `media_media-video_status` | Poll video job → `{status}`; на Success — re-hosted `{url}` |
+| `media_media-synthesize_speech` | TTS (MiMo preset voices / VoiceDesign / MiniMax Speech-2.8-HD; style; audio tags; wav/mp3) |
+| `media_media-clone_speech` | TTS клонированным голосом (MiMo voiceclone; sample ≤10 MB) |
+| `media_media-transcribe_audio` | ASR (MiMo v2.5; zh/en auto) → `{text, seconds}` |
+| `media_media-list_media_models` | Живой каталог моделей/голосов/лимитов |
+
+**Consumers:** image-creator, video-generator, voice-synthesizer, voice-clone, voice-transcriber (у всех `media.*: allow`, остальные MCP denied).
+
+**Notes:** все инструменты возвращают hosted URLs (TTL 24 h) — никогда base64 в контексте. Загрузка локальных файлов пользователем: `POST https://hcbifrost.herocraft.com/media-upload?name=<file>` c `Authorization: Bearer <LITELLM_API_KEY>` → `{url, ref: "upload:<name>"}`.
+
 ### Image Analysis
 
 Image analysis is handled by the dedicated `view-image` agent (model `bifrost-litellm/MiniMax-M3`), which uses direct vision capabilities — no MCP server needed.
@@ -1060,7 +1092,7 @@ All commands are `subtask: true` — they run as subagent tasks.
 |------|----------|---------|
 | opencode.json | `~/.config/opencode/opencode.json` | Main configuration (providers, MCP, agents, commands) |
 | workflow-enforcement.ts | `~/.config/opencode/plugins/workflow-enforcement.ts` | Workflow enforcement plugin |
-| [agent].md | `~/.config/opencode/agents/[name].md` | Individual agent definitions (38 files) |
+| [agent].md | `~/.config/opencode/agents/[name].md` | Individual agent definitions (40 files) |
 
 ### Data Storage
 
@@ -1083,7 +1115,7 @@ All commands are `subtask: true` — they run as subagent tasks.
 | dev_plan.md | Project root | Implementation plan (written by dev-planner) |
 | bug_plan.md | Project root | Bug fix plan (written by plan-bug, read by execute-bug) |
 
-### Agent Files List (38 files)
+### Agent Files List (40 files)
 
 ```
 ~/.config/opencode/agents/
@@ -1102,6 +1134,7 @@ All commands are `subtask: true` — they run as subagent tasks.
 ├── dev-reviewer.md
 ├── rework.md
 ├── consistency-checker.md
+├── docs-planner.md
 ├── docs-writer.md
 ├── utility.md
 ├── mcp-github.md
@@ -1120,10 +1153,12 @@ All commands are `subtask: true` — they run as subagent tasks.
 ├── research-reviewer.md
 ├── scout.md
 ├── view-image.md
-├── generate-image.md
-├── generate-image-gpt.md
+├── image-creator.md
+├── video-generator.md
 ├── git-commit.md
-└── voice-synthesizer.md
+├── voice-synthesizer.md
+├── voice-transcriber.md
+└── voice-clone.md
 ```
 
 ---
@@ -1250,7 +1285,7 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 
 - [ ] opencode.json скопирован в `~/.config/opencode/`
 - [ ] Plugin скопирован в `~/.config/opencode/plugins/`
-- [ ] Все 38 agent файлов скопированы в `~/.config/opencode/agents/`
+- [ ] Все 40 agent файлов скопированы в `~/.config/opencode/agents/`
 - [ ] `LITELLM_API_KEY` env var настроен
 - [ ] Bifrost MCP URLs доступны (`hcbifrost.herocraft.com/litellm/`)
 - [ ] Routing tables в плагине совпадают с opencode.json
@@ -1269,13 +1304,13 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 - [ ] view-image может анализировать изображения напрямую
 - [ ] worker может выполнять bash команды
 
-### Agent Files (38 total)
+### Agent Files (40 total)
 
 **Primary agents (2):**
 - orchestrator.md
 - plankestrator.md
 
-**Subagents (36):**
+**Subagents (38):**
 - advisor.md
 - bugfix.md
 - bugfix-triage.md
@@ -1289,9 +1324,8 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 - docs-planner.md
 - docs-writer.md
 - execute-bug.md
-- generate-image.md
-- generate-image-gpt.md
 - git-commit.md
+- image-creator.md
 - mcp-github.md
 - mcp-read.md
 - mcp-search.md
@@ -1309,8 +1343,11 @@ Select-String "workflow-enforcement" $HOME\.local\share\opencode\log\*.log
 - scout.md
 - summarizer.md
 - utility.md
+- video-generator.md
 - view-image.md
+- voice-clone.md
 - voice-synthesizer.md
+- voice-transcriber.md
 - worker.md
 
 ### Test Commands
@@ -1345,10 +1382,10 @@ opencode --agent plankestrator
 | Component | Count | Location |
 |-----------|-------|----------|
 | Primary agents | 2 | `~/.config/opencode/agents/` |
-| Subagents | 36 | `~/.config/opencode/agents/` |
+| Subagents | 38 | `~/.config/opencode/agents/` |
 | MCP servers | 5 | zai_zread, zai_web_search, zai_web_reader, serena, unity-mcp |
 | Plugin hooks | 6 | workflow-enforcement.ts |
-| Routing tables | 2 | orchestrator (26), plankestrator (10) |
+| Routing tables | 2 | orchestrator (28), plankestrator (10) |
 | Pipelines | 13 | BUGFIX, DEV, DEVOPS, DOCS, PLAN, RESEARCH |
 | Custom commands | 5 | opencode.json |
 | Models | 10 | bifrost-litellm (QWEN3.7-plus, MiniMax-M3, GLM-5.3 (res), Kimi K3, qwen3.8-max, mimo-v2.5, xiaomi/mimo-v2.6-pro, openrouter/deepseek-v4.1-flash, tencent/Hy4, stepfun/step-5-preview) |

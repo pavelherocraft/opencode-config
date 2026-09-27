@@ -49,7 +49,7 @@ These skills are project-level: invoke them from the repo root via
 ```powershell
 & ".opencode\skills\integrity-check\scripts\check.ps1"
 & ".opencode\skills\integrity-check\scripts\check.ps1" -Json
-    & ".opencode\skills\integrity-check\scripts\check.ps1" -ExpectedAgents 38 -ExpectedModels 10 -ExpectedOrch 26 -ExpectedPlan 10
+    & ".opencode\skills\integrity-check\scripts\check.ps1" -ExpectedAgents 40 -ExpectedModels 10 -ExpectedOrch 28 -ExpectedPlan 10
 ```
 
 ### POSIX mirror

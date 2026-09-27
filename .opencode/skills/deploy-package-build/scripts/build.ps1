@@ -3,11 +3,11 @@
     Deterministic rebuild of deploy-package/ from live sources.
 
 .DESCRIPTION
-    Byte-copies live agents (expected 38), live opencode.json, live
+    Byte-copies live agents (expected 40), live opencode.json, live
     plugins/workflow-enforcement.ts and the 4 root docs (ARCHITECTURE/AGENTS/
     MCP_SETUP/PLUGIN) into deploy-package/, SHA256-verifies every copy,
     regenerates HASHES.txt (LF, sorted, two-space format) and gates on counters
-    (agents 38, distinct models 11, routing 26/10 across opencode.json +
+    (agents 40, distinct models 11, routing 28/10 across opencode.json +
     ARCHITECTURE.md + live workflow-enforcement.ts) plus a literal-secrets scan
     of opencode.json. -Plan (default) reports without writing; -Apply performs
     the build; -Archive additionally rebuilds deploy-package.7z via 7-Zip.
@@ -26,13 +26,13 @@
     STALE findings become exit 3.
 
 .PARAMETER ExpectedAgents
-    Gate default 38.
+    Gate default 40.
 
 .PARAMETER ExpectedModels
     Gate default 10.
 
 .PARAMETER ExpectedOrch
-    Gate default 26.
+    Gate default 28.
 
 .PARAMETER ExpectedPlan
     Gate default 10.
@@ -59,9 +59,9 @@ param(
     [switch]$Apply,
     [switch]$Archive,
     [switch]$Strict,
-    [int]$ExpectedAgents = 38,
+    [int]$ExpectedAgents = 40,
     [int]$ExpectedModels = 10,
-    [int]$ExpectedOrch = 26,
+    [int]$ExpectedOrch = 28,
     [int]$ExpectedPlan = 10,
     [switch]$Json
 )

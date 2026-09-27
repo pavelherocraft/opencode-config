@@ -3,21 +3,21 @@
     Fast LLM-free integrity check of the agent orchestration config.
 
 .DESCRIPTION
-    SHA256 for all 38 agent pairs (live vs deploy), counters (agents, models in
+    SHA256 for all 40 agent pairs (live vs deploy), counters (agents, models in
     use, routing tables across opencode.json + ARCHITECTURE.md + live
     workflow-enforcement.ts), every frontmatter model: key validated for format
     (provider/key, split on FIRST slash) and existence in opencode.json provider
     models. PASS/FAIL report. STRICTLY READ-ONLY.
 
 .PARAMETER ExpectedAgents
-    Expected number of agent .md files in each mirror. Default 38.
+    Expected number of agent .md files in each mirror. Default 40.
 
 .PARAMETER ExpectedModels
     Expected number of DISTINCT models in use (also MCP_SETUP Distribution rows
     and Summary count). Default 10.
 
 .PARAMETER ExpectedOrch
-    Expected orchestrator routing-table size. Default 26.
+    Expected orchestrator routing-table size. Default 28.
 
 .PARAMETER ExpectedPlan
     Expected plankestrator routing-table size. Default 10.
@@ -38,13 +38,13 @@
 .EXAMPLE
     .\check.ps1
     .\check.ps1 -Json
-    .\check.ps1 -ExpectedAgents 38 -ExpectedModels 10 -ExpectedOrch 26 -ExpectedPlan 10
+    .\check.ps1 -ExpectedAgents 40 -ExpectedModels 10 -ExpectedOrch 28 -ExpectedPlan 10
 #>
 
 param(
-    [int]$ExpectedAgents = 38,
+    [int]$ExpectedAgents = 40,
     [int]$ExpectedModels = 10,
-    [int]$ExpectedOrch = 26,
+    [int]$ExpectedOrch = 28,
     [int]$ExpectedPlan = 10,
     [string]$Config = "",
     [switch]$Json
