@@ -22,7 +22,7 @@ These skills are project-level: invoke them from the repo root via
 
 ## When NOT to use
 
-- Tier compliance validation (§Validation C4) — use the `consistency-checker` agent
+- Tier compliance validation (Model Roles) — use the `consistency-checker` agent
 - Fleet data (routing, permissions) — use `agent-report`
 - Counters/pairs/integrity gating — use `integrity-check`
 - Editing pipelines — ARCHITECTURE.md is edited manually via text anchors
@@ -65,7 +65,7 @@ interiors not analyzed):
 | otherwise tierRank(A) > tierRank(B) | `INFO:TIER_DROP` | `~->` |
 | otherwise | — | `-->` |
 
-Compliance enforcement stays with consistency-checker (ARCHITECTURE.md §Validation) — markers here
+Compliance enforcement stays with consistency-checker (ARCHITECTURE.md Model Roles) — markers here
 are advisory. Canonical expected pairs: plan-bug ==> execute-bug (BUGFIX DEEP),
 dev-planner ==> dev-professor (DEV COMPLEX), docs-planner ==> docs-writer
 (DOCS DEEP, equal tier).
@@ -161,7 +161,7 @@ markdown mode: per pipeline `### <LABEL>` + fenced ```text block (same ASCII)
 | 2 | Usage/environment error (bad flags, ARCHITECTURE.md or agents dir missing, `## 2. Pipelines` / `## Model Roles` anchors absent, `-Pipeline` matched nothing) |
 
 No exit 3 — visualization does not gate (WARN:PREWALK_INVERSION is advisory;
-authoritative enforcement is consistency-checker, ARCHITECTURE.md §Validation).
+authoritative enforcement is consistency-checker, ARCHITECTURE.md Model Roles).
 
 ## Hard rules
 

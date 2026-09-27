@@ -20,7 +20,7 @@ These skills are project-level: invoke them from the repo root via
 ## When NOT to use
 
 - Deep semantic consistency (routing vs pipelines vs docs prose) — use the
-  `consistency-checker` agent (follows ARCHITECTURE.md §Validation)
+  `consistency-checker` agent (follows ARCHITECTURE.md)
 - Provider config schema audit (limits/modalities/variants) — use `provider-config-audit`
 - Fixing drift — use `config-sync --save` (this skill only REPORTS)
 

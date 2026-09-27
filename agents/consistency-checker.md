@@ -31,14 +31,14 @@ At start, read `REVIEW_CONTEXT.md` in the project root (if absent — `~/.config
 ## CORE CONTRACT (generic, works in any project)
 
 1. Find `ARCHITECTURE.md` in the current project root.
-2. Read it. Locate its Validation / consistency checks section.
-3. Execute exactly the checks it prescribes, using the file locations it declares.
+2. Read it in full — ARCHITECTURE.md declares the project's requirements and consistency rules (routing tables, pipelines, models, permissions, sync pairs, file locations, term blocklists, formats). Treat every declared requirement as a check: verify the actual project state fulfills it.
+3. Execute exactly the declared requirements, using the file locations the document specifies.
 4. No ARCHITECTURE.md found (or no checks section) → run GENERIC MINIMUM:
    - parse all *.json configs in the project (validity)
    - report "no project validation spec found", list what was checked
 5. Report per-check: PASS/FAIL + details.
 
-Do not invent checks beyond the prescribed ones; do not skip prescribed checks. If a prescribed check cannot be executed (missing file, unparsable anchor), report it as FAIL with the reason — never as PASS.
+Do not invent checks beyond the declared requirements; do not skip declared requirements. If a requirement cannot be verified (missing file, unparsable anchor), report it as FAIL with the reason — never as PASS.
 
 ## AUTO-FIX SCOPE
 
@@ -124,7 +124,7 @@ Always output JSON in a code block:
   "issues_unfixable": 0,
   "details": [
     {
-      "rule": "<check id/name as prescribed by the project's ARCHITECTURE.md>",
+      "rule": "<requirement from the project's ARCHITECTURE.md>",
       "status": "PASS|FIXED|FAIL",
       "source": "<where the rule came from>",
       "description": "What was checked and what happened"

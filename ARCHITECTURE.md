@@ -2,6 +2,8 @@
 
 This file is the single source of truth for the OpenCode dual-primary-agent architecture. All other files must be consistent with this document. It exists ONLY here, in the repo (canonical project doc; it is NOT copied to the live config).
 
+This document declares the project's requirements and consistency rules in full. The consistency-checker agent verifies that the actual project state fulfills them.
+
 ## 1. Routing Tables
 
 ### orchestrator Whitelist (28 agents)
@@ -123,7 +125,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 
 ## Model Roles (v5 — single source of truth, OMP model-roles analog)
 
-Роли централизуют назначение моделей 40 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (§Validation, C4), (3) документации. Квота-aware fallback-цепочки — платформенное требование (статус: НЕ реализовано, требует поддержки рантайма/proxy).
+Роли централизуют назначение моделей 40 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Model Roles), (3) документации. Квота-aware fallback-цепочки — платформенное требование (статус: НЕ реализовано, требует поддержки рантайма/proxy).
 
 | Role | Model | Tier | Agents |
 |------|-------|------|--------|
@@ -150,7 +152,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 
 **Правила:**
 1. **Prewalk-принцип (OMP):** в паре planner→executor роль planner'а ДОЛЖНА быть tier ≥ executor'а: plan-bug (plan-flash, mid) → execute-bug (executor-cheap, low); dev-planner (plan-strong, top) → dev-professor (executor-strong, mid); docs-planner (docs-plan, low) → docs-writer (docs, low). Инверсия запрещена.
-2. Смена модели агента = правка этой таблицы + frontmatter live `agents/*.md` + Subagent Models (эта таблица) — 2 синхронных места; после правки live выполнить `config-sync --save` (repo-зеркало). Валидация — consistency-checker (§Validation, C4).
+2. Смена модели агента = правка этой таблицы + frontmatter live `agents/*.md` + Subagent Models (эта таблица) — 2 синхронных места; после правки live выполнить `config-sync --save` (repo-зеркало). Валидация — consistency-checker (Model Roles).
 3. Новые агенты получают роль из таблицы; новая роль добавляется только с обоснованием в CHANGELOG.
 4. Миграция frontmatter на role-алиасы (`model: "@review-strong"`) — ЗАБЛОКИРОВАНА до поддержки рантаймом opencode (задокументированное платформенное требование, аналогично quota-aware fallback).
 
@@ -925,30 +927,6 @@ The workflow-enforcement plugin detects the agent using multiple methods (priori
    - `detectAgentFromSubagent()` function in plugin
 
 This ensures correct agent identification even if session data is incorrect.
-
-## Validation (consistency checks)
-
-Исполняется генерик-агентом consistency-checker (находит этот файл и следует секциям ниже).
-
-### C1. Routing tables
-plugin `ROUTING_TABLES` (live plugins/workflow-enforcement.ts) ↔ `orchestrator.md` routing line (L26) ↔ `opencode.json` task-allowlist orchestrator — одни и те же агенты. plankestrator аналогично.
-
-### C2. Agent counts (выводные)
-- `agents/*.md` count == opencode.json agent entries count
-- orchestrator whitelist length == числу записей в plugin ROUTING_TABLES.orchestrator
-- Ожидания НЕ хардкодятся — выводятся из факта. Текущее фактическое: 40 агентов, whitelist 28/10.
-
-### C3. Sync-pair drift
-5 пар (см. File Locations): SHA256 live vs repo. Drift → MECHANICAL FIX: copy live → repo (save). Restore — запрещён автоматически.
-
-### C4. Model keys
-Каждый `model:` из agents/*.md существует в opencode.json provider models (префикс bifrost-litellm/).
-
-### C5. JSON validity
-opencode.json парсится (live и repo).
-
-### C6. Doc references
-ARCHITECTURE.md не ссылается на несуществующие файлы (удалённые артефакты старой структуры — запрещённые термины; эталон допустимых путей — §File Locations).
 
 ## Infrastructure Export (on-demand)
 
