@@ -1055,6 +1055,14 @@
     "./plugins/workflow-enforcement.ts"
   ],
   "mcp": {
+    "media": {
+      "type": "remote",
+      "url": "https://hcbifrost.herocraft.com/litellm/media/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:LITELLM_API_KEY}"
+      }
+    },
     "zai_web_reader": {
       "type": "remote",
       "url": "https://hcbifrost.herocraft.com/litellm/zai_web_reader/mcp",
