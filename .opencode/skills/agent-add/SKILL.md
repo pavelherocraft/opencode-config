@@ -91,6 +91,25 @@ python .opencode/skills/agent-add/scripts/add.py --agent code-search --model bif
 python .opencode/skills/agent-add/scripts/add.py --agent code-search --model bifrost-litellm/MiniMax-M3 --description "Fast code search" --primary orchestrator --permissions readonly --apply [--role R --tier T] [--commit] [--push]
 ```
 
+### Tests (regenerate the two historically broken generators)
+
+```powershell
+# PowerShell: ROUTING_TABLES insertion lands in the CORRECT array + frontmatter
+# lines stay separate (no "permission block merged into one line")
+powershell -File ".opencode\skills\agent-add\scripts\test-add-ps1.ps1"
+```
+
+```bash
+# Python: same checks + generated frontmatter must parse as YAML (PyYAML when
+# available; mixed task-block indentation is asserted structurally too)
+python .opencode/skills/agent-add/scripts/test-add-py.py
+```
+
+Both suites drive the real functions extracted from the sibling script against
+a synthetic `ROUTING_TABLES` fixture with a non-zero prefix AND the live plugin
+(read-only regression, T6). Exit 0 = all pass, 1 = failures. No live config is
+written.
+
 ## Parameters
 
 | Param | Meaning |

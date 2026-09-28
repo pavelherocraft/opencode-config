@@ -47,7 +47,7 @@ Pick exactly ONE row. No improvisation. `next_agent` = first element of `pipelin
 | 3 | DEV | SIMPLE | false | `["worker", "utility"]` |
 | 4 | DEV | SIMPLE | true | `["worker", "consistency-checker", "utility"]` |
 | 5 | DEV | COMPLEX | false | `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"]` |
-| 6 | DEV | SUPERCOMPLEX | true | per plan step: `["dev-planner", "dev-professor", "dev-reviewer", "consistency-checker", "utility"]` |
+| 6 | DEV | SUPERCOMPLEX | true | per plan step: `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"]` |
 | 7 | DOCS | SIMPLE | any | `["docs-writer", "utility"]` |
 | 8 | DOCS | DEEP | any | `["docs-planner", "docs-writer", "dev-reviewer", "rework", "consistency-checker", "utility"]` |
 
@@ -82,11 +82,12 @@ For EACH step in the list, in order:
 
 1. `dev-planner` — Task prompt: the step's `id` + `title` + `description`, the research/plan file path, which steps are already done, and the mandatory suffix "Write the plan to dev_plan.md." It writes the detailed plan for THIS ONE step to `dev_plan.md`.
 2. `dev-professor` — Task prompt: "Review dev_plan.md and implement step by step" + step context. It implements ONLY this step.
-3. `dev-reviewer` — reviews this step's implementation.
-4. `consistency-checker` — validates architecture.
-5. Critical issues → rework loop: `rework → consistency-checker`, max 3 iterations (see Rework loop note above).
-6. `utility` — syntax check.
-7. Next step → repeat from item 1.
+3. `advisor` — observes this step's implementation result (ADVISOR STEP RULES apply).
+4. `dev-reviewer` — reviews this step's implementation.
+5. `consistency-checker` — validates architecture.
+6. Critical issues → rework loop: `rework → consistency-checker`, max 3 iterations (see Rework loop note above).
+7. `utility` — syntax check.
+8. Next step → repeat from item 1.
 
 Ack format for every row 6 turn: `→ STEP <i>/<total> (<step id>): DELEGATED to <agent>`.
 
@@ -139,7 +140,7 @@ Reviewers (dev-reviewer, consistency-checker) tag their JSON with `severity: nit
 
 ## ADVISOR STEP RULES (v5, step-boundary watchdog)
 
-- Advisor runs AFTER the implementation agent and BEFORE dev-reviewer (rows 5 and BUGFIX-DEEP only). It never re-orders the pipeline — it only tags findings.
+- Advisor runs AFTER the implementation agent and BEFORE dev-reviewer (rows 5, 6 and BUGFIX-DEEP only). It never re-orders the pipeline — it only tags findings.
 - Task prompt for advisor MUST contain: (1) step goal, (2) implementation agent's JSON verbatim, (3) `PREVIOUS ADVISOR NOTES: <verbatim notes from prior advisor runs in this session, or "none">`, (4) if a blocker was consumed within the LAST 3 pipeline steps — the line `NIT_ONLY_MODE` (immuneTurns analog, window = 3 steps; you keep the counter).
 - Advisor `severity: "blocker"` → append `⚠️ BLOCKER (advisor): <one-liner>` to the ack, prepend advisor notes to the Task prompts of dev-reviewer AND rework, and start the NIT_ONLY_MODE counter (next 3 advisor calls get NIT_ONLY_MODE).
 - Advisor `concern`/`nit` → pass notes verbatim into dev-reviewer's Task prompt (`ADVISOR NOTES: <json notes>`); pipeline continues unchanged.
@@ -150,7 +151,7 @@ Reviewers (dev-reviewer, consistency-checker) tag their JSON with `severity: nit
 
 **type=BUGFIX** if: error message / stack trace / failing test / "not working" / "broken" / "crash" / "bug" / "error" / "почему сломалось" / "что случилось" / something worked before but stopped. Even "why is X broken?" questions are BUGFIX — triage investigates, not you. Set `complexity: null`, `plan_exists: null`.
 
-**type=DEVOPS** if: build / deploy / CI-CD / run tests / lint / format / env setup / dependency install / git commit-push-PR. No code writing.
+**type=DEVOPS** if: build / deploy / CI-CD / run tests / lint / format / env setup / dependency install / git commit-push-PR / agent model migration (`agent-model-migrate` skill: `migrate.ps1 -Agent <name> -Model <provider/key>` → then `config-sync --save`). No code writing.
 
 **type=DEV** if: new feature / code modification / refactoring / added functionality / UI changes — and not BUGFIX/DEVOPS/DOCS.
 

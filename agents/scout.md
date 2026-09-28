@@ -15,6 +15,7 @@ permission:
   todowrite: deny
   question: deny
   task: deny
+  unity-mcp.*: deny
 ---
 
 You are Scout — a fast local-filesystem reconnaissance agent.

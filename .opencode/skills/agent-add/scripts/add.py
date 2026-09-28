@@ -318,7 +318,10 @@ def edit_routing_array(text, primary, new_name, section_heading=None):
             raise EditError(f'token already present in ROUTING_TABLES.{primary}: {new_name}')
     old_count = len(tokens)
     last = tokens[-1]
-    abs_base = base + outer.start() + outer.start(1) + inner.start(1)
+    # outer.start(1) is ALREADY absolute in the subject string: do NOT add
+    # outer.start() on top (that double count once routed the insert into
+    # the wrong array and corrupted the TypeScript source).
+    abs_base = base + outer.start(1) + inner.start(1)
     insert_pos = abs_base + last.end()
     line_start = text.rfind('\n', 0, insert_pos) + 1
     lead = text[line_start:insert_pos]
@@ -495,7 +498,9 @@ def edit_primary_task_allow(text, primary, new_name):
 
 def add_fm_task_extras(perm_lines, extras):
     """Insert '    <tok>: allow' lines into the frontmatter task sub-block
-    (after the '"*": deny' line). Extras already present are skipped."""
+    (after the '"*": deny' line). Extras already present are skipped.
+    Extra lines reuse the indent of the '"*": deny' line so the task block
+    stays a single YAML mapping (mixed indents are a YAML error)."""
     if not extras:
         return list(perm_lines)
     task_idx = -1
@@ -517,18 +522,22 @@ def add_fm_task_extras(perm_lines, extras):
             existing_allow.add(m.group(1).strip())
     extras2 = [t for t in extras if t not in existing_allow]
     star_idx = -1
+    star_indent = '  '
     for i in range(task_idx + 1, len(perm_lines)):
-        if re.match(r'^\s*"\*": deny\s*$', perm_lines[i]):
+        m = re.match(r'^(\s*)"\*": deny\s*$', perm_lines[i])
+        if m:
             star_idx = i
+            star_indent = m.group(1)
+            break
     out = []
     for i, l in enumerate(perm_lines):
         out.append(l)
         if i == star_idx:
             for t in extras2:
-                out.append(f'    {t}: allow')
+                out.append(f'{star_indent}{t}: allow')
     if star_idx < 0:
         for t in extras2:
-            out.append(f'    {t}: allow')
+            out.append(f'{star_indent}{t}: allow')
     return out
 
 

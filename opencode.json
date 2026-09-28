@@ -1170,6 +1170,7 @@
         "read": "allow",
         "grep": "allow",
         "glob": "allow",
+        "unity-mcp.*": "deny",
         "task": {
           "*": "deny"
         }
@@ -1313,6 +1314,7 @@
     },
     "git-commit": {
       "permission": {
+        "unity-mcp.*": "deny",
         "skill": {
           "*": "deny",
           "git-commit": "allow"
@@ -1894,6 +1896,7 @@
         "serena_find_referencing_symbols": "allow",
         "serena_get_symbols_overview": "allow",
         "serena_search_for_pattern": "allow",
+        "unity-mcp.*": "deny",
         "task": {
           "*": "deny"
         }
@@ -1914,6 +1917,7 @@
         "read": "allow",
         "grep": "allow",
         "glob": "allow",
+        "unity-mcp.*": "deny",
         "task": {
           "*": "deny"
         }

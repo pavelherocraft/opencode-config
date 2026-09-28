@@ -188,7 +188,7 @@ try {
     }
 
     # commit
-    git commit -m $Message
+    git commit -m "$Message"
     if ($LASTEXITCODE -ne 0) { Write-Output 'ERROR: git commit failed'; exit 2 }
     $hash = git rev-parse --short HEAD
     Write-Output "COMMITTED: $hash $subject"

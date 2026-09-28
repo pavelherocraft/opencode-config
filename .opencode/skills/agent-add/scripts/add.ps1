@@ -663,7 +663,10 @@ function Edit-RoutingArray([string]$Text, [string]$PrimaryName, [string]$NewName
     }
     $res.OldCount = $tokens.Count
     $last = $tokens[$tokens.Count - 1]
-    $absBase = $base + $outer.Index + $outer.Groups[1].Index + $inner.Groups[1].Index
+    # .NET Group.Index is ALREADY absolute in the subject string: do NOT add
+    # $outer.Index on top (that double count once routed the insert into the
+    # wrong array and corrupted the TypeScript source).
+    $absBase = $base + $outer.Groups[1].Index + $inner.Groups[1].Index
     $insertPos = $absBase + $last.Index + $last.Length
     $lineStart = $Text.LastIndexOf("`n", $insertPos) + 1
     $lead = $Text.Substring($lineStart, $insertPos - $lineStart)
@@ -862,9 +865,13 @@ if ($Description -match '\|') {
 
 # Frontmatter permission lines: preset or template; ensure task extras are present.
 # Mirrors add.py add_fm_task_extras: extras already present as allow entries
-# (template block embeds its own task tokens) are skipped.
+# (template block embeds its own task tokens) are skipped. Returns the plain
+# line array (NO unary-comma wrapper: 'return ,$out' plus the '@()' at the call
+# site used to hand back the List OBJECT itself, merging the whole permission
+# block into one line). Extra lines reuse the indent of the '"*": deny' line so
+# the task block stays a single YAML mapping (mixed indents are a YAML error).
 function Add-FmTaskExtras([string[]]$PermLines, [string[]]$Extras) {
-    if ($Extras.Count -eq 0) { return ,$PermLines }
+    if ($Extras.Count -eq 0) { return $PermLines }
     $taskIdx = -1
     for ($i = 0; $i -lt $PermLines.Count; $i++) { if ($PermLines[$i] -match '^task:\s*$') { $taskIdx = $i; break } }
     if ($taskIdx -lt 0) {
@@ -873,7 +880,7 @@ function Add-FmTaskExtras([string[]]$PermLines, [string[]]$Extras) {
         $out.Add('task:')
         $out.Add('    "*": deny')
         foreach ($t in $Extras) { $out.Add('    ' + $t + ': allow') }
-        return ,$out
+        return $out
     }
     $existing = @{}
     for ($i = $taskIdx + 1; $i -lt $PermLines.Count; $i++) {
@@ -882,20 +889,22 @@ function Add-FmTaskExtras([string[]]$PermLines, [string[]]$Extras) {
     }
     $extras2 = @($Extras | Where-Object { -not $existing.ContainsKey($_) })
     $starIdx = -1
+    $starIndent = '  '
     for ($i = $taskIdx + 1; $i -lt $PermLines.Count; $i++) {
-        if ($PermLines[$i] -match '^\s*"\*": deny\s*$') { $starIdx = $i }
+        $m = [regex]::Match($PermLines[$i], '^(\s*)"\*": deny\s*$')
+        if ($m.Success) { $starIdx = $i; $starIndent = $m.Groups[1].Value; break }
     }
     $out = New-Object System.Collections.Generic.List[string]
     for ($i = 0; $i -lt $PermLines.Count; $i++) {
         $out.Add($PermLines[$i])
         if ($i -eq $starIdx) {
-            foreach ($t in $extras2) { $out.Add('    ' + $t + ': allow') }
+            foreach ($t in $extras2) { $out.Add($starIndent + $t + ': allow') }
         }
     }
     if ($starIdx -lt 0) {
-        foreach ($t in $extras2) { $out.Add('    ' + $t + ': allow') }
+        foreach ($t in $extras2) { $out.Add($starIndent + $t + ': allow') }
     }
-    return ,$out
+    return $out
 }
 
 $fmBody = $null

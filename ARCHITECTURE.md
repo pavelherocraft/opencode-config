@@ -63,7 +63,7 @@ This document declares the project's requirements and consistency rules in full.
 | plankestrator | 10 | 11 (plankestrator + 10 subagents) |
 | **Grand Total** | **39** | **41** |
 
-Note: 39 whitelist entries (view-image shared by both primaries) = 38 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 39 unique subagents + 2 primary agents = 41 unique agents total.
+Note: 39 whitelist entries (view-image shared by both primaries) = 38 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / DEV SUPERCOMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 39 unique subagents + 2 primary agents = 41 unique agents total.
 
 ### Shared Utility Agents
 
@@ -185,7 +185,7 @@ Worker is the implementation agent — it MUST have `bash: allow` to execute com
 | Command Type | Examples |
 |--------------|----------|
 | npm operations | `npm install`, `npm run build`, `npm run test` |
-| git operations | `git status`, `git add`, `git commit`, `git push` |
+| git operations | `git status`, `git add`, `git branch`, `git log`, `git diff` (NOT `git commit` / `git push` — denied in frontmatter; delegate to `git-commit`) |
 | file operations | `mkdir`, `touch`, `rm` |
 | linting tools | `eslint`, `prettier`, `tsc` |
 | test runners | `jest`, `vitest`, `pytest` |
@@ -451,7 +451,7 @@ dev-planner → dev-professor → advisor → dev-reviewer → rework → consis
 
 ```
 PER PLAN STEP (repeated for each step in the step list):
-  dev-planner → dev-professor → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
+  dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
 ```
 
 Super-complex development tasks with a large plan (>3 steps — pre-existing OR produced by DECOMPOSITION) or huge volume of work. The orchestrator executes the full review/consistency/syntax chain **for every step** of the plan — never one pass over the whole task.
@@ -468,7 +468,7 @@ DECOMPOSITION paths set `plan_exists: true`, `plan_source: "DECOMPOSITION"`. **�
 2. **The plan/research file has a clear step structure** — headings like `## P0-1`, `## Phase 1`, `## Шаг 1`, `### P0-1` → the orchestrator extracts the steps via its ONE allowed classification `read` of the plan file, or — if it has not read the file — via a single `mcp-read` Task call listing the step headings (`mcp-read` is the orchestrator's whitelisted file-reading agent; `devops-readonly` is NOT callable by orchestrator — it belongs to plankestrator's routing table).
 3. **No step list anywhere** → ONE `dev-planner` call in DECOMPOSITION mode (`MODE: DECOMPOSITION` in the Task prompt): dev-planner analyzes the research file and returns JSON `{"decomposition": true, "steps": [{"id": "...", "title": "...", "description": "..."}, ...]}` WITHOUT writing `dev_plan.md`.
 
-**Per-step chain:** For each step, `dev-planner` writes the detailed plan for THIS step to `dev_plan.md`, `dev-professor` reads the plan file, critically reviews it, then implements the step, `dev-reviewer` reviews the code, `consistency-checker` validates architecture, then `utility` runs the syntax check before the orchestrator advances to the next step.
+**Per-step chain:** For each step, `dev-planner` writes the detailed plan for THIS step to `dev_plan.md`, `dev-professor` reads the plan file, critically reviews it, then implements the step, `advisor` observes the implementation result at the step boundary (see "Advisor step" under DEV COMPLEX), `dev-reviewer` reviews the code, `consistency-checker` validates architecture, then `utility` runs the syntax check before the orchestrator advances to the next step.
 
 **Rework loop:** If consistency-checker finds critical issues within a step, the task returns to `rework` for fixes, then consistency-checker validates again. Loop repeats up to 3 iterations per step. If a step passes, the orchestrator advances to the next plan step and repeats the chain.
 
@@ -718,13 +718,15 @@ All three Z.AI MCP servers (`zai_zread`, `zai_web_search`, `zai_web_reader`) are
 
 ## unity-mcp Permissions
 
-### ALL Agents Have unity-mcp Access (exceptions: scout, codebase-analyzer, advisor, voice-synthesizer, image-creator, video-generator, voice-transcriber, voice-clone)
+### ALL Agents Have unity-mcp Access (exceptions: scout, codebase-analyzer, advisor, view-image, git-commit, voice-synthesizer, image-creator, video-generator, voice-transcriber, voice-clone)
 
 unity-mcp is available for ALL agents, not just orchestrator and plankestrator.
 
+**Deny is explicit, never implicit.** Unlisted MCP tools default to `allow` in opencode, so every exception below carries an explicit `unity-mcp.*: deny` in BOTH the agent frontmatter and the `opencode.json` agent entry — absence of the key is NOT a deny and MUST NOT be documented as one.
+
 | Agent Category | unity-mcp Permission | Reason |
 |----------------|---------------------|--------|
-| Primary agents | `unity-mcp.*: allow` | orchestrator, plankestrator route Unity tasks |
+| Primary agents (orchestrator, plankestrator) | no explicit entry (opencode default `allow`) — runtime-blocked | They are not given an explicit `unity-mcp.*` rule, so opencode's default (`allow`) would apply; however the `workflow-enforcement.ts` plugin gate `PRIMARY_AGENT_ALLOWED_TOOLS = {task, read, glob, grep}` blocks ALL other tool calls (including unity-mcp) once identity is locked. The real gate is the plugin, not the frontmatter/opencode.json declaration. |
 | Implementation agents | `unity-mcp.*: allow` | worker, bugfix, execute-bug, rework implement Unity changes |
 | Development agents | `unity-mcp.*: allow` | dev-professor, dev-reviewer, dev-planner guide Unity development |
 | Validation agents | `unity-mcp.*: allow` | consistency-checker, utility, docs-writer validate Unity code |
@@ -732,12 +734,14 @@ unity-mcp is available for ALL agents, not just orchestrator and plankestrator.
 | MCP agents | `unity-mcp.*: allow` | mcp-github, mcp-read, mcp-search, summarizer read Unity content |
 | Planning agents | `unity-mcp.*: allow` | plan-writer-*, plan-reviewer-*, research-writer-*, research-reviewer plan Unity features |
 | Read-only agents | `unity-mcp.*: allow` | devops-readonly reads Unity DevOps info |
-| Advisory agent | ❌ deny | advisor is strictly read-only (read/grep/glob + read-only serena); unity-mcp tools are mutating — excluded like scout |
-| Media agents | ❌ deny | image-creator, video-generator, voice-synthesizer, voice-clone, voice-transcriber work exclusively through the media MCP server — unity-mcp and all other MCP servers are denied in their frontmatter and opencode.json entries |
+| Read-only recon agents | ❌ `unity-mcp.*: deny` | scout, codebase-analyzer — local filesystem recon only (read/glob/grep); unity-mcp is mutating — explicit deny in frontmatter + opencode.json |
+| Advisory agent | ❌ `unity-mcp.*: deny` | advisor is strictly read-only (read/grep/glob + read-only serena); unity-mcp tools are mutating — explicit deny in frontmatter + opencode.json |
+| Vision / git-utility agents | ❌ `unity-mcp.*: deny` | view-image (vision analysis only) and git-commit (git operations only) never touch Unity — explicit deny in frontmatter + opencode.json |
+| Media agents | ❌ `unity-mcp.*: deny` | image-creator, video-generator, voice-synthesizer, voice-clone, voice-transcriber work exclusively through the media MCP server — unity-mcp and all other MCP servers are denied in their frontmatter and opencode.json entries |
 
 ### unity-mcp Tools Available
 
-All agents can use these unity-mcp tools:
+All agents EXCEPT the explicit deny-exceptions above can use these unity-mcp tools:
 - `unity-mcp_manage_gameobject` — create, find, modify, delete GameObjects
 - `unity-mcp_manage_scene` — load, save, create scenes, query hierarchy
 - `unity-mcp_manage_asset` — asset management operations

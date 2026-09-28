@@ -15,6 +15,7 @@ permission:
   todowrite: deny
   question: deny
   task: deny
+  unity-mcp.*: deny
 ---
 
 You are Codebase Analyzer — a deep codebase analysis agent on a strong model (Kimi K2.8).
