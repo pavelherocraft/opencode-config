@@ -32,7 +32,7 @@ This document declares the project's requirements and consistency rules in full.
 | 20 | view-image | Image analysis |
 | 21 | docs-planner | Documentation planning (DOCS DEEP) |
 | 22 | image-creator | Image creation (MCP media: generation + editing) |
-| 23 | video-generator | Video generation (MCP media: MiniMax Hailuo, async) |
+| 23 | video-generator | Video generation (MCP media: MiniMax-H3 default — 2K, first+last frame; Hailuo family; async polling) |
 | 24 | git-commit | Gated conventional git commits |
 | 25 | advisor | Step-boundary advisory reviewer (severity-tagged, read-only) |
 | 26 | voice-synthesizer | Voice synthesis (TTS, MCP media) |
@@ -113,15 +113,19 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 
 Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3.7-plus` and are documented in §Identity Lock Mechanism (v3), item 5 — not duplicated in the Subagent Models table.
 
-### Media models (via media MCP — not agent LLMs)
+### Voice media models (via media MCP — not agent LLMs)
 
 | Model | Provider | Agents | Usage |
 |-------|----------|--------|-------|
 | voice/xiaomi/mimo-v2.5-tts | bifrost-litellm | 0 | Via media MCP — voice-synthesizer (preset-voice TTS) |
 | voice/xiaomi/mimo-v2.5-asr | bifrost-litellm | 0 | Via media MCP — voice-transcriber (speech-to-text) |
-| voice/xiaomi/mimo-v2.5-tts-voiceclone | bifrost-litellm | 0 | Via media MCP — voice-clone (voice cloning) |
+| voice/xiaomi/mimo-v2.5-tts-voiceclone | bifrost-litellm | 0 | Via media MCP — voice-clone: zero-shot per-request clone (`clone_speech`) |
+| MiniMax-H3 / Hailuo-2.3 / Hailuo-02 / T2V-01 (video) | bifrost-litellm | 0 | Via media MCP — video-generator; H3 = default (2K, first+last frame, PAYG), Hailuo family = TokenPlan |
+| 7 image + 7 image-edit models | bifrost-litellm | 0 | Via media MCP — image-creator; authoritative set is the live catalog |
 | voice/xiaomi/mimo-v2.5-tts-voicedesign | bifrost-litellm | 0 | Via media MCP — voice-synthesizer (VoiceDesign mode) |
-| minimax/speech-2.8-hd | bifrost-litellm | 0 | Via media MCP — voice-synthesizer (MiniMax system voices) |
+| minimax/speech-2.8-hd | bifrost-litellm | 0 | Via media MCP — voice-synthesizer: 8 system voices + registered persistent clone voices via `voice_id` (PAYG) |
+
+Полный и актуальный набор моделей/параметров media MCP — в живом каталоге (`media_media-list_media_models`); он не хардкодится здесь и проверяется при изменениях. Параметры (duration/resolution/ratio/frames для видео, style/voice/voice_id для речи) закреплены в промптах агентов video-generator.md, image-creator.md, voice-synthesizer.md, voice-clone.md. Биллинг: MiniMax-H3 и persistent voice clone (`media_media-register_voice_clone`) → PAYG-аккаунт MiniMax; остальные модели — по каналам провайдера.
 
 ## Model Roles (v5 — single source of truth, OMP model-roles analog)
 
@@ -647,7 +651,7 @@ All MCP servers are configured in `opencode.json` under the `mcp` section. Three
 | zai_web_reader | `zai_web_reader_` | URL content reading: `zai_web_reader_webReader` |
 | serena | `serena_` | Code symbol operations: `find_symbol`, `rename_symbol`, etc. |
 | unity-mcp | `unity-mcp.*` | Unity Editor operations: `manage_gameobject`, `manage_scene`, etc. |
-| media | `media_` | Media generation (remote via Bifrost): `media_media-generate_image`, `media_media-edit_image`, `media_media-generate_video`, `media_media-video_status`, `media_media-synthesize_speech`, `media_media-clone_speech`, `media_media-transcribe_audio`, `media_media-list_media_models` — consumed by image-creator, video-generator, voice-synthesizer, voice-clone, voice-transcriber |
+| media | `media_` | Media generation (remote via Bifrost, 9 tools): `media_media-generate_image`, `media_media-edit_image`, `media_media-generate_video`, `media_media-video_status`, `media_media-synthesize_speech`, `media_media-clone_speech`, `media_media-register_voice_clone`, `media_media-transcribe_audio`, `media_media-list_media_models` — consumed by image-creator, video-generator, voice-synthesizer, voice-clone, voice-transcriber. Role split: voice-clone owns cloning (zero-shot `clone_speech` + persistent `register_voice_clone`); voice-synthesizer owns all synthesis incl. registered clones via `voice_id` |
 
 ### Usage Rules
 
