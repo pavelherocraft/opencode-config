@@ -32,7 +32,8 @@ const ROUTING_TABLES = {
     "advisor",
     "voice-synthesizer",
     "voice-transcriber",
-    "voice-clone"
+    "voice-clone",
+    "codebase-analyzer"
   ],
   plankestrator: [
     "plankestrator-identity-probe",

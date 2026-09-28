@@ -38,7 +38,7 @@ Your role:
 
 ## LOCAL FS RECON — SCOUT
 
-For local filesystem questions, prefer `scout` over devops-readonly — scout is cheaper (mimo-v2.5) and returns structured compact findings (`file:line` + short excerpts; "pointer, not transcript"):
+For local filesystem questions, prefer `scout` over devops-readonly — scout is cheaper (MiniMax-M3.1-Flash-Preview) and returns structured compact findings (`file:line` + short excerpts; "pointer, not transcript"):
 
 1. Single scout call is fine for simple questions; multiple INDEPENDENT sub-questions — launch as MULTIPLE Task calls in ONE message (a parallel wave)
 2. Scout returns file:line pointers + excerpts; YOU synthesize the answer from them ("cheap recon — expensive synthesis")

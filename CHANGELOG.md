@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **scout model migration**: bifrost-litellm/mimo-v2.5 → bifrost-litellm/MiniMax-M3.1-Flash-Preview (Model Roles `micro` row updated in place — scout is the sole occupant; caller prompts updated: dev-planner, plan-bug, plan-writer-complex, research-writer-simple)
 - **Project restructure: repo is now a committable snapshot of live config** (5 sync pairs, save/restore via config-sync)
 - **ARCHITECTURE.md is the single canonical doc** (+ Validation section for generic consistency-checker; + Infrastructure Export on-demand policy)
 - **consistency-checker rewritten as generic agent** (follows per-project ARCHITECTURE.md; no hardcoded paths/counters)
@@ -25,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **codebase-analyzer agent** (bifrost-litellm/Kimi K2.8; orchestrator whitelist #29; also callable by dev-planner/plan-bug via task allowlists; read-only preset from scout template; NEW Model Roles row `analyzer`/mid — justification per §Model Roles rule 3: deep structural analysis requires a strong reasoning model absent from existing roles)
+- **Direct docs-writer calls from implementation agents** (worker/dev-professor/execute-bug get `task.docs-writer: allow`) for in-flight user-facing documentation; Auto-DOCS hook semantics unchanged; ARCHITECTURE §Direct docs-writer Call documents depth-2 chain
 - **image-creator** agent (media MCP: generate_image/edit_image; объединяет generate-image + generate-image-gpt; 7 gen + 7 edit моделей — Gemini Flash/Pro, GPT Image 1.5/2/2.5-sunburst/2.5-flare, MiniMax image-01; dialog-выбор модели, aspect ratio, chaining generate→edit→video)
 - **video-generator** agent (media MCP: generate_video/video_status; MiniMax Hailuo 2.3/02, T2V-01; async-поллинг task_id; 5/6/10 с; 768P/1080P; image-to-video через first_frame_url)
 - **voice-transcriber** agent (media MCP: transcribe_audio; ASR zh/en auto-detect, диалекты, code-switch, песни, шум, multi-speaker)
@@ -210,6 +213,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`plugins/package.json`**: added `"type": "module"` to silence Node.js
   `[MODULE_TYPELESS_PACKAGE_JSON]` warning emitted by
   `workflow-enforcement.ts` (was being reparsed as ES module on every load).
+
+### Fixed
+
+- **orchestrator Auto-DOCS hook never fired**: TURN ALGORITHM line "advance, don't analyze it" contradicted the hook (PIPELINE TABLE) — added explicit `requires_docs_update` mechanical-parse exception to orchestrator.md and ARCHITECTURE §Auto-DOCS Hook
 
 ### Removed
 

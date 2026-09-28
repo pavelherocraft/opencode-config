@@ -33,6 +33,14 @@ Rules:
 - Do NOT run syntax checks — utility agent handles that
 - Add type hints where the codebase already uses them
 
+## Direct docs-writer call (user-facing documentation)
+
+If DURING your work you realize that user-facing documentation is needed (instructions for users, portal guides, usage how-tos), call `docs-writer` directly via the Task tool (`subagent_type: "docs-writer"`):
+- Pass a SELF-CONTAINED prompt: what to document, which files/APIs/flows changed, target audience, language of the existing docs
+- docs-writer reads the code and writes the documentation itself — do NOT write user docs personally
+- This does NOT replace the `requires_docs_update` flag: set it in your final JSON per the Output Specification rules regardless of any direct docs-writer call
+- At most ONE docs-writer call per task, and ONLY for user-facing docs — code comments/docstrings remain your own job
+
 Output Specification (required for orchestrator auto-DOCS hook):
 ```json
 {

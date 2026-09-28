@@ -1156,6 +1156,26 @@
     }
   },
   "agent": {
+    "codebase-analyzer": {
+      "mode": "subagent",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "webfetch": "deny",
+        "patch": "deny",
+        "todowrite": "deny",
+        "question": "deny",
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "task": {
+          "*": "deny"
+        }
+      },
+      "options": {}
+    },
     "voice-synthesizer": {
       "mode": "subagent",
       "temperature": 0.3,
@@ -1342,7 +1362,8 @@
         "task": {
           "*": "deny",
           "view-image": "allow",
-          "scout": "allow"
+          "scout": "allow",
+          "codebase-analyzer": "allow"
         }
       },
       "options": {}
@@ -1352,7 +1373,7 @@
       "temperature": 0.2,
       "permission": {
         "edit": "allow",
-        "bash": "deny",
+        "bash": "allow",
         "unity-mcp.*": "allow",
         "serena_find_symbol": "allow",
         "serena_find_referencing_symbols": "allow",
@@ -1430,7 +1451,8 @@
         "serena_insert_after_symbol": "allow",
         "task": {
           "*": "deny",
-          "view-image": "allow"
+          "view-image": "allow",
+          "docs-writer": "allow"
         }
       },
       "options": {}
@@ -1543,7 +1565,8 @@
         "task": {
           "*": "deny",
           "view-image": "allow",
-          "scout": "allow"
+          "scout": "allow",
+          "codebase-analyzer": "allow"
         }
       },
       "options": {}
@@ -1603,7 +1626,8 @@
         "serena_insert_after_symbol": "allow",
         "task": {
           "*": "deny",
-          "view-image": "allow"
+          "view-image": "allow",
+          "docs-writer": "allow"
         }
       },
       "options": {}
@@ -1757,7 +1781,8 @@
           "advisor": "allow",
           "voice-synthesizer": "allow",
           "voice-transcriber": "allow",
-          "voice-clone": "allow"
+          "voice-clone": "allow",
+          "codebase-analyzer": "allow"
         }
       },
       "options": {}
@@ -2013,7 +2038,8 @@
         "serena_insert_after_symbol": "allow",
         "task": {
           "*": "deny",
-          "view-image": "allow"
+          "view-image": "allow",
+          "docs-writer": "allow"
         }
       },
       "options": {}

@@ -27,7 +27,7 @@ Your role:
 
 ## CODEBASE RECONNAISSANCE — SCOUT WAVES
 
-Before designing architecture decisions, use `scout` — the cheap local-filesystem recon agent (runs on mimo-v2.5; glob/grep/read only) — to explore existing architecture, patterns, and conventions in parallel:
+Before designing architecture decisions, use `scout` — the cheap local-filesystem recon agent (runs on MiniMax-M3.1-Flash-Preview; glob/grep/read only) — to explore existing architecture, patterns, and conventions in parallel:
 
 1. INDEPENDENT recon questions ("map existing module structure" ∥ "find current dependency wiring" ∥ "locate conventions for config") — launch as MULTIPLE Task calls in ONE message (a parallel wave)
 2. `scout` for local FS recon; mcp-search / mcp-read / mcp-github for external sources (docs, APIs, libraries) when needed

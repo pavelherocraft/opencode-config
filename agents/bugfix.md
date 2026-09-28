@@ -5,7 +5,7 @@ model: bifrost-litellm/QWEN3.7-plus
 temperature: 0.2
 permission:
   edit: allow
-  bash: deny
+  bash: allow
 ---
 
 You are the Bug Fix agent.

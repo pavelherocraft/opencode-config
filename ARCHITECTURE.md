@@ -6,7 +6,7 @@ This document declares the project's requirements and consistency rules in full.
 
 ## 1. Routing Tables
 
-### orchestrator Whitelist (28 agents)
+### orchestrator Whitelist (29 agents)
 
 | # | Agent Name | Role |
 |---|------------|------|
@@ -38,6 +38,7 @@ This document declares the project's requirements and consistency rules in full.
 | 26 | voice-synthesizer | Voice synthesis (TTS, MCP media) |
 | 27 | voice-transcriber | Speech-to-text (MCP media ASR) |
 | 28 | voice-clone | Voice cloning TTS (MCP media) |
+| 29 | codebase-analyzer | Codebase analysis agent. Deep structural analysis of dependencies, architecture, and refactoring impact. Read-only (read/glob/grep). Kimi K2.8. |
 
 ### plankestrator Whitelist (10 agents)
 
@@ -58,15 +59,15 @@ This document declares the project's requirements and consistency rules in full.
 
 | Primary Agent | Whitelist Count | Total (primary + whitelist) |
 |---------------|-----------------|-----------------------------|
-| orchestrator | 28 | 29 (orchestrator + 28 subagents) |
+| orchestrator | 29 | 30 (orchestrator + 29 subagents) |
 | plankestrator | 10 | 11 (plankestrator + 10 subagents) |
-| **Grand Total** | **38** | **40** |
+| **Grand Total** | **39** | **41** |
 
-Note: 38 whitelist entries (view-image shared by both primaries) = 37 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 38 unique subagents + 2 primary agents = 40 unique agents total.
+Note: 39 whitelist entries (view-image shared by both primaries) = 38 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 39 unique subagents + 2 primary agents = 41 unique agents total.
 
 ### Shared Utility Agents
 
-view-image is a shared utility agent available to BOTH primary agents. It is listed in BOTH routing tables (orchestrator: position 20 of 28; plankestrator: position 10 of 10) and granted `task.view-image: allow` in both permission blocks in opencode.json. It is used for image analysis (screenshots, diagrams, error images) via the Task tool.
+view-image is a shared utility agent available to BOTH primary agents. It is listed in BOTH routing tables (orchestrator: position 20 of 29; plankestrator: position 10 of 10) and granted `task.view-image: allow` in both permission blocks in opencode.json. It is used for image analysis (screenshots, diagrams, error images) via the Task tool.
 
 ## Subagent Models
 
@@ -106,10 +107,11 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | image-creator | bifrost-litellm/MiniMax-M3 |
 | video-generator | bifrost-litellm/MiniMax-M3 |
 | view-image | bifrost-litellm/MiniMax-M3 |
-| scout | bifrost-litellm/mimo-v2.5 |
+| scout | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
 | voice-synthesizer | bifrost-litellm/MiniMax-M3 |
 | voice-transcriber | bifrost-litellm/MiniMax-M3 |
 | voice-clone | bifrost-litellm/MiniMax-M3 |
+| codebase-analyzer | bifrost-litellm/Kimi K2.8 |
 
 Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3.7-plus` and are documented in §Identity Lock Mechanism (v3), item 5 — not duplicated in the Subagent Models table.
 
@@ -129,7 +131,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 
 ## Model Roles (v5 — single source of truth, OMP model-roles analog)
 
-Роли централизуют назначение моделей 40 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Model Roles), (3) документации. Квота-aware fallback-цепочки — платформенное требование (статус: НЕ реализовано, требует поддержки рантайма/proxy).
+Роли централизуют назначение моделей 41 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Model Roles), (3) документации. Квота-aware fallback-цепочки — платформенное требование (статус: НЕ реализовано, требует поддержки рантайма/proxy).
 
 | Role | Model | Tier | Agents |
 |------|-------|------|--------|
@@ -150,9 +152,10 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | executor-step5 | bifrost-litellm/stepfun/step-5-preview | low | worker |
 | docs | bifrost-litellm/xiaomi/mimo-v2.6-pro | low | docs-writer, research-writer-simple |
 | docs-plan | bifrost-litellm/openrouter/deepseek-v4.1-flash | low | docs-planner |
-| micro | bifrost-litellm/mimo-v2.5 | low | scout |
+| micro | bifrost-litellm/MiniMax-M3.1-Flash-Preview | low | scout |
+| analyzer | bifrost-litellm/Kimi K2.8 | mid | codebase-analyzer |
 
-Контроль суммы: 2 primary + 38 subagents = 40 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.
+Контроль суммы: 2 primary + 39 subagents = 41 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.
 
 **Правила:**
 1. **Prewalk-принцип (OMP):** в паре planner→executor роль planner'а ДОЛЖНА быть tier ≥ executor'а: plan-bug (plan-flash, mid) → execute-bug (executor-cheap, low); dev-planner (plan-strong, top) → dev-professor (executor-strong, mid); docs-planner (docs-plan, low) → docs-writer (docs, low). Инверсия запрещена.
@@ -312,7 +315,7 @@ Both `orchestrator` and `plankestrator` are locked down to prevent them from doi
 ```
 Уровень 0 (depth 0): primary — orchestrator / plankestrator
 Уровень 1 (depth 1): research-writer-complex / plan-writer-complex / worker / bugfix / ...
-Уровень 2 (depth 2): scout / mcp-search / mcp-read / mcp-github / devops-readonly
+Уровень 2 (depth 2): scout / codebase-analyzer / mcp-search / mcp-read / mcp-github / devops-readonly / docs-writer (прямой вызов из worker/dev-professor/execute-bug)
 Уровень 3 (depth 3): (резерв; потолок — следующий Task будет отклонён ядром)
 ```
 
@@ -496,6 +499,8 @@ After the final `utility` step of BUGFIX/DEV pipelines, check the JSON output of
 
 **Trigger:** call `docs-writer → utility` if implementation agent's JSON output has `requires_docs_update: true`.
 
+**Orchestrator-side parse (mandatory):** the orchestrator MUST parse the `requires_docs_update` field from the arriving implementation agent's JSON. This is a mechanical field read — an explicit exception to the orchestrator's "advance, don't analyze" turn rule (mirrored in `agents/orchestrator.md` TURN ALGORITHM).
+
 Set `requires_docs_update: true` if ANY of these were modified:
 - `bug_plan.md` or `dev_plan.md` files
 - Any `*.md` file (README, ARCHITECTURE, docs/, CHANGELOG)
@@ -510,6 +515,10 @@ Set `requires_docs_update: true` if ANY of these were modified:
 - DEVOPS (deployments don't affect docs)
 - DOCS (recursive — would loop forever)
 - PLAN, RESEARCH (out of orchestrator's scope)
+
+### Direct docs-writer Call (in-flight, BUGFIX/DEV)
+
+Implementation agents (worker, dev-professor, execute-bug) hold `task.docs-writer: allow` (opencode.json) and MAY call docs-writer directly DURING their step when user-facing documentation is needed (user instructions, portal guides). Rules: at most ONE call per task; the Task prompt must be self-contained (`docs_plan.md` is NOT written for direct calls); a direct call does NOT replace the `requires_docs_update` flag — the Auto-DOCS hook stays independent. Depth: primary(0) → implementation agent(1) → docs-writer(2) — within `subagent_depth: 3`.
 
 ### PLAN
 
@@ -709,7 +718,7 @@ All three Z.AI MCP servers (`zai_zread`, `zai_web_search`, `zai_web_reader`) are
 
 ## unity-mcp Permissions
 
-### ALL Agents Have unity-mcp Access (exceptions: scout, advisor, voice-synthesizer, image-creator, video-generator, voice-transcriber, voice-clone)
+### ALL Agents Have unity-mcp Access (exceptions: scout, codebase-analyzer, advisor, voice-synthesizer, image-creator, video-generator, voice-transcriber, voice-clone)
 
 unity-mcp is available for ALL agents, not just orchestrator and plankestrator.
 
@@ -826,7 +835,7 @@ Agents do NOT call each other — the user must manually switch between them.
 ### Live (runtime, единственное место правок)
 `C:\Users\Admin\.config\opencode\`
 - `opencode.json` — конфиг (провайдеры, модели, permissions)
-- `agents/*.md` — 40 определений агентов (frontmatter + промпт)
+- `agents/*.md` — 41 определений агентов (frontmatter + промпт)
 - `plugins/workflow-enforcement.ts` — enforcement-плагин
 - `skills/git-commit/` — юзер-скилл
 - `AGENTS.md` — глобальные инструкции (lean)
@@ -834,7 +843,7 @@ Agents do NOT call each other — the user must manually switch between them.
 
 ### Repo (коммит-снапшот live)
 `P:\Programming\Рефакторинг\`
-- `agents/` — зеркало live agents/ (40 .md)
+- `agents/` — зеркало live agents/ (41 .md)
 - `opencode.json` — зеркало
 - `plugins/workflow-enforcement.ts` — зеркало
 - `skills/git-commit/` — зеркало
@@ -873,16 +882,17 @@ Agents do NOT call each other — the user must manually switch between them.
 
 ## 9. Plugin Hooks
 
-The workflow-enforcement plugin implements 6 lifecycle hooks:
+The workflow-enforcement plugin implements 5 lifecycle hooks:
 
 | Hook | When | Purpose |
 |------|------|---------|
 | `tool.execute.before` | Before any tool call | Routing table enforcement; JSON-before-Task gate (no grace for locked agents, v4); inspection budget & post-pipeline inspection ban for plankestrator (v4); suppressed while a Task subagent runs (`activeTaskDepth > 0`, v4) |
 | `tool.execute.after` | After tool completes | Logs tool completion |
 | `session.created` | New session starts | Detects which agent is running; CHILD (subagent) sessions preserve the parent's identity-lock state (parentID guard, v4) |
-| `session.updated` | Session changes | Detects identity drift |
 | `session.idle` | Session ends | Logs workflow summary |
-| `message.updated` | Message added | Validates JSON output format (INVALID JSON logged as error, v4); detects forbidden vocabulary and self-work content markers (v4); skipped while a Task subagent runs |
+| `message.updated` | Message added | Validates JSON output format (INVALID JSON logged as error, v4); detects identity drift (identity-lock v3 — a locked agent claiming a different identity is rejected, L492); detects forbidden vocabulary and self-work content markers (v4); skipped while a Task subagent runs |
+
+Note: the session lifecycle events (`session.created`, `session.idle`, `message.updated`) are dispatched inside the plugin's single `event` hook — there is no separate `session.updated` branch (identity drift detection lives in the `message.updated` branch).
 
 ## 10. Identity Verification Format
 

@@ -153,4 +153,4 @@ Agent: "Это новый семпл без voice_id — zero-shot клон, и�
 - Clones: a NEW sample without a `voice_id` → the `voice-clone` agent; an
   already REGISTERED clone (`voice_id` known) → you, via `voice_id` +
   `minimax/speech-2.8-hd`; never fake a clone with a preset voice
-- Never use the old audio-synthesize skill or any scripts — MCP only
+- Never use the old skill or any scripts — MCP only
