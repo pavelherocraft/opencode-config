@@ -131,6 +131,8 @@ const INSPECTION_BUDGET = 3
 let selfWorkDetected: boolean = false
 // >0 пока выполняется Task-субагент — enforcement приостановлен (атрибуция)
 let activeTaskDepth = 0
+// Track if primary agent has made first Task call (for read/grep/glob lock)
+const primaryAgentFirstTaskCall = new Map<string, boolean>()
 
 // ============================================================
 // Forbidden vocabulary per agent — sanity check on message text.
@@ -236,6 +238,7 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         selfWorkDetected = false
         activeTaskDepth = 0
         seenFindings = new Map()  // v5: сброс дедуп-журнала замечаний
+        primaryAgentFirstTaskCall.clear()
 
         // Try to detect agent from event data
         const sessionData = (event as any).properties?.session
@@ -431,6 +434,20 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         const jsonContent = extractJSONFromMessage(message)
         const identityText = extractIdentityFromMessage(message)
 
+        // NEW: Block primary agents without identity line in first message
+        if ((currentAgent === "orchestrator" || currentAgent === "plankestrator") &&
+            !identityText &&
+            !hasOutputtedJSON.get(currentAgent)) {
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "error",
+              message: `PRIMARY AGENT MISSING IDENTITY — ${currentAgent} did not start with "IDENTITY VERIFIED: I am ${currentAgent}"`,
+              extra: { agent: currentAgent }
+            }
+          })
+        }
+
         // FIX: Use IDENTITY VERIFIED text to detect agent FIRST (highest priority)
         if (identityText && !currentAgent) {
           if (identityText === "orchestrator" || identityText === "plankestrator") {
@@ -527,6 +544,47 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
 
         // Validate JSON if we know which agent is running
         if (jsonContent && currentAgent) {
+          // NEW: Validate pipeline and next_agent for primary agents
+          if (jsonContent && (currentAgent === "orchestrator" || currentAgent === "plankestrator")) {
+            const type = jsonContent.type
+            const complexity = jsonContent.complexity
+            const planExists = jsonContent.plan_exists
+            const pipeline = jsonContent.pipeline
+            const nextAgent = jsonContent.next_agent
+
+            // Validate pipeline
+            if (pipeline && Array.isArray(pipeline)) {
+              const pipelineValidation = validatePipeline(currentAgent, type, complexity, planExists, pipeline)
+              if (!pipelineValidation.valid) {
+                await client.app.log({
+                  body: {
+                    service: "workflow-enforcement",
+                    level: "error",
+                    message: `PIPELINE VALIDATION FAILED — ${pipelineValidation.error}`,
+                    extra: { agent: currentAgent, pipeline }
+                  }
+                })
+              }
+            }
+
+            // Validate next_agent
+            if (nextAgent !== undefined && pipeline && Array.isArray(pipeline)) {
+              // Determine current step (simplified: count Task calls so far)
+              const currentStep = 0 // TODO: track step counter properly
+              const nextAgentValidation = validateNextAgent(nextAgent, pipeline, currentStep)
+              if (!nextAgentValidation.valid) {
+                await client.app.log({
+                  body: {
+                    service: "workflow-enforcement",
+                    level: "error",
+                    message: `NEXT_AGENT VALIDATION FAILED — ${nextAgentValidation.error}`,
+                    extra: { agent: currentAgent, nextAgent, pipeline }
+                  }
+                })
+              }
+            }
+          }
+
           const validation = validateJSONOutput(jsonContent, currentAgent)
 
           if (!validation.valid) {
@@ -666,6 +724,29 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
           target: targetForLog
         })
         return
+      }
+
+      // NEW: Track first Task call for primary agents
+      if (input.tool === "task" && (currentAgent === "orchestrator" || currentAgent === "plankestrator")) {
+        primaryAgentFirstTaskCall.set(currentAgent, true)
+      }
+
+      // NEW: Block read/grep/glob for primary agents after first Task call
+      if ((input.tool === "read" || input.tool === "grep" || input.tool === "glob") &&
+          (currentAgent === "orchestrator" || currentAgent === "plankestrator") &&
+          primaryAgentFirstTaskCall.get(currentAgent)) {
+        await client.app.log({
+          body: {
+            service: "workflow-enforcement",
+            level: "error",
+            message: `PRIMARY AGENT FORBIDDEN TOOL — ${currentAgent} attempted ${input.tool} after first Task call`,
+            extra: { agent: currentAgent, tool: input.tool }
+          }
+        })
+        throw new Error(`
+⛔ PRIMARY AGENT FORBIDDEN: ${input.tool} blocked after first Task call.
+You can only use read/grep/glob for classification in Turn 1. Delegate inspection to the appropriate subagent via Task.
+        `)
       }
 
       // HARD GATE: primary agents (orchestrator / plankestrator) are restricted at
@@ -1299,6 +1380,87 @@ function extractJSONFromMessage(message: any): any | null {
   }
 
   return null
+}
+
+// ============================================================
+// Pipeline & Identity Validation
+// ============================================================
+
+/**
+ * Validate pipeline matches PIPELINE TABLE for primary agents.
+ */
+function validatePipeline(agent: string, type: string, complexity: string, planExists: boolean, pipeline: string[]): { valid: boolean; error?: string } {
+  const PIPELINES: Record<string, Record<string, string[]>> = {
+    orchestrator: {
+      "BUGFIX-null-null": ["bugfix-triage"],
+      "DEVOPS-null-null": ["devops-agent", "devops-reviewer"],
+      "DEV-SIMPLE-false": ["worker", "utility"],
+      "DEV-SIMPLE-true": ["worker", "consistency-checker", "utility"],
+      "DEV-COMPLEX-false": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"],
+      "DEV-SUPERCOMPLEX-true": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"],
+      "DOCS-SIMPLE-any": ["docs-writer", "utility"],
+      "DOCS-DEEP-any": ["docs-planner", "docs-writer", "dev-reviewer", "rework", "consistency-checker", "utility"]
+    },
+    plankestrator: {
+      "PLAN-SIMPLE": ["plan-writer-simple", "plan-reviewer-simple"],
+      "PLAN-COMPLEX": ["plan-writer-complex", "plan-reviewer-complex"],
+      "RESEARCH-SIMPLE": ["research-writer-simple", "research-reviewer"],
+      "RESEARCH-COMPLEX": ["research-writer-complex", "research-reviewer"],
+      "RESEARCH+PLAN-SIMPLE": ["research-writer-simple", "research-reviewer", "plan-writer-simple", "plan-reviewer-simple"],
+      "RESEARCH+PLAN-COMPLEX": ["research-writer-complex", "research-reviewer", "plan-writer-complex", "plan-reviewer-complex"]
+    }
+  }
+
+  // Build key based on agent type
+  let key: string
+  if (agent === "orchestrator") {
+    key = `${type}-${complexity}-${planExists}`
+    // Handle "any" for DOCS
+    if (type === "DOCS") {
+      key = `${type}-${complexity}-any`
+    }
+  } else if (agent === "plankestrator") {
+    key = `${type}-${complexity}`
+  } else {
+    return { valid: true } // Unknown agent, allow
+  }
+
+  const expected = PIPELINES[agent]?.[key]
+  if (!expected) {
+    return { valid: true } // Unknown combination, allow
+  }
+
+  if (JSON.stringify(pipeline) !== JSON.stringify(expected)) {
+    return {
+      valid: false,
+      error: `Pipeline mismatch for ${agent} ${type}/${complexity}/${planExists}. Expected: [${expected.join(', ')}], got: [${pipeline.join(', ')}]`
+    }
+  }
+
+  return { valid: true }
+}
+
+/**
+ * Validate next_agent matches current pipeline step.
+ */
+function validateNextAgent(nextAgent: string | null, pipeline: string[], currentStep: number): { valid: boolean; error?: string } {
+  if (nextAgent === null) {
+    return { valid: true } // Pipeline complete
+  }
+
+  if (currentStep >= pipeline.length) {
+    return { valid: false, error: `Pipeline exhausted but next_agent is ${nextAgent}` }
+  }
+
+  const expected = pipeline[currentStep]
+  if (nextAgent !== expected) {
+    return {
+      valid: false,
+      error: `next_agent mismatch at step ${currentStep}. Expected: ${expected}, got: ${nextAgent}`
+    }
+  }
+
+  return { valid: true }
 }
 
 /**
