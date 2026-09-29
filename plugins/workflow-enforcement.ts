@@ -135,6 +135,69 @@ let activeTaskDepth = 0
 const primaryAgentFirstTaskCall = new Map<string, boolean>()
 
 // ============================================================
+// v6 (Part II, Phase 9.0а/б + 10.1 + 13.1 + 14.1) — deferred violation flags
+// and pipeline-step tracking. Pattern: selfWorkDetected (set in message.updated,
+// consumed in tool.execute.before). A throw inside the event hook is INERT —
+// the message is already sent; only the unified gate in tool.execute.before
+// (Phase 9.0в) blocks the real action.
+// Consume-once: flags reset after the throw; recovery — a clean valid message
+// clears message-derived flags (latest-message-wins; message.updated re-fires
+// per streaming chunk, early chunks may lack identity/JSON).
+// ============================================================
+let identityMissing = false      // Phase 9.1  — primary message without identity line
+let pipelineMismatch = false     // Phase 9.2  — pipeline violates PIPELINE TABLE
+let nextAgentMismatch = false    // Phase 9.3  — next_agent violates pipeline step
+let invalidJSON = false          // Phase 9.4  — JSON schema violation (incl. severity, Phase 15)
+let forbiddenIdentity = false    // Phase 9.5  — foreign identity claim ("I am plankestrator")
+let pipelineImmutable = false    // Phase 17.2 — pipeline changed after Turn 1
+let blockerStop = false          // Phase 14.3 — 3 blockers; NOT cleared by recovery (cumulative)
+let violationDetail = ""         // detail text for the deferred THROW message
+
+// v6 (Phase 9.0б): dedup of NON-idempotent operations by messageID (streaming re-fires)
+const processedMessageIDs = new Set<string>()
+
+// v6 (Phase 13.2б): top-level session ID — attribution of a parallel Task
+// (caller = primary vs caller = subagent performing a legitimate nested delegation)
+let topLevelSessionID: string | null = null
+
+// v6 (Phase 10.1): pipeline step tracking — replaces the `const currentStep = 0` TODO stub.
+// Key = primary agent name (hasOutputtedJSON / primaryAgentFirstTaskCall pattern).
+// currentStep semantics: index of the LAST DISPATCHED agent (dispatch happens in the
+// same turn whose JSON set the state); expected next_agent of the following turn =
+// pipeline[currentStep + 1].
+// provisional=true: classification turn with complexity=null (DECOMPOSITION Turn A,
+// codebase-analyzer helper, BUGFIX/DEVOPS Turn 1) — the pipeline is NOT frozen yet and
+// may be freely replaced by the next turn (correction F-4).
+// type: last locked type — used by the Auto-DOCS hook exception (correction F-12).
+const pipelineState = new Map<string, { pipeline: string[]; currentStep: number; provisional: boolean; type: string | null }>()
+
+// v6 (Phase 13.1): max ONE Task call per turn
+const taskCallsPerTurn = new Map<string, number>()   // agent → Task calls in current turn
+const lastTurnMessageID = new Map<string, string>()  // agent → messageID of current turn (reset dedup)
+
+// v6 (Phase 14.1): rework loop max 3 + BLOCKER STOP after 3 — PER REWORK-LOOP,
+// not per session (advisor Note 2): SUPERCOMPLEX runs a full rework loop PER PLAN
+// STEP; session-scoped counting would exhaust the max-3 quota by the 3rd plan step.
+// The counters reset when a new loop context begins (see the pipeline state block).
+const reworkCount = new Map<string, number>()        // agent → rework dispatches in current loop
+const blockerEscalations = new Map<string, number>() // agent → reviewer severity=blocker in current loop
+// v6 (advisor Note 2): furthest pipeline index dispatched — detects new loop context
+// (forward progress past the max, or a backward jump >= 2 = a new chain cycle).
+const maxStepReached = new Map<string, number>()     // agent → furthest pipeline index dispatched
+
+// v6 (correction F-4): auxiliary agents of classification turns — NOT pipeline steps
+// (same semantics as AUXILIARY_TASK_TARGETS in the Task section): their turns skip
+// next_agent validation and do not lock pipelineState.
+const AUXILIARY_NEXT_AGENTS = [...IDENTITY_PROBE_AGENTS, "view-image"]
+
+// v6 (correction F-11 / risk R15): row-6 SUPERCOMPLEX semantics are not fully
+// formalized — the rework-loop agent is ABSENT from the base array ("full chain PER
+// PLAN STEP", orchestrator.md SUPERCOMPLEX Stage 2 item 6) and per-step re-emission
+// may vary the array. Strict 10.3/17.2 checks would produce GUARANTEED false
+// positives → log-only for complexity==="SUPERCOMPLEX" until the format is formalized.
+const SUPERCOMPLEX_STRICT = false
+
+// ============================================================
 // Forbidden vocabulary per agent — sanity check on message text.
 // If the agent claims identity X but writes text characteristic of Y,
 // the plugin rejects the message instead of silently warning.
@@ -152,8 +215,19 @@ const FORBIDDEN_VOCAB: Record<string, string[]> = {
   ]
 }
 
+// v6 (Phase 9.5): identity-subset of FORBIDDEN_VOCAB — these ESCALATE to a deferred
+// THROW (gate 9.0в). Agent-name tokens stay log-only (legitimate cross-references,
+// e.g. orchestrator quoting "plan-writer-" in prose — rationale of the old :641–644
+// comment holds for names).
+const FORBIDDEN_IDENTITY_TOKENS: Record<string, string[]> = {
+  orchestrator: ["I am plankestrator", "I'm plankestrator", "I am the Plankestrator"],
+  plankestrator: ["I am orchestrator", "I'm orchestrator", "I am the Conductor",
+                   "I am the Task classifier", "Task classifier and router"]
+}
+
 // ============================================================
-// Self-work markers (v4) — маркеры САМОСТОЯТЕЛЬНОЙ plan/research-работы
+// Self-work markers (v4; v6 Phase 12: + orchestrator) — маркеры САМОСТОЯТЕЛЬНОЙ
+// plan/research/implementation-работы
 // в сообщении locked primary-агента (исследование: Пробел 3, Рек. 3).
 // Намеренно НЕ смешиваются с FORBIDDEN_VOCAB: тот логируется как
 // "contains {otherAgent} terminology" (стр. 420) — семантика другая.
@@ -163,6 +237,10 @@ const FORBIDDEN_VOCAB: Record<string, string[]> = {
 // списка исследования: модель отвечает пользователю по-русски.
 // ============================================================
 const SELF_WORK_MARKERS: Record<string, string[]> = {
+  // v6 (Phase 12): orchestrator self-work = writing analysis/implementation yourself
+  // instead of delegating (worker / dev-planner / bugfix-triage / docs-writer).
+  // Heading tokens ("## ...") keep the false-positive rate low (same rationale as v4).
+  orchestrator: ["## Findings", "## Analysis", "## Implementation", "## Root Cause"],
   plankestrator: [
     "## Findings", "## Research", "Executive Summary", "## Analysis",
     "### Root Cause", "## Recommendations", "## Overview",
@@ -239,6 +317,27 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         activeTaskDepth = 0
         seenFindings = new Map()  // v5: сброс дедуп-журнала замечаний
         primaryAgentFirstTaskCall.clear()
+
+        // v6 (Phase 9.0д + 10.4 + 13.2б + 14.4): reset deferred-violation state,
+        // pipeline tracking and counters. CRITICAL: this lives in the unconditional
+        // reset block AFTER the parentID guard — a child (Task subagent) session must
+        // NOT wipe the parent's state (same bug the guard was written for).
+        identityMissing = pipelineMismatch = nextAgentMismatch = invalidJSON =
+          forbiddenIdentity = pipelineImmutable = blockerStop = false
+        violationDetail = ""
+        pipelineState.clear()
+        taskCallsPerTurn.clear()
+        lastTurnMessageID.clear()
+        reworkCount.clear()
+        blockerEscalations.clear()
+        maxStepReached.clear()
+        processedMessageIDs.clear()
+        // v6 (Phase 13.2б): remember the top-level session ID for parallel-Task
+        // attribution. childCheckData is in scope (defined above, before the guard).
+        // If extraction fails (field names differ), topLevelSessionID stays null and
+        // 13.2б degrades to the pre-existing warn (safe fallback).
+        topLevelSessionID = String(childCheckData?.id || (event as any).sessionID
+          || (event as any).session_id || (event as any).properties?.sessionID || "") || null
 
         // Try to detect agent from event data
         const sessionData = (event as any).properties?.session
@@ -376,6 +475,27 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
               await client.app.log({ body: { service: "workflow-enforcement", level: "error",
                 message: `BLOCKER FINDING — ${subAgent} вернул severity=blocker; orchestrator: немедленный rework + ⚠️ BLOCKER ack + эскалация пользователю при персистировании`,
                 extra: { agent: subAgent } } })
+              // v6 (Phase 14.3): BLOCKER STOP after 3 (orchestrator.md SEVERITY RULES —
+              // "if a blocker persists after the 3rd rework iteration → STOP and report").
+              // Reviewer JSON arrives in SUBAGENT messages (this depth>0 branch); a throw
+              // in the event hook is inert → the blockerStop flag is consumed by gate 9.0в:
+              // it blocks the primary's NEXT tool call, forcing the final summary instead
+              // of a 4th iteration. blockerStop is NOT cleared by recovery (cumulative
+              // session state) — only session.created resets it. MessageID dedup is
+              // mandatory (streaming re-fires; suffixed key avoids collision with 10.2).
+              const blockerMsgId = String((subMessage as any).id || (subMessage as any).info?.id || "")
+              if (blockerMsgId && !processedMessageIDs.has(blockerMsgId + ":blocker")) {
+                processedMessageIDs.add(blockerMsgId + ":blocker")
+                const bCount = (blockerEscalations.get(currentAgent ?? "") || 0) + 1
+                blockerEscalations.set(currentAgent ?? "", bCount)
+                await client.app.log({ body: { service: "workflow-enforcement", level: "error",
+                  message: `BLOCKER ESCALATION COUNTED — ${bCount}/3 (${subAgent})`,
+                  extra: { agent: currentAgent, reviewer: subAgent, count: bCount } } })
+                if (bCount >= 3) {
+                  blockerStop = true
+                  violationDetail = `BLOCKER STOP AFTER 3: blocker persisted after 3 rework iterations (${subAgent}). Escalate to the user in the final summary — do NOT dispatch another Task.`
+                }
+              }
             }
             // 3. Дедуп + фильтр пустых фраз + бюджет (emission-guard)
             const seen = seenFindings.get(subAgent) ?? new Set<string>()
@@ -411,6 +531,23 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
 
         if (!message) return
 
+        // v6 (Phase 13.3): turn boundary = a NEW primary message. Dedup by messageID:
+        // message.updated fires per streaming chunk — the counter resets ONLY when the
+        // message changes (an unconditional reset would zero the counter between two Task
+        // calls of the SAME message, making the 13.2 gate inert — source-plan correction).
+        // Subagent messages never reach here (the depth>0 branch returns earlier).
+        const turnMsgId = String((message as any).id || (message as any).info?.id || "")
+        if (currentAgent && turnMsgId && lastTurnMessageID.get(currentAgent) !== turnMsgId) {
+          lastTurnMessageID.set(currentAgent, turnMsgId)
+          taskCallsPerTurn.set(currentAgent, 0)
+        }
+
+        // v6 (Phase 9.0г, correction F-9): per-event marker — "a deferred flag was set
+        // DURING THIS message.updated run". The recovery in the valid-JSON else-branch
+        // clears only flags left by PREVIOUS messages, never the ones set by this
+        // event's validations (:556–602 run BEFORE the else-branch in the same run).
+        let v6FlagSetThisEvent = false
+
         // NEW: Detect mode change mid-session (user toggles Shift+Tab).
         // Some opencode versions include session metadata in the message
         // event payload, so re-check the plan mode indicator here.
@@ -434,6 +571,10 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         const jsonContent = extractJSONFromMessage(message)
         const identityText = extractIdentityFromMessage(message)
 
+        // v6 (Phase 9.0г-1): recovery — identity line present → clear identityMissing
+        // (latest-message-wins: an early streaming chunk may not contain the line yet).
+        if (identityText) identityMissing = false
+
         // NEW: Block primary agents without identity line in first message
         if ((currentAgent === "orchestrator" || currentAgent === "plankestrator") &&
             !identityText &&
@@ -446,6 +587,11 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
               extra: { agent: currentAgent }
             }
           })
+          // v6 (Phase 9.1): escalate log-only → deferred THROW (gate 9.0в blocks the
+          // next tool call of this primary). Recovery: the next message containing the
+          // identity line clears the flag (9.0г-1).
+          identityMissing = true
+          violationDetail = `PRIMARY AGENT MISSING IDENTITY — ${currentAgent} did not start with "IDENTITY VERIFIED: I am ${currentAgent}"`
         }
 
         // FIX: Use IDENTITY VERIFIED text to detect agent FIRST (highest priority)
@@ -520,9 +666,17 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
                 }
               }
             })
-            // Hard-error: log and let the message through but flag the violation.
-            // We do NOT update currentAgent; we keep the locked identity.
-            // Downstream Task calls will be validated against the locked routing table.
+            // v6 (Phase 9.6): escalate — drift under identity lock is a terminal
+            // violation. currentAgent is NOT updated (locked identity preserved); the
+            // throw aborts the remaining message.updated processing for this event.
+            // CAVEAT: a throw in an event hook does NOT retract the message and may be
+            // swallowed by the opencode runtime (effect = error log + aborted handler).
+            // If Verification V-A5 shows the stream continues harmlessly — degrade to a
+            // deferred flag (`identityDrift`) consumed by gate 9.0в (add to state block A1).
+            throw new Error(`
+⛔ IDENTITY DRIFT REJECTED — session is LOCKED to ${lockedAgentName}.
+Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-session.
+            `)
           } else {
             const previousAgent = currentAgent
             currentAgent = String(jsonContent.agent)
@@ -546,15 +700,32 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         if (jsonContent && currentAgent) {
           // NEW: Validate pipeline and next_agent for primary agents
           if (jsonContent && (currentAgent === "orchestrator" || currentAgent === "plankestrator")) {
+            // v6 (Phase 15): severity in the PRIMARY's JSON — validate against the
+            // taxonomy (VALID_SEVERITIES, not a duplicated literal). Previously severity
+            // was checked only on subagent messages (SEVERITY_AGENTS branch); a primary
+            // re-emitting reviewer JSON (rework loop) could carry an invalid value.
+            // null/undefined are tolerated — severity is NOT part of the primary required
+            // schema. Escalates via invalidJSON (Phase 9.4 mechanism → gate 9.0в).
+            if (jsonContent.severity !== undefined && jsonContent.severity !== null &&
+                !VALID_SEVERITIES.includes(String(jsonContent.severity))) {
+              invalidJSON = true
+              v6FlagSetThisEvent = true
+              violationDetail = `INVALID SEVERITY: ${String(jsonContent.severity)}, expected ${VALID_SEVERITIES.join("|")}`
+              await client.app.log({ body: { service: "workflow-enforcement", level: "error",
+                message: `PRIMARY SEVERITY INVALID — ${currentAgent}: ${violationDetail}`,
+                extra: { agent: currentAgent, severity: String(jsonContent.severity) } } })
+            }
+
             const type = jsonContent.type
             const complexity = jsonContent.complexity
             const planExists = jsonContent.plan_exists
             const pipeline = jsonContent.pipeline
             const nextAgent = jsonContent.next_agent
 
-            // Validate pipeline
+            // Validate pipeline (v6 Phase 9.2: log escalated to deferred THROW via
+            // pipelineMismatch; log preserved for audit)
             if (pipeline && Array.isArray(pipeline)) {
-              const pipelineValidation = validatePipeline(currentAgent, type, complexity, planExists, pipeline)
+              const pipelineValidation = validatePipeline(currentAgent, type, complexity, planExists, pipeline, jsonContent)
               if (!pipelineValidation.valid) {
                 await client.app.log({
                   body: {
@@ -564,21 +735,56 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
                     extra: { agent: currentAgent, pipeline }
                   }
                 })
+                pipelineMismatch = true
+                v6FlagSetThisEvent = true
+                violationDetail = `PIPELINE VALIDATION FAILED — ${pipelineValidation.error}`
               }
             }
 
-            // Validate next_agent
-            if (nextAgent !== undefined && pipeline && Array.isArray(pipeline)) {
-              // Determine current step (simplified: count Task calls so far)
-              const currentStep = 0 // TODO: track step counter properly
-              const nextAgentValidation = validateNextAgent(nextAgent, pipeline, currentStep)
+            // Validate next_agent (v6 Phase 10.3 + 9.3 — real step tracking replaces
+            // the `const currentStep = 0` TODO stub; violation escalates via the
+            // nextAgentMismatch deferred flag, NOT a direct throw — throws in
+            // message.updated are inert).
+            // F-4: auxiliary classification turns (identity probes, view-image) are NOT
+            // pipeline steps — skip (AUXILIARY_TASK_TARGETS semantics of the Task section).
+            if (nextAgent !== undefined && pipeline && Array.isArray(pipeline) &&
+                !AUXILIARY_NEXT_AGENTS.includes(String(nextAgent))) {
+              const pState = pipelineState.get(currentAgent)
+              // Turn 1: state not set yet (the state block runs below, in the valid-JSON
+              // else-branch) → effectiveStep = 0.
+              const effectiveStep = pState ? pState.currentStep + 1 : 0
+              const nextAgentValidation = validateNextAgent(nextAgent, pipeline, effectiveStep)
               if (!nextAgentValidation.valid) {
+                // Whitelist exceptions:
+                // (1) loopback into the completed prefix (rework loop / escalate_to /
+                //     DECOMPOSITION re-dispatch / SUPERCOMPLEX per-step dev-planner).
+                //     Cap effectiveStep <= length (F-12): re-dispatch AFTER exhaustion
+                //     is a violation (the final turn must carry next_agent=null).
+                const isLoopback = nextAgent !== null && effectiveStep <= pipeline.length &&
+                  pipeline.slice(0, effectiveStep).includes(String(nextAgent))
+                // (2) severity-nit skip over rework (orchestrator SEVERITY RULES)
+                const isReworkSkip = pipeline[effectiveStep] === "rework" &&
+                  nextAgent === pipeline[effectiveStep + 1]
+                // (3) F-12: Auto-DOCS hook — legitimate pipeline switch to DOCS after the
+                //     main pipeline completed (orchestrator TURN ALGORITHM: requires_docs_update).
+                const isDocsHook = !!pState && pState.type !== "DOCS" &&
+                  jsonContent.type === "DOCS" && String(nextAgent) === pipeline[0]
+                // (4) F-11 (R15): SUPERCOMPLEX row-6 semantics not fully formalized
+                //     (rework absent from the base array; per-step re-emission) → log-only.
+                const isSupercomplexExempt = !SUPERCOMPLEX_STRICT &&
+                  jsonContent.complexity === "SUPERCOMPLEX"
+                if (!(isLoopback || isReworkSkip || isDocsHook || isSupercomplexExempt)) {
+                  nextAgentMismatch = true  // Phase 9.3 → THROW via gate 9.0в
+                  v6FlagSetThisEvent = true
+                  violationDetail = `NEXT_AGENT MISMATCH at step ${effectiveStep} — ${nextAgentValidation.error}`
+                }
                 await client.app.log({
                   body: {
                     service: "workflow-enforcement",
                     level: "error",
                     message: `NEXT_AGENT VALIDATION FAILED — ${nextAgentValidation.error}`,
-                    extra: { agent: currentAgent, nextAgent, pipeline }
+                    extra: { agent: currentAgent, nextAgent, pipeline, effectiveStep,
+                      whitelisted: isLoopback || isReworkSkip || isDocsHook || isSupercomplexExempt }
                   }
                 })
               }
@@ -600,17 +806,155 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
                 }
               }
             })
+            // v6 (Phase 9.4): escalate log-only → deferred THROW (gate 9.0в). Previously
+            // the violation blocked Task only INDIRECTLY (hasOutputtedJSON not set →
+            // JSON-before-Task gate); the flag blocks ANY tool call directly.
+            invalidJSON = true
+            v6FlagSetThisEvent = true
+            violationDetail = `INVALID JSON OUTPUT — errors: ${validation.errors.join("; ")}, missing: ${validation.missingFields.join(", ")}`
           } else {
             hasOutputtedJSON.set(currentAgent, true)
+
+            // v6 (Phase 9.0г-2): recovery — latest-message-wins. A clean valid-JSON
+            // message clears message-derived deferred flags left by PREVIOUS messages /
+            // early streaming chunks. Flags set during THIS event (v6FlagSetThisEvent)
+            // survive. blockerStop is NOT cleared (cumulative session state, Phase 14.3).
+            if (!v6FlagSetThisEvent) {
+              pipelineMismatch = nextAgentMismatch = invalidJSON =
+                forbiddenIdentity = pipelineImmutable = false
+              violationDetail = ""
+            }
+
+            // v6 (correction F-10): messageID for dedup + observability (V-A11 verifies
+            // the extraction; if empty, non-idempotent counters of Stage C stay disabled).
+            const msgId = String((message as any).id || (message as any).info?.id || "")
 
             await client.app.log({
               body: {
                 service: "workflow-enforcement",
                 level: "info",
                 message: "Valid JSON output detected — Task tool now allowed",
-                extra: { agent: currentAgent }
+                extra: { agent: currentAgent, msgId }
               }
             })
+
+            // ==========================================================
+            // v6 (Phase 10.2 + 17.1 + 17.2): UNIFIED PIPELINE STATE BLOCK.
+            // Runs AFTER validations, ONLY for valid JSON, ONCE per message (msgId dedup).
+            // F-10: with an empty msgId the block still executes — every mutation below
+            // is an idempotent ASSIGNMENT (never an increment), so streaming re-fires
+            // cannot double-advance the step.
+            // ==========================================================
+            if (!msgId || !processedMessageIDs.has(msgId)) {
+              if (msgId) processedMessageIDs.add(msgId)
+              const prev = pipelineState.get(currentAgent)
+              const newPipeline = Array.isArray(jsonContent.pipeline) ? jsonContent.pipeline as string[] : null
+              const nextAgentIsAux = AUXILIARY_NEXT_AGENTS.includes(String(jsonContent.next_agent))
+              // F-4: OUT OF SCOPE / no-pipeline turns and auxiliary turns (identity probes,
+              // view-image) do NOT lock state — classification is not finished yet.
+              if (newPipeline && newPipeline.length > 0 && !nextAgentIsAux) {
+                const nextIdx = jsonContent.next_agent
+                  ? newPipeline.indexOf(String(jsonContent.next_agent)) : -1
+                // F-4: classification turns with complexity=null (DECOMPOSITION Turn A,
+                // codebase-analyzer helper, BUGFIX/DEVOPS Turn 1) lock a PROVISIONAL
+                // pipeline — the next turn may replace it freely.
+                const provisional = jsonContent.complexity === null || jsonContent.complexity === undefined
+                const newType = jsonContent.type !== undefined && jsonContent.type !== null
+                  ? String(jsonContent.type) : null
+                if (!prev) {
+                  // Turn 1 — lock the pipeline (Phase 17.1: first valid JSON wins;
+                  // the dedup guard above protects against streaming overwrites).
+                  pipelineState.set(currentAgent, {
+                    pipeline: newPipeline,
+                    currentStep: nextIdx >= 0 ? nextIdx : 0,
+                    provisional,
+                    type: newType
+                  })
+                } else if (JSON.stringify(newPipeline) !== JSON.stringify(prev.pipeline)) {
+                  // Phase 17.2 — pipeline changed after being locked
+                  const isException =
+                    prev.provisional ||                                     // F-4: provisional classification pipeline
+                    jsonContent.type === "BUGFIX" ||                        // BUGFIX continuation (one-time expansion)
+                    jsonContent.plan_source === "DECOMPOSITION" ||          // DECOMPOSITION Turn B (Q3)
+                    jsonContent.severity === "nit" ||                       // nit-skip re-emission
+                    (prev.type !== "DOCS" && newType === "DOCS") ||         // F-12: Auto-DOCS hook
+                    (!SUPERCOMPLEX_STRICT && jsonContent.complexity === "SUPERCOMPLEX") // F-11 / R15
+                  if (isException) {
+                    // v6 (advisor Note 2): pipeline replacement = a new chain/stage
+                    // context (SUPERCOMPLEX per-plan-step re-emission, BUGFIX
+                    // continuation, DECOMPOSITION Turn B, Auto-DOCS hook) → the
+                    // previous rework loop is finished; reset its counters.
+                    if ((reworkCount.get(currentAgent) || 0) > 0 || (blockerEscalations.get(currentAgent) || 0) > 0) {
+                      await client.app.log({ body: { service: "workflow-enforcement", level: "info",
+                        message: `REWORK/BLOCKER COUNTERS RESET — pipeline replaced, new loop context`,
+                        extra: { agent: currentAgent } } })
+                    }
+                    reworkCount.delete(currentAgent)
+                    blockerEscalations.delete(currentAgent)
+                    maxStepReached.set(currentAgent, nextIdx >= 0 ? nextIdx : 0)
+                    prev.pipeline = newPipeline
+                    // F-1: currentStep = indexOf(next_agent), NO "-1". The message
+                    // announces the dispatch happening NOW — after this turn the last
+                    // dispatched agent is next_agent itself. (The "-1" variant of the
+                    // source plan produced a false NEXT_AGENT MISMATCH on BUGFIX
+                    // continuation Turn 3; DECOMPOSITION re-dispatch is covered by the
+                    // isLoopback whitelist in 10.3.)
+                    if (nextIdx >= 0) prev.currentStep = nextIdx
+                    prev.provisional = provisional
+                    prev.type = newType
+                  } else {
+                    pipelineImmutable = true
+                    v6FlagSetThisEvent = true
+                    violationDetail = `PIPELINE IMMUTABLE: pipeline changed after Turn 1 — [${prev.pipeline.join(", ")}] → [${newPipeline.join(", ")}] (exceptions: provisional classification, BUGFIX continuation, DECOMPOSITION, nit-skip, Auto-DOCS hook)`
+                  }
+                } else if (nextIdx >= 0) {
+                  // pipeline unchanged — advance the step to the actual next_agent
+                  // (single rule covers forward moves, rework loopbacks and nit-skip).
+                  // v6 (advisor Note 2): a NEW rework-loop context begins when
+                  // (a) the step advances PAST the previous maximum (the loop for the
+                  // prior stage is finished), or (b) the step jumps BACKWARD by >= 2
+                  // (a new chain cycle — SUPERCOMPLEX per-plan-step re-dispatch of an
+                  // early agent with an identical re-emitted array; rework loopbacks
+                  // are always -1 hops reviewer<->rework and do NOT reset).
+                  const prevMax = maxStepReached.get(currentAgent) ?? prev.currentStep
+                  if (nextIdx > prevMax || prev.currentStep - nextIdx >= 2) {
+                    if ((reworkCount.get(currentAgent) || 0) > 0 || (blockerEscalations.get(currentAgent) || 0) > 0) {
+                      await client.app.log({ body: { service: "workflow-enforcement", level: "info",
+                        message: `REWORK/BLOCKER COUNTERS RESET — new loop context (step ${prev.currentStep} → ${nextIdx}, max ${prevMax})`,
+                        extra: { agent: currentAgent, from: prev.currentStep, to: nextIdx, prevMax } } })
+                    }
+                    reworkCount.delete(currentAgent)
+                    blockerEscalations.delete(currentAgent)
+                  }
+                  maxStepReached.set(currentAgent, Math.max(prevMax, nextIdx))
+                  prev.currentStep = nextIdx
+                }
+              }
+            }
+
+            // v6 (Phase 16): strict ack format audit (WARN-ONLY — never blocks; a
+            // measurable format-drift signal before any future escalation). Only for
+            // delegation turns (next_agent truthy); OUT OF SCOPE and final turns
+            // (next_agent=null) require no ack. Correction F-5 — SIX legal ack variants
+            // verified against the CURRENT prompts (post-Part I):
+            //   1. "→ DELEGATED to <agent> for: <goal>"                 (both TURN ALGORITHMs)
+            //   2. "→ STEP <i>/<N> (<id>): DELEGATED to <agent>"        (orchestrator SUPERCOMPLEX Stage 2)
+            //   3. "→ DELEGATED to advisor (step <N>, notes so far: <c>)" (orchestrator ADVISOR STEP RULES)
+            //   4. "→ rework SKIPPED (dev-reviewer severity=nit)"       (orchestrator SEVERITY RULES)
+            //   5. "→ SUPERCOMPLEX steps (<N>): [...] (source: ...)"    (orchestrator SUPERCOMPLEX Stage 1 echo)
+            //   6. "→ DECOMPOSITION requested from dev-planner for: <goal>" (orchestrator Q3)
+            // `[\w-]+` (not `\w+`) — agent names contain hyphens (plan-writer-simple).
+            // Post-ack prose checking ("no analysis after the ack") is OUT of scope (R16).
+            if (jsonContent.next_agent && msgId && !processedMessageIDs.has(msgId + ":ack")) {
+              processedMessageIDs.add(msgId + ":ack")
+              const ackContent = String(message.content || message.text || "")
+              const ackPattern = /^→ (?:(?:STEP \d+\/\d+\s*(?:\([^)]*\))?\s*:\s*)?DELEGATED to [\w-]+(?:\s*\(step [^)]*\)| for: .+)?|DECOMPOSITION requested from [\w-]+ for: .+|rework SKIPPED \(.+\)|SUPERCOMPLEX steps \(\d+\):.*\(source: .+\))\s*$/m
+              if (!ackPattern.test(ackContent)) {
+                await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
+                  message: `ACK FORMAT INVALID — ${currentAgent}: expected one of the 6 legal ack forms (see the Phase 16 comment)`,
+                  extra: { agent: currentAgent, excerpt: ackContent.slice(0, 200) } } })
+              }
+            }
           }
         }
 
@@ -638,10 +982,20 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
                 }
               }
             })
-            // Note: we DO NOT throw here — we log the error and let downstream
-            // checks (identity drift, routing table) catch the actual violation.
-            // Throwing on text-level vocabulary would block legitimate cross-references
-            // (e.g. orchestrator mentioning "plan-writer" in an OUT OF SCOPE message).
+            // v6 (Phase 9.5): we do NOT throw for AGENT-NAME tokens — legitimate
+            // cross-references exist (e.g. orchestrator mentioning "plan-writer" in an
+            // OUT OF SCOPE message); downstream checks (identity drift, routing table)
+            // catch the actual violation. IDENTITY-claim tokens DO escalate — via the
+            // deferred forbiddenIdentity flag consumed by gate 9.0в.
+            // TS2538: narrowing of the mutable `let lockedAgentName` is not
+            // preserved inside this callback, even though line 965 guards it.
+            // Non-null assertion is safe: the enclosing `if` guarantees it's a string.
+            const identityViolations = violations.filter(t =>
+              (FORBIDDEN_IDENTITY_TOKENS[lockedAgentName!] || []).includes(t))
+            if (identityViolations.length > 0) {
+              forbiddenIdentity = true
+              violationDetail = `FORBIDDEN IDENTITY CLAIM — ${lockedAgentName} message claims foreign identity: ${identityViolations.join(", ")}`
+            }
           }
         }
 
@@ -696,13 +1050,35 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
       // поддерживают баланс счётчика: +1 здесь, -1 в tool.execute.after.
       if (activeTaskDepth > 0) {
         if (input.tool === "task") {
+          // v6 (Phase 13.2б): caller attribution — a parallel Task from the PRIMARY
+          // (top-level session) is a violation; a nested delegation from a RUNNING
+          // subagent (child session) is legitimate (research-writer-complex scout wave —
+          // RESEARCH COMPLEX row 4/6 plankestrator; ARCHITECTURE.md §2 Internal fan-out).
+          // F-3: the throw MUST happen BEFORE `activeTaskDepth += 1` — a blocked call
+          // never executes, so tool.execute.after never fires; incrementing first would
+          // leak depth > 0 forever and silently disable ALL enforcement.
+          const callerSessionID = String((input as any).sessionID || "") || null
+          if (topLevelSessionID && callerSessionID && callerSessionID === topLevelSessionID) {
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "error",
+                message: `PARALLEL TASK FROM PRIMARY BLOCKED — ${currentAgent} (depth=${activeTaskDepth})`,
+                extra: { agent: currentAgent, depth: activeTaskDepth, callerSessionID, topLevelSessionID }
+              }
+            })
+            throw new Error(`
+⛔ PARALLEL TASK CALL BLOCKED — a subagent is already running (depth=${activeTaskDepth}).
+Primary agent dispatches EXACTLY ONE Task per turn and waits for the result.
+            `)
+          }
           activeTaskDepth += 1
           await client.app.log({
             body: {
               service: "workflow-enforcement",
               level: "warn",
               message: "TASK CALL WHILE SUBAGENT ACTIVE — routing check skipped (nested delegation, or prohibited parallel Task from primary agent)",
-              extra: { depth: activeTaskDepth }
+              extra: { depth: activeTaskDepth, callerSessionID, topLevelSessionID }
             }
           })
         }
@@ -726,6 +1102,75 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         return
       }
 
+      // v6 (Phase 9.0в): UNIFIED DEFERRED-VIOLATION GATE — consumes flags set in
+      // message.updated. A throw inside the event hook is inert (the message is already
+      // sent); only THIS throw blocks the real action. The depth-bypass above guarantees
+      // only primary-agent calls at activeTaskDepth === 0 reach here — subagent tool
+      // calls are never blocked for the primary's violations. Consume-once: flags are
+      // reset right before the throw, so a corrected message passes on the next call.
+      if (currentAgent && (identityMissing || pipelineMismatch || nextAgentMismatch ||
+          invalidJSON || forbiddenIdentity || pipelineImmutable || blockerStop)) {
+        const code = identityMissing ? "IDENTITY MISSING"
+          : pipelineMismatch ? "PIPELINE VALIDATION FAILED"
+          : nextAgentMismatch ? "NEXT_AGENT MISMATCH"
+          : invalidJSON ? "INVALID JSON OUTPUT"
+          : forbiddenIdentity ? "FORBIDDEN IDENTITY CLAIM"
+          : pipelineImmutable ? "PIPELINE IMMUTABLE"
+          : "BLOCKER STOP AFTER 3"
+        await client.app.log({ body: { service: "workflow-enforcement", level: "error",
+          message: `DEFERRED VIOLATION ENFORCED — ${code}`,
+          extra: { agent: currentAgent, detail: violationDetail, attemptedTool: input.tool } } })
+        const detail = violationDetail
+        identityMissing = pipelineMismatch = nextAgentMismatch = invalidJSON =
+          forbiddenIdentity = pipelineImmutable = blockerStop = false
+        violationDetail = ""
+        throw new Error(`
+⛔ WORKFLOW VIOLATION — ${code}
+
+${detail}
+
+Your previous message violated plugin validation and was REJECTED before any tool
+could run. Fix: re-issue a corrected message in the required order:
+1. "IDENTITY VERIFIED: I am ${currentAgent}..."
+2. Valid JSON block (all required fields, pipeline per PIPELINE TABLE)
+3. THEN the Task call.
+        `)
+      }
+
+      // v6 (Phase 13.2): max ONE Task call per turn (PROHIBITIONS of both primaries:
+      // "No more than ONE Task call per turn"). Only at activeTaskDepth === 0 — the
+      // depth-bypass above already filtered subagent calls (correction 13.2(а): a nested
+      // scout wave is legitimate). Turn boundary = a NEW primary message (13.3 dedup by
+      // messageID). The counter increments only for allowed calls; calls blocked by
+      // downstream gates (JSON-before-Task, routing) reset with the next message anyway.
+      if (input.tool === "task" &&
+          (currentAgent === "orchestrator" || currentAgent === "plankestrator")) {
+        // v6 (advisor Note 3 fix): the per-turn counter is meaningful ONLY when
+        // messageID extraction works — the 13.3 turn-boundary reset keys on the
+        // message id. If extraction yields "" (payload shape changed), the counter
+        // would NEVER reset and block the 2nd Task call of the entire SESSION.
+        // Degrade explicitly (F-10 philosophy: no observability → Stage C counter
+        // disabled): skip the gate with a warn instead of a stuck hard block.
+        if (!lastTurnMessageID.has(currentAgent)) {
+          await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
+            message: `TURN TRACKING DEGRADED — messageID unavailable for ${currentAgent}; max-one-Task-per-turn gate DISABLED (no false block)`,
+            extra: { agent: currentAgent } } })
+        } else {
+          const count = taskCallsPerTurn.get(currentAgent) || 0
+          if (count >= 1) {
+            await client.app.log({ body: { service: "workflow-enforcement", level: "error",
+              message: `SECOND TASK CALL IN SAME TURN — ${currentAgent} (count=${count})`,
+              extra: { agent: currentAgent, count } } })
+            throw new Error(`
+⛔ MAX ONE TASK CALL PER TURN: already made 1 Task call in this turn.
+Wait for the subagent result, then issue the NEXT message:
+identity line → JSON → ONE Task call → ack.
+            `)
+          }
+          taskCallsPerTurn.set(currentAgent, count + 1)
+        }
+      }
+
       // NEW: Track first Task call for primary agents
       if (input.tool === "task" && (currentAgent === "orchestrator" || currentAgent === "plankestrator")) {
         primaryAgentFirstTaskCall.set(currentAgent, true)
@@ -746,6 +1191,30 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         throw new Error(`
 ⛔ PRIMARY AGENT FORBIDDEN: ${input.tool} blocked after first Task call.
 You can only use read/grep/glob for classification in Turn 1. Delegate inspection to the appropriate subagent via Task.
+        `)
+      }
+
+      // v6 (Phase 12.2): self-work consumption for orchestrator (mirror of the
+      // plankestrator branch in the INSPECTION GATE below). Without this block Phase
+      // 12.1 would be log-only: the existing consumption is locked inside the
+      // plankestrator-only INSPECTION GATE. ONLY inspection tools are blocked; Task
+      // calls are NOT — delegation IS the desired correction (v4 semantics).
+      // Real added value: Turn 1 BEFORE the first Task (after it, inspections are
+      // already blocked by the read-lock above).
+      if (selfWorkDetected && lockedAgentName === "orchestrator" &&
+          (input.tool === "read" || input.tool === "grep" || input.tool === "glob")) {
+        await client.app.log({ body: { service: "workflow-enforcement", level: "error",
+          message: `INSPECTION BLOCKED — self-work content detected in previous orchestrator message`,
+          extra: { lockedAgent: lockedAgentName, attemptedTool: input.tool } } })
+        throw new Error(`
+⛔ SELF-WORK CONTENT DETECTED IN YOUR PREVIOUS MESSAGE
+
+You are running as: orchestrator (identity-locked).
+Your last message contained analysis/implementation markers (e.g. "## Findings",
+"## Analysis", "## Implementation", "## Root Cause"). Producing such CONTENT is
+self-work — it belongs to worker / dev-planner / bugfix-triage / docs-writer, NOT to you.
+
+Fix: Identity line → JSON block → ONE Task call with next_agent from your routing table → ack line.
         `)
       }
 
@@ -992,6 +1461,28 @@ Identity line → JSON block → Task call with next_agent from your routing tab
           }
         })
         return
+      }
+
+      // v6 (Phase 14.2): rework loop max 3 (orchestrator.md SEVERITY RULES: "if a blocker
+      // persists after the 3rd rework iteration → STOP and report failure to the user").
+      // A DIRECT throw is legitimate here — tool.execute.before blocks the call itself.
+      // Note on ordering: the counter increments BEFORE the downstream gates
+      // (JSON-before-Task, routing-table) — a 4th rework blocked by one of those would
+      // still count. Accepted: a rework call without JSON / off-table is already a
+      // violation; exact counting in a crashed session is irrelevant.
+      if (targetAgent === "rework") {
+        const count = reworkCount.get(currentAgent) || 0
+        if (count >= 3) {
+          await client.app.log({ body: { service: "workflow-enforcement", level: "error",
+            message: `REWORK LOOP MAX 3 EXCEEDED — ${currentAgent} (count=${count})`,
+            extra: { agent: currentAgent, count } } })
+          throw new Error(`
+⛔ REWORK LOOP MAX 3: rework already invoked 3 times for THIS pipeline stage.
+The blocker is persistent — STOP the loop and escalate to the user:
+final summary with the unresolved findings (BLOCKER ack format per SEVERITY RULES).
+          `)
+        }
+        reworkCount.set(currentAgent, count + 1)
       }
       
       // Check: agent must output JSON before calling non-identity-probe agents.
@@ -1389,7 +1880,8 @@ function extractJSONFromMessage(message: any): any | null {
 /**
  * Validate pipeline matches PIPELINE TABLE for primary agents.
  */
-function validatePipeline(agent: string, type: string, complexity: string, planExists: boolean, pipeline: string[]): { valid: boolean; error?: string } {
+function validatePipeline(agent: string, type: string | null, complexity: string | null,
+  planExists: boolean | null, pipeline: string[], jsonContent?: any): { valid: boolean; error?: string } {
   const PIPELINES: Record<string, Record<string, string[]>> = {
     orchestrator: {
       "BUGFIX-null-null": ["bugfix-triage"],
@@ -1411,6 +1903,73 @@ function validatePipeline(agent: string, type: string, complexity: string, planE
     }
   }
 
+  // v6 (Phase 11.1в — applied EARLY, Stage A, correction F-2): legal variants for keys
+  // with branching/loops. Without this whitelist the Phase 9.2 escalation would block
+  // the BUGFIX continuation: continuation turns re-emit an EXPANDED array under the same
+  // key "BUGFIX-null-null" (orchestrator.md BUGFIX continuation / PIPELINE GUIDE row 1).
+  const PIPELINE_VARIANTS: Record<string, string[][]> = {
+    "orchestrator:BUGFIX-null-null": [
+      ["bugfix-triage"],  // Turn 1
+      ["bugfix-triage", "worker", "utility"],  // TRIAGE_RESULT: SIMPLE
+      ["bugfix-triage", "plan-bug", "execute-bug", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"]  // TRIAGE_RESULT: DEEP
+    ],
+    // v6 (Phase 11.1б + correction F-7): provisional classification turns (complexity=null)
+    "orchestrator:DEV-null-false": [
+      ["dev-planner"],        // Q3 DECOMPOSITION Turn A — complexity not determined yet
+      ["codebase-analyzer"]   // scope-analysis helper (orchestrator.md TURN ALGORITHM item 2)
+    ],
+    "orchestrator:DEV-null-true": [
+      ["codebase-analyzer"]   // the same helper when the task already references a plan
+    ]
+  }
+
+  // v6 (Phase 11.1a): OUT OF SCOPE — type=null is legitimate ONLY with an empty pipeline
+  // (type=null rule of both primaries; Part I Examples 10/12 orchestrator, 6 plankestrator).
+  if (type === null || type === undefined) {
+    return pipeline.length === 0
+      ? { valid: true }
+      : { valid: false, error: "type=null (OUT OF SCOPE) requires empty pipeline and next_agent=null" }
+  }
+
+  // v6 (advisor Note 1 fix): TERMINAL TURN exemption — the final turn carries
+  // next_agent=null with an EMPTY pipeline while type/complexity retain their
+  // classification values (plankestrator.md "Final turn — COMPLETE": state="COMPLETE",
+  // next_agent=null, pipeline=[]). Comparing [] against the full expected chain
+  // ("RESEARCH-COMPLEX" etc.) is a false positive that sets pipelineMismatch and
+  // blocks the primary's NEXT tool call via gate 9.0в.
+  if (pipeline.length === 0 &&
+      (jsonContent?.next_agent === null || jsonContent?.next_agent === undefined ||
+       jsonContent?.state === "COMPLETE")) {
+    return { valid: true }
+  }
+
+  // v6 (Phase 11.2): cross-field validation (fail-closed)
+  // Rule 1: SUPERCOMPLEX requires plan_exists=true (orchestrator.md CRITICAL RULE / Q2)
+  if (type === "DEV" && complexity === "SUPERCOMPLEX" && planExists === false) {
+    return { valid: false, error: "SUPERCOMPLEX requires plan_exists=true" }
+  }
+  // Rule 2 (correction F-6): plan_source only with plan_exists=true — scoped to DEV ONLY:
+  // a DOCS request referencing a plan file legitimately keeps plan_exists=null and may
+  // carry plan_source (orchestrator.md EDGE CASES "DOCS request referencing a plan file").
+  if (type === "DEV" && jsonContent?.plan_source && !planExists) {
+    return { valid: false, error: "plan_source requires plan_exists=true" }
+  }
+  // Rule 3 (orchestrator only): complexity=null only for BUGFIX/DEVOPS.
+  // Exceptions (correction F-7): provisional classification turns — DECOMPOSITION Turn A
+  // (["dev-planner"]) and the codebase-analyzer scope helper (TURN ALGORITHM item 2,
+  // "same status as the DECOMPOSITION PROTOCOL exception"; plan_exists may be true when
+  // the task already has a plan). OUT OF SCOPE is covered by the early return above.
+  // The agent guard is mandatory: BUGFIX/DEVOPS are orchestrator types; plankestrator has
+  // its own logic (ambiguous → COMPLEX; complexity=null only in OUT OF SCOPE).
+  if (agent === "orchestrator" && complexity === null &&
+      !["BUGFIX", "DEVOPS"].includes(String(type)) &&
+      !(type === "DEV" && planExists === false &&
+        pipeline.length === 1 && pipeline[0] === "dev-planner") &&
+      !(type === "DEV" &&
+        pipeline.length === 1 && pipeline[0] === "codebase-analyzer")) {
+    return { valid: false, error: "complexity=null only for BUGFIX/DEVOPS (exceptions: DECOMPOSITION Turn A, codebase-analyzer scope helper)" }
+  }
+
   // Build key based on agent type
   let key: string
   if (agent === "orchestrator") {
@@ -1426,14 +1985,23 @@ function validatePipeline(agent: string, type: string, complexity: string, planE
   }
 
   const expected = PIPELINES[agent]?.[key]
-  if (!expected) {
-    return { valid: true } // Unknown combination, allow
-  }
-
-  if (JSON.stringify(pipeline) !== JSON.stringify(expected)) {
+  const variants = PIPELINE_VARIANTS[`${agent}:${key}`]
+  if (!expected && !variants) {
     return {
       valid: false,
-      error: `Pipeline mismatch for ${agent} ${type}/${complexity}/${planExists}. Expected: [${expected.join(', ')}], got: [${pipeline.join(', ')}]`
+      error: `Unknown type/complexity/plan_exists combination for ${agent}: "${key}" (fail-closed — Phase 11)`
+    }
+  }
+
+  const matches = variants
+    ? variants.some(v => JSON.stringify(pipeline) === JSON.stringify(v))
+    : JSON.stringify(pipeline) === JSON.stringify(expected)
+  if (!matches) {
+    return {
+      valid: false,
+      error: `Pipeline mismatch for ${agent} ${type}/${complexity}/${planExists}. Expected: ${
+        variants ? variants.map(v => `[${v.join(", ")}]`).join(" | ") : `[${expected!.join(", ")}]`
+      }, got: [${pipeline.join(", ")}]`
     }
   }
 

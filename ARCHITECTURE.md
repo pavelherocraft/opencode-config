@@ -621,7 +621,7 @@ Cross-routing (a primary agent calling a specialist that belongs to the other pr
 | Layer | Where | Behavior |
 |-------|-------|----------|
 | 1. Prompt prevention | `CROSS-ROUTING BOUNDARY` sections in agents/orchestrator.md and agents/plankestrator.md | Explicit closed lists of the other primary's agents + "OUT OF SCOPE message = the exact standard phrase, no foreign agent names" + "pipeline frozen" |
-| 2. Plugin: forbidden vocabulary | workflow-enforcement.ts:617–646 | Foreign terminology in a message is detected and logged (log-only, does not throw) |
+| 2. Plugin: forbidden vocabulary | workflow-enforcement.ts (FORBIDDEN_VOCAB / FORBIDDEN_IDENTITY_TOKENS) | Foreign terminology in a message is detected and logged; IDENTITY-claim tokens (e.g. "I am plankestrator" in an orchestrator message) escalate to a deferred THROW at the next tool call (v6); agent-name tokens stay log-only (legitimate cross-references) |
 | 3. Plugin: routing table | workflow-enforcement.ts:1042–1053 | A Task call to an agent outside `ROUTING_TABLES[currentAgent]` → throw `WORKFLOW VIOLATION - ROUTING TABLE ENFORCEMENT` |
 
 Rules:
@@ -629,6 +629,27 @@ Rules:
 2. The OUT OF SCOPE message is ONLY the standard phrase (agents/orchestrator.md type=null rule / agents/plankestrator.md type=null rule), never naming foreign specialists — this reduces forbidden-vocab log noise (layer 2) and eliminates the temptation of "partial" cross-routing.
 3. Subagent results suggesting work of the other primary's scope NEVER change the pipeline — the pipeline is frozen; the recommendation goes into the final summary only.
 4. "Planning-flavored DEV" stays with the orchestrator (Q3 DECOMPOSITION; superseded rule 2026-09-22) — the main source of false cross-routing is eliminated by the deliverable test (T2 vs T6 / P2).
+
+#### Enforcement gates (v6, workflow-enforcement.ts Part II)
+
+| Violation | Detection point | Delivery | Blocks |
+|-----------|-----------------|----------|--------|
+| identity missing (first message) | message.updated | deferred flag → unified gate in tool.execute.before | any tool call of the primary |
+| pipeline mismatch (PIPELINE TABLE / variants) | message.updated | deferred flag → gate | any tool call |
+| next_agent mismatch (real step tracking; whitelists: loopback, nit-skip, Auto-DOCS hook, SUPERCOMPLEX-exempt) | message.updated | deferred flag → gate | any tool call |
+| invalid JSON / invalid severity in primary JSON | message.updated | deferred flag → gate | any tool call |
+| forbidden IDENTITY claim (identity tokens only; agent-name tokens stay log-only) | message.updated | deferred flag → gate | any tool call |
+| identity drift under identity lock | message.updated | DIRECT throw from the event hook (caveat: may be swallowed by the runtime) | remaining handler for that event |
+| pipeline changed after Turn 1 (exceptions: provisional classification, BUGFIX continuation, DECOMPOSITION Turn B, nit-skip, Auto-DOCS hook, SUPERCOMPLEX per-plan-step re-emission) | message.updated | deferred flag → gate | any tool call |
+| second Task call in the same turn | tool.execute.before | DIRECT throw | the Task call |
+| parallel Task from the primary while a subagent runs (sessionID attribution) | tool.execute.before depth-bypass | DIRECT throw (before depth increment) | the Task call |
+| 4th rework dispatch per rework-loop | tool.execute.before Task section | DIRECT throw | the Task call |
+| 3rd reviewer blocker per rework-loop | message.updated (subagent branch) | deferred flag (cumulative, no recovery) → gate | any tool call until rework-loop end |
+| orchestrator self-work markers in message text | message.updated | selfWorkDetected → inspection block | read/grep/glob (Task calls are NOT blocked — delegation is the correction) |
+| ack format drift (6 legal variants) | message.updated | warn-only log | nothing (audit) |
+| unknown type/complexity/plan_exists combination | validatePipeline | fail-closed → pipeline flag → gate | any tool call |
+
+Deferred-violation pattern: a throw inside an event hook cannot retract an already-sent message, so message.updated sets a flag and the unified gate in tool.execute.before throws at the primary's NEXT tool call (consume-once; a clean valid message clears message-derived flags — latest-message-wins against streaming artifacts). All v6 state resets in the unconditional session.created reset block AFTER the parentID guard (child sessions never wipe parent state).
 
 ## 3. JSON Validation Fields
 
@@ -971,11 +992,11 @@ The workflow-enforcement plugin implements 5 lifecycle hooks:
 
 | Hook | When | Purpose |
 |------|------|---------|
-| `tool.execute.before` | Before any tool call | Routing table enforcement; JSON-before-Task gate (no grace for locked agents, v4); inspection budget & post-pipeline inspection ban for plankestrator (v4); suppressed while a Task subagent runs (`activeTaskDepth > 0`, v4) |
+| `tool.execute.before` | Before any tool call | Routing table enforcement; JSON-before-Task gate (no grace for locked agents, v4); inspection budget & post-pipeline inspection ban for plankestrator (v4); suppressed while a Task subagent runs (`activeTaskDepth > 0`, v4); unified deferred-violation gate (v6); max ONE Task per turn + parallel-Task block from primary (v6); rework max 3 per rework-loop (v6); orchestrator self-work inspection block (v6) |
 | `tool.execute.after` | After tool completes | Logs tool completion |
 | `session.created` | New session starts | Detects which agent is running; CHILD (subagent) sessions preserve the parent's identity-lock state (parentID guard, v4) |
 | `session.idle` | Session ends | Logs workflow summary |
-| `message.updated` | Message added | Validates JSON output format (INVALID JSON logged as error, v4); detects identity drift (identity-lock v3 — a locked agent claiming a different identity is rejected, L492); detects forbidden vocabulary and self-work content markers (v4); skipped while a Task subagent runs |
+| `message.updated` | Message added | Validates JSON output format (INVALID JSON logged as error, v4); detects identity drift (identity-lock v3 — a locked agent claiming a different identity is rejected, L492); detects forbidden vocabulary and self-work content markers (v4); skipped while a Task subagent runs; deferred-violation flags escalate log-only checks to a THROW at the next tool call (v6); pipeline step tracking + immutability after Turn 1 (v6); blocker counter with BLOCKER STOP after 3 (v6); primary severity validation (v6); ack format audit (v6, warn-only); identity drift under lock throws directly (v6) |
 
 Note: the session lifecycle events (`session.created`, `session.idle`, `message.updated`) are dispatched inside the plugin's single `event` hook — there is no separate `session.updated` branch (identity drift detection lives in the `message.updated` branch).
 
