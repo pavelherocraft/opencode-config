@@ -392,6 +392,8 @@ bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.
 
 **Single source of truth for pipeline selection:** the PIPELINE TABLE in each primary agent's own `.md` file (`agents/orchestrator.md` for BUGFIX/DEVOPS/DEV/DOCS, `agents/plankestrator.md` for PLAN/RESEARCH/RESEARCH+PLAN). Each table must stay identical to the corresponding section in this file. (The inline `prompt` field formerly present in opencode.json was removed — markdown wins per the merge order documented above.)
 
+Prompt-local reference sections (`PIPELINE GUIDE`, `CLASSIFICATION EXAMPLES`) in agents/*.md are illustrative and are NOT mirrored here; on conflict, the PIPELINE TABLE + CLASSIFICATION RULES + this file win.
+
 **Plan file:** `plan-bug` writes the bug fix plan to `bug_plan.md` in the project root. `execute-bug` reads this file before implementing. The orchestrator MUST include "Write the plan to bug_plan.md" in the plan-bug prompt and "Read bug_plan.md" in the execute-bug prompt.
 
 **Prewalk pattern (v5, OMP prewalk analog):** one-shot handoff expensive→cheap at the planning/implementation boundary. `plan-bug` runs on the MID-tier planner model (`GLM-5.3 (res)`, tier plan-flash) and writes a SELF-CONTAINED `bug_plan.md`; `execute-bug` runs on the CHEAP executor model (`MiniMax-M3`, tier executor-cheap) and mechanically applies the plan in a fresh context. Escape hatch: `execute-bug` sets `plan_gap: true` in its JSON when the plan turns out incomplete — downstream dev-reviewer/consistency-checker escalate (consistency-checker `escalate_to: "execute-bug"` remains available). Same philosophy in DEV COMPLEX: dev-planner (plan-strong) > dev-professor (executor-strong). Source: OMP prewalk pattern (`docs/prewalk.md`).
@@ -419,6 +421,38 @@ Canonical classification rules for DEV tasks (SIMPLE / COMPLEX / SUPERCOMPLEX). 
 **PLAN EXISTS OVERRIDE:** `plan_exists=true` + not SUPERCOMPLEX → DEV is ALWAYS SIMPLE (with-plan variant). An existing plan replaces in-pipeline planning — never reclassify a planned ≤3-step task as COMPLEX. Consequently DEV COMPLEX always implies `plan_exists: false`.
 
 **Superseded (2026-09-22):** the former rule that routed unplanned multi-step DEV tasks (no plan + COMPLEX) to plankestrator as out of scope is NO LONGER valid — they stay with the orchestrator: Q3 decomposition first, then SUPERCOMPLEX / COMPLEX / SIMPLE per the outcome. PLAN/RESEARCH requests themselves remain out of orchestrator's scope.
+
+### Type Selection Decision Tree (orchestrator)
+
+Selects the TYPE (BUGFIX / DEVOPS / DEV / DOCS / null) BEFORE the complexity rules (Q1–Q5). `agents/orchestrator.md` mirrors this section — any change must land in both files in the same commit.
+
+| # | Question | YES → | NO → |
+|---|----------|-------|------|
+| T1 | Identity test / small talk / meta question ("what did we do", "status")? | `type: null` — brief answer after the JSON, no Task call | T2 |
+| T2 | Deliverable IS a plan/research document, no implementation requested ("plan", "research", "investigate options", "design the architecture", "create a plan")? | `type: null` + OUT OF SCOPE message (switch to plankestrator), no Task call | T3 |
+| T3 | Broken behavior described: error / stack trace / crash / failing test / "not working" / "broken" / regression? | BUGFIX (row 1), `complexity: null`, `plan_exists: null` | T4 |
+| T4 | Main action = RUNNING operations (build / deploy / test-run / lint / git / env / deps / model migration), no code writing? | DEVOPS (row 2) | T5 |
+| T5 | Deliverable = markdown/docs only, zero logic change? | DOCS (row 7 or 8 by size) | T6 |
+| T6 | Deliverable = new or modified code? | DEV → complexity Q1–Q5 | Re-check T2 |
+
+**Mixed-intent priority (request spans several types):** BUGFIX > DEV > DOCS > DEVOPS. Pick exactly ONE row — the primary deliverable. Secondary intents are NOT separate pipelines: docs about the code change ride the Auto-DOCS hook (`requires_docs_update`); a deploy after a fix is mentioned in the final completion summary as a follow-up request. NEVER split one request into two pipelines.
+
+**Deliverable test (T2 vs T6 — golden boundary):** «составь план рефакторинга» → the PLAN is the deliverable → `type: null` (plankestrator). «сделай рефакторинг» → the CODE is the deliverable → DEV (unplanned multi-step DEV stays with you — Q3 DECOMPOSITION; superseded rule 2026-09-22). The topic (refactoring / bugs / docs) never decides — the requested deliverable does.
+
+**Edge cases (deterministic resolutions):**
+
+| Situation | Resolution |
+|-----------|------------|
+| «запусти тесты» vs «тесты падают» | run tests = DEVOPS (row 2); failing tests = BUGFIX (row 1) |
+| «почему X сломался?» — question only, no fix requested | BUGFIX (row 1): triage investigates; you never answer or investigate yourself |
+| Build fails with a compile error in source code | BUGFIX (root cause = code). Repairing/configuring the CI setup itself = DEVOPS |
+| Docstrings / comments only | DOCS (row 7/8). Any logic change → DEV; doc updates ride the Auto-DOCS hook |
+| «реализуй план/исследование из <file>» | DEV; the file = plan → `plan_exists: true`, `plan_source: "<file>"`; step count + volume decide Q2 / Q2a |
+| DOCS request referencing a plan file («напиши документацию по PLAN.md») | DOCS by size (row 7/8). `plan_exists` applies to DEV ONLY — leave it `null` for DOCS; the file is input context for docs-planner/docs-writer |
+| Ambiguous DEV scope | COMPLEX (Q5 default) |
+| «сделай быстро, без ревьюеров» | The pipeline is frozen and reviewers are mandatory (PROHIBITIONS). The only legal accelerator is the severity-nit rework SKIP (SEVERITY RULES) |
+| Subagent result says «нужно сначала исследовать/спланировать» | Pipeline FROZEN: complete it; surface the recommendation in the final completion summary. Never re-route, never call plankestrator's agents |
+| Unplanned multi-step DEV («сделай рефакторинг всей системы оплаты») | NOT out of scope — Q3: DECOMPOSITION PROTOCOL first, then row 6 / 5 / 3 per outcome |
 
 ### DEV SIMPLE
 
@@ -541,6 +575,37 @@ research-writer-complex (internal DAG):
 
 The wave and the barrier are prompt-level behavior of the writer agent. The plugin and plankestrator's PIPELINE TABLE are NOT affected: enforcement is suppressed inside subagent sessions (`activeTaskDepth > 0`), and task-permissions for all scouts are already granted in opencode.json + frontmatter (verified 2026-09-19).
 
+### PLAN vs RESEARCH Boundary (plankestrator)
+
+Selects the TYPE (PLAN / RESEARCH / RESEARCH+PLAN / null) from the REQUEST TEXT ONLY, applied IN ORDER. `agents/plankestrator.md` mirrors this section — any change must land in both files in the same commit.
+
+| # | Question | YES → | NO → |
+|---|----------|-------|------|
+| P1 | Identity test / small talk / meta question? | `type: null` — brief answer after the JSON, no Task call | P2 |
+| P2 | Deliverable IS implementation: fix / implement / deploy / run tests / write code / npm install / git commit / docs? | `type: null` + OUT OF SCOPE (switch to orchestrator), no Task call | P3 |
+| P3 | BOTH research and plan requested (either order)? | RESEARCH+PLAN → row 6, ALWAYS COMPLEX | P4 |
+| P4 | Deliverable = knowledge: исследуй / изучи / сравни / узнай / разберись / проанализируй варианты / research / compare / find out? | RESEARCH (row 3/4 by complexity) | P5 |
+| P5 | Deliverable = plan/design of future work: спланируй / разработай план / спроектируй / архитектура / plan / design / how should we build? | PLAN (row 1/2 by complexity) | Re-check P2 |
+
+**PLAN vs RESEARCH boundary (deliverable test):** decisions / a plan of future work → PLAN. Knowledge / answer / comparison → RESEARCH. Both explicitly → RESEARCH+PLAN (row 6). «Сравни и выбери» = RESEARCH (the verdict IS knowledge); «…и спланируй внедрение» = RESEARCH+PLAN.
+
+**Deliverable test (P2 — golden boundary):** «исправь баг» → OUT OF SCOPE (deliverable = fixed code). «Спланируй исправление бага» → PLAN (deliverable = a plan document; the bug topic does not make it implementation). Keywords never decide alone — the requested deliverable does.
+
+**Complexity default:** ambiguous complexity → COMPLEX (a stronger writer/reviewer chain is the safe side).
+
+**Edge cases (deterministic resolutions):**
+
+| Situation | Resolution |
+|-----------|------------|
+| «исследуй, почему сборка медленная» | RESEARCH (knowledge deliverable, verb «исследуй»). «Почини сборку» → OUT OF SCOPE (orchestrator) |
+| «спланируй фикс бага X» | PLAN — the deliverable is a plan document, not a fix (P2 deliverable test) |
+| «напиши документацию» | OUT OF SCOPE — docs writing = orchestrator's DOCS. «Спланируй структуру документации» → PLAN |
+| «сравни A и B» (2 objects) | RESEARCH COMPLEX (row 4) — comparison of 2+ objects is COMPLEX per CLASSIFICATION RULES |
+| «узнай лимит API X» (one question) | RESEARCH SIMPLE (row 3) |
+| Request references an image needed to classify | view-image as its OWN separate turn BEFORE the classification turn (TURN ALGORITHM item 3) |
+| «дополни существующий PLAN.md» | PLAN; pass the file reference in the Task prompt verbatim; complexity by the augmentation's scope |
+| Writer/reviewer result hints «теперь можно внедрять» | Pipeline FROZEN; mention in the COMPLETE summary (max 3 lines), never Task an orchestrator agent |
+
 ### Wave → Barrier → Synthesis Pattern
 
 A **barrier** is a synchronization point: the next stage starts only after ALL results of a parallel wave have arrived. In this architecture the barrier is NOT a separate agent — it is a structural property of the Task tool (all parallel Task calls issued in one message return before the agent's next turn) plus an explicit prompt-level step of the writer agent.
@@ -548,6 +613,22 @@ A **barrier** is a synchronization point: the next stage starts only after ALL r
 Implementation (research-writer-complex): wave results → rank by relevance/reliability → internal brief (key facts, contradictions, gaps) → synthesis from the brief on the strong model. "Pointer, not transcript": the report references sources and the output file, raw scout transcripts never leave the writer's context.
 
 **Decision record (2026-09-19):** a separate `summarizer` barrier agent (Option A) was DEFERRED — parallel Task calls already provide a free structural barrier, a summarizer hop would require passing raw wave transcripts in its prompt (violates pointer-not-transcript), and ranking is inseparable from synthesis, which must run on the strong model. Escalation path if pilots show context overflow: grant `"summarizer": "allow"` in research-writer-complex task permissions and pass waves via a file pointer.
+
+### Cross-Routing Prevention
+
+Cross-routing (a primary agent calling a specialist that belongs to the other primary) is prevented by three layers:
+
+| Layer | Where | Behavior |
+|-------|-------|----------|
+| 1. Prompt prevention | `CROSS-ROUTING BOUNDARY` sections in agents/orchestrator.md and agents/plankestrator.md | Explicit closed lists of the other primary's agents + "OUT OF SCOPE message = the exact standard phrase, no foreign agent names" + "pipeline frozen" |
+| 2. Plugin: forbidden vocabulary | workflow-enforcement.ts:617–646 | Foreign terminology in a message is detected and logged (log-only, does not throw) |
+| 3. Plugin: routing table | workflow-enforcement.ts:1042–1053 | A Task call to an agent outside `ROUTING_TABLES[currentAgent]` → throw `WORKFLOW VIOLATION - ROUTING TABLE ENFORCEMENT` |
+
+Rules:
+1. Closed lists of the other primary's agents are stated explicitly in both prompts — the model must not derive them from the routing table.
+2. The OUT OF SCOPE message is ONLY the standard phrase (agents/orchestrator.md type=null rule / agents/plankestrator.md type=null rule), never naming foreign specialists — this reduces forbidden-vocab log noise (layer 2) and eliminates the temptation of "partial" cross-routing.
+3. Subagent results suggesting work of the other primary's scope NEVER change the pipeline — the pipeline is frozen; the recommendation goes into the final summary only.
+4. "Planning-flavored DEV" stays with the orchestrator (Q3 DECOMPOSITION; superseded rule 2026-09-22) — the main source of false cross-routing is eliminated by the deliverable test (T2 vs T6 / P2).
 
 ## 3. JSON Validation Fields
 
