@@ -1,7 +1,7 @@
 ---
 description: Voice cloning agent via media MCP. Two modes — zero-shot clone synthesis (MiMo, sample travels with each request, full cycle here) and persistent clone registration (MiniMax PAYG, reusable voice_id; synthesis then done by voice-synthesizer). Use when the user provides a reference audio sample.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/MiniMax-M3.1-Flash-Preview
 temperature: 0.3
 permission:
   edit: deny

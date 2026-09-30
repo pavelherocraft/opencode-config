@@ -1,7 +1,7 @@
 ---
-description: Bugfix execution agent. Reads a self-contained plan from bug_plan.md, then implements deep bug fixes mechanically. MiniMax-M3.
+description: Bugfix execution agent. Reads a self-contained plan from bug_plan.md, then implements deep bug fixes mechanically. MiniMax-M3.1-Flash-Preview.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/MiniMax-M3.1-Flash-Preview
 temperature: 0.2
 permission:
   edit: allow

@@ -1,7 +1,7 @@
 ---
 description: Video generation agent via media MCP. Async text-to-video and image-to-video: MiniMax-H3 (newest, v2 API, up to 2K, first+last frame, reference media, ratio incl. 21:9 and adaptive i2v) — DEFAULT; Hailuo 2.3/02, T2V-01; 5/6/10 s; 768P/1080P/2K. Use for ANY video generation request.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/MiniMax-M3.1-Flash-Preview
 temperature: 0.3
 permission:
   edit: deny

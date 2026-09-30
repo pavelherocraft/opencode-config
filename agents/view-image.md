@@ -1,7 +1,7 @@
 ---
-description: Image analysis agent. Analyzes images directly via vision-capable model (MiniMax-M3). Auto-compresses images >100KB to fit context.
+description: Image analysis agent. Analyzes images directly via vision-capable model (MiniMax-M3.1-Flash-Preview). Auto-compresses images >100KB to fit context.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/MiniMax-M3.1-Flash-Preview
 temperature: 0.1
 permission:
   edit: deny

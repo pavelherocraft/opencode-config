@@ -1,7 +1,7 @@
 ---
 description: Search the web using MCP webSearchPrime. Use for finding information, documentation, and resources.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/MiniMax-M3.1-Flash-Preview
 temperature: 0.1
 permission:
   edit: deny

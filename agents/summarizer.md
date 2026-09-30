@@ -1,7 +1,7 @@
 ---
 description: Content summarization agent. Summarizes long texts, documents, and outputs into concise summaries.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/MiniMax-M3.1-Flash-Preview
 temperature: 0.1
 permission:
   edit: deny

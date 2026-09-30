@@ -1,7 +1,7 @@
 ---
 description: Image creation agent via media MCP. Generates images from text and edits images (7 models — Gemini Flash/Pro, GPT Image, MiniMax). Use for ANY image generation or editing request.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/MiniMax-M3.1-Flash-Preview
 temperature: 0.3
 permission:
   edit: deny

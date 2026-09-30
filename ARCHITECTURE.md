@@ -77,7 +77,7 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | bugfix-triage | bifrost-litellm/openrouter/deepseek-v4.1-flash |
 | bugfix | bifrost-litellm/QWEN3.7-plus |
 | plan-bug | bifrost-litellm/GLM-5.3 (res) |
-| execute-bug | bifrost-litellm/MiniMax-M3 |
+| execute-bug | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
 | dev-planner | bifrost-litellm/qwen3.8-max |
 | dev-professor | bifrost-litellm/GLM-5.3 (res) |
 | dev-reviewer | bifrost-litellm/Kimi K3 |
@@ -86,12 +86,12 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | advisor | bifrost-litellm/tencent/Hy4 |
 | docs-writer | bifrost-litellm/xiaomi/mimo-v2.6-pro |
 | docs-planner | bifrost-litellm/openrouter/deepseek-v4.1-flash |
-| utility | bifrost-litellm/MiniMax-M3 |
-| mcp-github | bifrost-litellm/MiniMax-M3 |
-| mcp-read | bifrost-litellm/MiniMax-M3 |
-| mcp-search | bifrost-litellm/MiniMax-M3 |
-| summarizer | bifrost-litellm/MiniMax-M3 |
-| devops-agent | bifrost-litellm/MiniMax-M3 |
+| utility | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
+| mcp-github | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
+| mcp-read | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
+| mcp-search | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
+| summarizer | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
+| devops-agent | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
 | devops-reviewer | bifrost-litellm/qwen3.8-max |
 | orchestrator-identity-probe | bifrost-litellm/QWEN3.7-plus |
 | plankestrator-identity-probe | bifrost-litellm/QWEN3.7-plus |
@@ -102,15 +102,15 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | research-writer-simple | bifrost-litellm/xiaomi/mimo-v2.6-pro |
 | research-writer-complex | bifrost-litellm/Kimi K3 |
 | research-reviewer | bifrost-litellm/GLM-5.3 (res) |
-| devops-readonly | bifrost-litellm/MiniMax-M3 |
-| git-commit | bifrost-litellm/MiniMax-M3 |
-| image-creator | bifrost-litellm/MiniMax-M3 |
-| video-generator | bifrost-litellm/MiniMax-M3 |
-| view-image | bifrost-litellm/MiniMax-M3 |
+| devops-readonly | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
+| git-commit | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
+| image-creator | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
+| video-generator | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
+| view-image | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
 | scout | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
-| voice-synthesizer | bifrost-litellm/MiniMax-M3 |
-| voice-transcriber | bifrost-litellm/MiniMax-M3 |
-| voice-clone | bifrost-litellm/MiniMax-M3 |
+| voice-synthesizer | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
+| voice-transcriber | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
+| voice-clone | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
 | codebase-analyzer | bifrost-litellm/Kimi K2.8 |
 
 Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3.7-plus` and are documented in §Identity Lock Mechanism (v3), item 5 — not duplicated in the Subagent Models table.
@@ -148,7 +148,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | triage-flash | bifrost-litellm/openrouter/deepseek-v4.1-flash | low | bugfix-triage |
 | advisory | bifrost-litellm/tencent/Hy4 | mid | advisor |
 | executor-strong | bifrost-litellm/GLM-5.3 (res) | mid | dev-professor |
-| executor-cheap | bifrost-litellm/MiniMax-M3 | low | execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image, git-commit, voice-synthesizer, image-creator, video-generator, voice-transcriber, voice-clone |
+| executor-cheap | bifrost-litellm/MiniMax-M3.1-Flash-Preview | low | execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image, git-commit, voice-synthesizer, image-creator, video-generator, voice-transcriber, voice-clone |
 | executor-step5 | bifrost-litellm/stepfun/step-5-preview | low | worker |
 | docs | bifrost-litellm/xiaomi/mimo-v2.6-pro | low | docs-writer, research-writer-simple |
 | docs-plan | bifrost-litellm/openrouter/deepseek-v4.1-flash | low | docs-planner |
@@ -396,7 +396,7 @@ Prompt-local reference sections (`PIPELINE GUIDE`, `CLASSIFICATION EXAMPLES`) in
 
 **Plan file:** `plan-bug` writes the bug fix plan to `bug_plan.md` in the project root. `execute-bug` reads this file before implementing. The orchestrator MUST include "Write the plan to bug_plan.md" in the plan-bug prompt and "Read bug_plan.md" in the execute-bug prompt.
 
-**Prewalk pattern (v5, OMP prewalk analog):** one-shot handoff expensive→cheap at the planning/implementation boundary. `plan-bug` runs on the MID-tier planner model (`GLM-5.3 (res)`, tier plan-flash) and writes a SELF-CONTAINED `bug_plan.md`; `execute-bug` runs on the CHEAP executor model (`MiniMax-M3`, tier executor-cheap) and mechanically applies the plan in a fresh context. Escape hatch: `execute-bug` sets `plan_gap: true` in its JSON when the plan turns out incomplete — downstream dev-reviewer/consistency-checker escalate (consistency-checker `escalate_to: "execute-bug"` remains available). Same philosophy in DEV COMPLEX: dev-planner (plan-strong) > dev-professor (executor-strong). Source: OMP prewalk pattern (`docs/prewalk.md`).
+**Prewalk pattern (v5, OMP prewalk analog):** one-shot handoff expensive→cheap at the planning/implementation boundary. `plan-bug` runs on the MID-tier planner model (`GLM-5.3 (res)`, tier plan-flash) and writes a SELF-CONTAINED `bug_plan.md`; `execute-bug` runs on the CHEAP executor model (`MiniMax-M3.1-Flash-Preview`, tier executor-cheap) and mechanically applies the plan in a fresh context. Escape hatch: `execute-bug` sets `plan_gap: true` in its JSON when the plan turns out incomplete — downstream dev-reviewer/consistency-checker escalate (consistency-checker `escalate_to: "execute-bug"` remains available). Same philosophy in DEV COMPLEX: dev-planner (plan-strong) > dev-professor (executor-strong). Source: OMP prewalk pattern (`docs/prewalk.md`).
 
 **Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes. Loop repeats up to 3 iterations. If consistency-checker passes → utility. If max iterations reached → failure report.
 

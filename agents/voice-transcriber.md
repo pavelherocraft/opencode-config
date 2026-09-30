@@ -1,7 +1,7 @@
 ---
 description: Speech-to-text agent via media MCP. Transcribes audio — Chinese/English auto-detect, dialects, code-switch, songs, noisy and multi-speaker recordings. Use for ANY audio transcription request.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/MiniMax-M3.1-Flash-Preview
 temperature: 0.1
 permission:
   edit: deny

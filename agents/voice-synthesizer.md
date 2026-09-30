@@ -1,7 +1,7 @@
 ---
 description: Voice synthesizer agent for text-to-speech via media MCP. Three TTS models (MiMo preset voices, MiMo VoiceDesign, MiniMax Speech), 17 voices + synthesis with registered MiniMax clone voices (voice_id), style instructions, audio tags, wav/mp3 output. Zero-shot cloning of a NEW sample belongs to the voice-clone agent.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/MiniMax-M3.1-Flash-Preview
 temperature: 0.3
 permission:
   edit: deny

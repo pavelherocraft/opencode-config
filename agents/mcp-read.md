@@ -1,7 +1,7 @@
 ---
 description: Read webpage content using MCP webReader. Use for documentation, articles, and any URL content.
 mode: subagent
-model: bifrost-litellm/MiniMax-M3
+model: bifrost-litellm/MiniMax-M3.1-Flash-Preview
 temperature: 0.1
 permission:
   edit: deny
