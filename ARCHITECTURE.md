@@ -485,8 +485,20 @@ dev-planner → dev-professor → advisor → dev-reviewer → rework → consis
 
 ```
 PER PLAN STEP (repeated for each step in the step list):
-  dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
+  dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
 ```
+
+**🚨 CRITICAL: SUPERCOMPLEX executes the FULL pipeline for EACH plan step.**
+
+The pipeline `dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker → [rework loop] → utility` is executed **SEPARATELY for every step** of the plan.
+
+**Example:** If the plan has 8 steps, the orchestrator executes the full pipeline 8 times:
+- Step 1: dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker → utility
+- Step 2: dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker → utility
+- ...
+- Step 8: dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker → utility
+
+**Never** execute the pipeline once for the entire task. **Always** iterate over each plan step.
 
 Super-complex development tasks with a large plan (>3 steps — pre-existing OR produced by DECOMPOSITION) or huge volume of work. The orchestrator executes the full review/consistency/syntax chain **for every step** of the plan — never one pass over the whole task.
 
@@ -502,7 +514,7 @@ DECOMPOSITION paths set `plan_exists: true`, `plan_source: "DECOMPOSITION"`. **�
 2. **The plan/research file has a clear step structure** — headings like `## P0-1`, `## Phase 1`, `## Шаг 1`, `### P0-1` → the orchestrator extracts the steps via its ONE allowed classification `read` of the plan file, or — if it has not read the file — via a single `mcp-read` Task call listing the step headings (`mcp-read` is the orchestrator's whitelisted file-reading agent; `devops-readonly` is NOT callable by orchestrator — it belongs to plankestrator's routing table).
 3. **No step list anywhere** → ONE `dev-planner` call in DECOMPOSITION mode (`MODE: DECOMPOSITION` in the Task prompt): dev-planner analyzes the research file and returns JSON `{"decomposition": true, "steps": [{"id": "...", "title": "...", "description": "..."}, ...]}` WITHOUT writing `dev_plan.md`.
 
-**Per-step chain:** For each step, `dev-planner` writes the detailed plan for THIS step to `dev_plan.md`, `dev-professor` reads the plan file, critically reviews it, then implements the step, `advisor` observes the implementation result at the step boundary (see "Advisor step" under DEV COMPLEX), `dev-reviewer` reviews the code, `consistency-checker` validates architecture, then `utility` runs the syntax check before the orchestrator advances to the next step.
+**Per-step chain:** For each step, `dev-planner` writes the detailed plan for THIS step to `dev_plan.md`, `dev-professor` reads the plan file, critically reviews it, then implements the step, `advisor` observes the implementation result at the step boundary (see "Advisor step" under DEV COMPLEX), `dev-reviewer` reviews the code, `rework` applies reviewer fixes, `consistency-checker` validates architecture, then `utility` runs the syntax check before the orchestrator advances to the next step.
 
 **Rework loop:** If consistency-checker finds critical issues within a step, the task returns to `rework` for fixes, then consistency-checker validates again. Loop repeats up to 3 iterations per step. If a step passes, the orchestrator advances to the next plan step and repeats the chain.
 

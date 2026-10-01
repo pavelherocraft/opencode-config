@@ -47,7 +47,7 @@ Pick exactly ONE row. No improvisation. `next_agent` = first element of `pipelin
 | 3 | DEV | SIMPLE | false | `["worker", "utility"]` |
 | 4 | DEV | SIMPLE | true | `["worker", "consistency-checker", "utility"]` |
 | 5 | DEV | COMPLEX | false | `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"]` |
-| 6 | DEV | SUPERCOMPLEX | true | per plan step: `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"]` |
+| 6 | DEV | SUPERCOMPLEX | true | per plan step: `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"]` |
 | 7 | DOCS | SIMPLE | any | `["docs-writer", "utility"]` |
 | 8 | DOCS | DEEP | any | `["docs-planner", "docs-writer", "dev-reviewer", "rework", "consistency-checker", "utility"]` |
 
@@ -95,7 +95,7 @@ Pick exactly ONE row. No improvisation. `next_agent` = first element of `pipelin
 - **Expected outcome:** dev_plan.md + reviewed implementation; Auto-DOCS hook applies.
 
 ### Row 6 — DEV SUPERCOMPLEX: full chain PER PLAN STEP
-- **Description:** NOT one pass over the task. Determine the step list ONCE (priority: user steps > plan headings > dev-planner DECOMPOSITION), then run dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker (rework loop max 3) → utility for EACH step. See SUPERCOMPLEX PIPELINE section for the three stages.
+- **Description:** NOT one pass over the task. Determine the step list ONCE (priority: user steps > plan headings > dev-planner DECOMPOSITION), then run dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker (rework loop max 3) → utility for EACH step. See SUPERCOMPLEX PIPELINE section for the three stages.
 - **When to use:** explicit user request (Q1) / plan with >3 steps + huge volume (Q2) / DECOMPOSITION outcome (Q3). ALWAYS `plan_exists=true` (CRITICAL RULE: SUPERCOMPLEX + plan_exists=false is INVALID).
 - **Agents & roles:** same as row 5, iterated per step; mcp-read may list plan headings (Stage 1, priority 2).
 - **Expected outcome:** all N steps implemented; final JSON `next_agent: null` + `SUPERCOMPLEX complete: N/N steps implemented`; Auto-DOCS hook if ANY step flagged `requires_docs_update: true`.
@@ -139,10 +139,11 @@ For EACH step in the list, in order:
 2. `dev-professor` — Task prompt: "Review dev_plan.md and implement step by step" + step context. It implements ONLY this step.
 3. `advisor` — observes this step's implementation result (ADVISOR STEP RULES apply).
 4. `dev-reviewer` — reviews this step's implementation.
-5. `consistency-checker` — validates architecture.
-6. Critical issues → rework loop: `rework → consistency-checker`, max 3 iterations (see Rework loop note above).
-7. `utility` — syntax check.
-8. Next step → repeat from item 1.
+5. `rework` — applies dev-reviewer fixes.
+6. `consistency-checker` — validates architecture.
+7. Critical issues → rework loop: `rework → consistency-checker`, max 3 iterations (see Rework loop note above).
+8. `utility` — syntax check.
+9. Next step → repeat from item 1.
 
 Ack format for every row 6 turn: `→ STEP <i>/<total> (<step id>): DELEGATED to <agent>`.
 
