@@ -1,7 +1,7 @@
 ---
-description: DevOps reviewer. Validates command execution results, exit codes, output logs, and file creation. Qwen 3.7 Plus.
+description: DevOps reviewer. Validates command execution results, exit codes, output logs, and file creation. Kimi K2.8.
 mode: subagent
-model: bifrost-litellm/qwen3.8-max
+model: bifrost-litellm/Kimi K2.8
 temperature: 0.1
 permission:
   edit: deny

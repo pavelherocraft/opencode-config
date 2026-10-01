@@ -92,7 +92,7 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | mcp-search | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
 | summarizer | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
 | devops-agent | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
-| devops-reviewer | bifrost-litellm/qwen3.8-max |
+| devops-reviewer | bifrost-litellm/Kimi K2.8 |
 | orchestrator-identity-probe | bifrost-litellm/QWEN3.7-plus |
 | plankestrator-identity-probe | bifrost-litellm/QWEN3.7-plus |
 | plan-writer-simple | bifrost-litellm/QWEN3.7-plus |
