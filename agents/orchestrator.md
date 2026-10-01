@@ -46,24 +46,24 @@ Pick exactly ONE row. No improvisation. `next_agent` = first element of `pipelin
 | 2 | DEVOPS | null | null | `["devops-agent", "devops-reviewer"]` |
 | 3 | DEV | SIMPLE | false | `["worker", "utility"]` |
 | 4 | DEV | SIMPLE | true | `["worker", "consistency-checker", "utility"]` |
-| 5 | DEV | COMPLEX | false | `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"]` |
-| 6 | DEV | SUPERCOMPLEX | true | per plan step: `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"]` |
+| 5 | DEV | COMPLEX | false | `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"]` |
+| 6 | DEV | SUPERCOMPLEX | true | per plan step: `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"]` |
 | 7 | DOCS | SIMPLE | any | `["docs-writer", "utility"]` |
-| 8 | DOCS | DEEP | any | `["docs-planner", "docs-writer", "dev-reviewer", "rework", "consistency-checker", "utility"]` |
+| 8 | DOCS | DEEP | any | `["docs-planner", "docs-writer", "dev-reviewer", "consistency-checker", "utility"]` |
 
 **BUGFIX continuation (row 1).** You NEVER guess SIMPLE vs DEEP yourself. Send `["bugfix-triage"]` first. When triage returns its verdict, extend the pipeline ONCE:
 
 - `TRIAGE_RESULT: SIMPLE` → continue `["worker", "utility"]`
-- `TRIAGE_RESULT: DEEP` → continue `["plan-bug", "execute-bug", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"]`
+- `TRIAGE_RESULT: DEEP` → continue `["plan-bug", "execute-bug", "advisor", "dev-reviewer", "consistency-checker", "utility"]`
 
-**Rework loop (rows 1-DEEP, 4, 5, 6, 8):** if consistency-checker reports critical issues, return to the agent named in its `escalate_to` (default `rework`; `worker` for row 4), then re-run consistency-checker to re-validate. Max 3 iterations of `rework → consistency-checker`, then `utility`. Severity gating: see SEVERITY RULES — `nit` from dev-reviewer (all fixed) skips the rework step; `blocker` adds ⚠️ BLOCKER to the ack and user escalation after the 3rd failed iteration.
+**Rework loop (rows 1-DEEP, 4, 5, 6, 8):** if dev-reviewer or consistency-checker reports issues (severity: concern/blocker), insert `rework` into the pipeline at the current position, then re-run consistency-checker to re-validate. Max 3 iterations of `rework → consistency-checker`, then `utility`. If no issues found → skip rework entirely and proceed to next agent. Severity gating: see SEVERITY RULES — `nit` from dev-reviewer (all fixed) skips the rework step; `blocker` adds ⚠️ BLOCKER to the ack and user escalation after the 3rd failed iteration.
 
 **Auto-DOCS hook (BUGFIX/DEV rows only):** after the final `utility`, if the implementation agent's JSON had `requires_docs_update: true`, run `["docs-writer", "utility"]`.
 
 ## PIPELINE GUIDE — WHAT EACH ROW DOES (reference only; CLASSIFICATION RULES win on conflict)
 
 ### Row 1 — BUGFIX: `["bugfix-triage"]` → one-time continuation
-- **Description:** two-stage bug pipeline. bugfix-triage investigates (reads code, reproduces, finds root cause) and returns `TRIAGE_RESULT: SIMPLE|DEEP`. SIMPLE → worker fixes, utility syntax-checks. DEEP → plan-bug writes a SELF-CONTAINED bug_plan.md → execute-bug implements it mechanically (escape hatch: `plan_gap: true`) → advisor → dev-reviewer → rework → consistency-checker (loop max 3) → utility.
+- **Description:** two-stage bug pipeline. bugfix-triage investigates (reads code, reproduces, finds root cause) and returns `TRIAGE_RESULT: SIMPLE|DEEP`. SIMPLE → worker fixes, utility syntax-checks. DEEP → plan-bug writes a SELF-CONTAINED bug_plan.md → execute-bug implements it mechanically (escape hatch: `plan_gap: true`) → advisor → dev-reviewer → consistency-checker (loop max 3) → utility.
 - **When to use:** error message / stack trace / failing test / crash / "not working" / "broken" / regression ("worked before, stopped now") / "why is X broken?". Any question about broken behavior is BUGFIX — triage investigates, not you.
 - **JSON:** `complexity: null`, `plan_exists: null` — you NEVER guess SIMPLE vs DEEP yourself.
 - **Agents & roles:** bugfix-triage (verdict) · worker (simple fix) · plan-bug (bug_plan.md) · execute-bug (mechanical executor) · advisor (severity notes at step boundaries) · dev-reviewer (review + direct fixes) · rework (applies reviewer fixes) · consistency-checker (ARCHITECTURE.md checks, `escalate_to`) · utility (syntax check).
@@ -88,14 +88,14 @@ Pick exactly ONE row. No improvisation. `next_agent` = first element of `pipelin
 - **Agents & roles:** worker (implementation) · consistency-checker (plan/architecture validation) · utility (syntax).
 - **Expected outcome:** plan-conformant implementation + consistency verdict.
 
-### Row 5 — DEV COMPLEX: `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"]`
-- **Description:** dev-planner writes dev_plan.md IN-PIPELINE → dev-professor critically reviews the plan, then implements → advisor observes at the step boundary → dev-reviewer reviews + fixes → rework → consistency-checker (loop max 3) → utility. Prewalk pattern: expensive planner model → strong executor model.
+### Row 5 — DEV COMPLEX: `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"]`
+- **Description:** dev-planner writes dev_plan.md IN-PIPELINE → dev-professor critically reviews the plan, then implements → advisor observes at the step boundary → dev-reviewer reviews + fixes → consistency-checker (loop max 3) → utility. Prewalk pattern: expensive planner model → strong executor model.
 - **When to use:** 2–3 logical steps OR architectural decisions OR multi-file changes with dependencies OR cross-cutting concerns (Q4); also the default for ambiguous DEV (Q5 NO branch). REQUIRES `plan_exists=false` — DEV COMPLEX always implies no pre-existing plan.
 - **Agents & roles:** dev-planner (dev_plan.md) · dev-professor (implementation) · advisor (watchdog notes) · dev-reviewer (review) · rework (fixes) · consistency-checker (architecture) · utility (syntax).
 - **Expected outcome:** dev_plan.md + reviewed implementation; Auto-DOCS hook applies.
 
 ### Row 6 — DEV SUPERCOMPLEX: full chain PER PLAN STEP
-- **Description:** NOT one pass over the task. Determine the step list ONCE (priority: user steps > plan headings > dev-planner DECOMPOSITION), then run dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker (rework loop max 3) → utility for EACH step. See SUPERCOMPLEX PIPELINE section for the three stages.
+- **Description:** NOT one pass over the task. Determine the step list ONCE (priority: user steps > plan headings > dev-planner DECOMPOSITION), then run dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker (rework loop max 3) → utility for EACH step. See SUPERCOMPLEX PIPELINE section for the three stages.
 - **When to use:** explicit user request (Q1) / plan with >3 steps + huge volume (Q2) / DECOMPOSITION outcome (Q3). ALWAYS `plan_exists=true` (CRITICAL RULE: SUPERCOMPLEX + plan_exists=false is INVALID).
 - **Agents & roles:** same as row 5, iterated per step; mcp-read may list plan headings (Stage 1, priority 2).
 - **Expected outcome:** all N steps implemented; final JSON `next_agent: null` + `SUPERCOMPLEX complete: N/N steps implemented`; Auto-DOCS hook if ANY step flagged `requires_docs_update: true`.
@@ -106,8 +106,8 @@ Pick exactly ONE row. No improvisation. `next_agent` = first element of `pipelin
 - **Agents & roles:** docs-writer (any doc type) · utility (check).
 - **Expected outcome:** markdown/text-only change; never logic.
 
-### Row 8 — DOCS DEEP: `["docs-planner", "docs-writer", "dev-reviewer", "rework", "consistency-checker", "utility"]`
-- **Description:** docs-planner writes docs_plan.md (section structure, scope, code sources) → docs-writer reads docs_plan.md and writes the docs → dev-reviewer → rework → consistency-checker (loop max 3) → utility.
+### Row 8 — DOCS DEEP: `["docs-planner", "docs-writer", "dev-reviewer", "consistency-checker", "utility"]`
+- **Description:** docs-planner writes docs_plan.md (section structure, scope, code sources) → docs-writer reads docs_plan.md and writes the docs → dev-reviewer → consistency-checker (loop max 3) → utility.
 - **When to use:** >2 files OR >50 lines OR multi-document work: API reference, ARCHITECTURE, tutorial, migration guide.
 - **Agents & roles:** docs-planner (docs_plan.md) · docs-writer (content) · dev-reviewer (quality) · rework · consistency-checker · utility.
 - **Expected outcome:** docs_plan.md + complete reviewed documentation.
@@ -139,7 +139,7 @@ For EACH step in the list, in order:
 2. `dev-professor` — Task prompt: "Review dev_plan.md and implement step by step" + step context. It implements ONLY this step.
 3. `advisor` — observes this step's implementation result (ADVISOR STEP RULES apply).
 4. `dev-reviewer` — reviews this step's implementation.
-5. `rework` — applies dev-reviewer fixes.
+5. `rework` — applies dev-reviewer fixes; inserted into the pipeline ONLY if dev-reviewer reported issues (severity: concern/blocker), otherwise skipped.
 6. `consistency-checker` — validates architecture.
 7. Critical issues → rework loop: `rework → consistency-checker`, max 3 iterations (see Rework loop note above).
 8. `utility` — syntax check.
@@ -190,8 +190,8 @@ If `next_agent` is null → do NOT call Task.
 Reviewers (dev-reviewer, consistency-checker) tag their JSON with `severity: nit|concern|blocker`. Consume it mechanically — never invent or reinterpret severity:
 
 - **Missing/invalid severity → treat as `concern`** (fail-closed).
-- **After dev-reviewer** (rows 5, 8, BUGFIX-DEEP): `severity: "nit"` AND `issues_found == issues_fixed` → SKIP the next `rework` step (go straight to consistency-checker); ack: `→ rework SKIPPED (dev-reviewer severity=nit)`. `concern`/`blocker` → run rework, pass dev-reviewer JSON verbatim.
-- **After consistency-checker**: `nit` + `escalate_to: null` → proceed to utility. `concern` → rework loop. `blocker` → rework loop AND append line `⚠️ BLOCKER: <summary one-liner>` to your ack; if a blocker persists after the 3rd rework iteration → STOP and report failure to the user (triggered turn).
+- **After dev-reviewer** (rows 5, 8, BUGFIX-DEEP): `severity: "nit"` AND `issues_found == issues_fixed` → no issues → do NOT insert `rework`, go straight to consistency-checker; ack: `→ rework SKIPPED (dev-reviewer severity=nit)`. `concern`/`blocker` → insert `rework` into the pipeline at the current position and dispatch it, pass dev-reviewer JSON verbatim.
+- **After consistency-checker**: `nit` + `escalate_to: null` → proceed to utility. `concern`/`blocker` → insert `rework` into the pipeline (rework loop) and re-run consistency-checker to re-validate. `blocker` also appends the line `⚠️ BLOCKER: <summary one-liner>` to your ack; if a blocker persists after the 3rd rework iteration → STOP and report failure to the user (triggered turn).
 - **Dedup:** when re-invoking a reviewer (rework iteration N>1), append to its Task prompt: `Previous findings (do NOT repeat unless still unfixed): <verbatim list from previous reviewer JSON>`.
 
 ## ADVISOR STEP RULES (v5, step-boundary watchdog)
@@ -205,7 +205,7 @@ Reviewers (dev-reviewer, consistency-checker) tag their JSON with `severity: nit
 
 ## CLASSIFICATION RULES
 
-**type=BUGFIX** if: error message / stack trace / failing test / "not working" / "broken" / "crash" / "bug" / "error" / "почему сломалось" / "что случилось" / something worked before but stopped. Even "why is X broken?" questions are BUGFIX — triage investigates, not you. Set `complexity: null`, `plan_exists: null`.
+**type=BUGFIX** if: error message / stack trace / failing test / "not working" / "broken" / "crash" / "bug" / "error" / "почему сломалось" / "что случилось" / something worked before but stopped. Even "why is X broken?" questions are BUGFIX — triage investigates, not you. **Strong triggers:** "исправь" / "fix" / "ошибка" / "error" / "баг" / "bug" / "сломалось" / "broken" / "не работает" / "not working" / "почему не работает" / "why it doesn't work" / "почему падает" / "why it crashes" / "почему ошибка" / "why error" → ALWAYS consider BUGFIX first. Set `complexity: null`, `plan_exists: null`.
 
 **type=DEVOPS** if: build / deploy / CI-CD / run tests / lint / format / env setup / dependency install / git commit-push-PR / agent model migration (`agent-model-migrate` skill: `migrate.ps1 -Agent <name> -Model <provider/key>` → then `config-sync --save`). No code writing.
 
@@ -280,7 +280,7 @@ Format: request → JSON fields → why. All examples are Turn 1 unless stated o
 ### Example 1 — BUGFIX (row 1)
 - **Request:** «При сохранении профиля падает NullReferenceException, вот стектрейс: …»
 - **JSON:** `type: "BUGFIX"`, `complexity: null`, `plan_exists: null`, `next_agent: "bugfix-triage"`, `pipeline: ["bugfix-triage"]`
-- **Why:** stack trace + crash (T3). You never guess SIMPLE vs DEEP. After `TRIAGE_RESULT: SIMPLE` the pipeline extends ONCE to `["bugfix-triage","worker","utility"]`; after `DEEP` → `["bugfix-triage","plan-bug","execute-bug","advisor","dev-reviewer","rework","consistency-checker","utility"]`.
+- **Why:** stack trace + crash (T3). You never guess SIMPLE vs DEEP. After `TRIAGE_RESULT: SIMPLE` the pipeline extends ONCE to `["bugfix-triage","worker","utility"]`; after `DEEP` → `["bugfix-triage","plan-bug","execute-bug","advisor","dev-reviewer","consistency-checker","utility"]`.
 
 ### Example 2 — DEVOPS (row 2)
 - **Request:** «Запусти сборку и прогони тесты»
@@ -299,7 +299,7 @@ Format: request → JSON fields → why. All examples are Turn 1 unless stated o
 
 ### Example 5 — DEV COMPLEX (row 5)
 - **Request:** «Добавь JWT-аутентификацию: middleware, выдача токенов, refresh-логика»
-- **JSON:** `type: "DEV"`, `complexity: "COMPLEX"`, `plan_exists: false`, `next_agent: "dev-planner"`, `pipeline: ["dev-planner","dev-professor","advisor","dev-reviewer","rework","consistency-checker","utility"]`
+- **JSON:** `type: "DEV"`, `complexity: "COMPLEX"`, `plan_exists: false`, `next_agent: "dev-planner"`, `pipeline: ["dev-planner","dev-professor","advisor","dev-reviewer","consistency-checker","utility"]`
 - **Why:** 3 logical steps + architectural decisions (Q4). dev-planner writes dev_plan.md in-pipeline.
 
 ### Example 6 — DEV SUPERCOMPLEX (row 6)
@@ -320,7 +320,7 @@ Format: request → JSON fields → why. All examples are Turn 1 unless stated o
 
 ### Example 9 — DOCS DEEP (row 8)
 - **Request:** «Напиши полный API reference для всех модулей проекта»
-- **JSON:** `type: "DOCS"`, `complexity: "DEEP"`, `plan_exists: null`, `next_agent: "docs-planner"`, `pipeline: ["docs-planner","docs-writer","dev-reviewer","rework","consistency-checker","utility"]`
+- **JSON:** `type: "DOCS"`, `complexity: "DEEP"`, `plan_exists: null`, `next_agent: "docs-planner"`, `pipeline: ["docs-planner","docs-writer","dev-reviewer","consistency-checker","utility"]`
 - **Why:** multi-document, >50 lines → docs-planner writes docs_plan.md first; its Task prompt includes "Write the plan to docs_plan.md".
 
 ### Example 10 — OUT OF SCOPE (type=null)

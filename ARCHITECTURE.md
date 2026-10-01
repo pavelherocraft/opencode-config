@@ -382,13 +382,13 @@ bugfix-triage → worker → utility
 ### BUGFIX DEEP
 
 ```
-bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → advisor → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
+bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.md) → advisor → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
 ```
 
 **Two-stage pipeline decision (mandatory):** the orchestrator NEVER guesses SIMPLE vs DEEP itself. For any BUGFIX it first sends `["bugfix-triage"]` with `complexity: null`. When triage returns its verdict, the orchestrator extends the pipeline ONCE:
 
 - `TRIAGE_RESULT: SIMPLE` → continue `["worker", "utility"]`
-- `TRIAGE_RESULT: DEEP` → continue `["plan-bug", "execute-bug", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"]`
+- `TRIAGE_RESULT: DEEP` → continue `["plan-bug", "execute-bug", "advisor", "dev-reviewer", "consistency-checker", "utility"]`
 
 **Single source of truth for pipeline selection:** the PIPELINE TABLE in each primary agent's own `.md` file (`agents/orchestrator.md` for BUGFIX/DEVOPS/DEV/DOCS, `agents/plankestrator.md` for PLAN/RESEARCH/RESEARCH+PLAN). Each table must stay identical to the corresponding section in this file. (The inline `prompt` field formerly present in opencode.json was removed — markdown wins per the merge order documented above.)
 
@@ -398,7 +398,7 @@ Prompt-local reference sections (`PIPELINE GUIDE`, `CLASSIFICATION EXAMPLES`) in
 
 **Prewalk pattern (v5, OMP prewalk analog):** one-shot handoff expensive→cheap at the planning/implementation boundary. `plan-bug` runs on the MID-tier planner model (`GLM-5.3 (res)`, tier plan-flash) and writes a SELF-CONTAINED `bug_plan.md`; `execute-bug` runs on the CHEAP executor model (`MiniMax-M3.1-Flash-Preview`, tier executor-cheap) and mechanically applies the plan in a fresh context. Escape hatch: `execute-bug` sets `plan_gap: true` in its JSON when the plan turns out incomplete — downstream dev-reviewer/consistency-checker escalate (consistency-checker `escalate_to: "execute-bug"` remains available). Same philosophy in DEV COMPLEX: dev-planner (plan-strong) > dev-professor (executor-strong). Source: OMP prewalk pattern (`docs/prewalk.md`).
 
-**Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes. Loop repeats up to 3 iterations. If consistency-checker passes → utility. If max iterations reached → failure report.
+**Rework loop:** `rework` is NOT in the base pipeline. If dev-reviewer or consistency-checker reports issues (severity: concern/blocker), `rework` is inserted into the pipeline at the current position, then consistency-checker re-validates. Loop repeats up to 3 iterations. If no issues found → skip rework entirely. If consistency-checker passes → utility. If max iterations reached → failure report.
 
 ### DEV Complexity Classification (decision tree)
 
@@ -430,7 +430,7 @@ Selects the TYPE (BUGFIX / DEVOPS / DEV / DOCS / null) BEFORE the complexity rul
 |---|----------|-------|------|
 | T1 | Identity test / small talk / meta question ("what did we do", "status")? | `type: null` — brief answer after the JSON, no Task call | T2 |
 | T2 | Deliverable IS a plan/research document, no implementation requested ("plan", "research", "investigate options", "design the architecture", "create a plan")? | `type: null` + OUT OF SCOPE message (switch to plankestrator), no Task call | T3 |
-| T3 | Broken behavior described: error / stack trace / crash / failing test / "not working" / "broken" / regression? | BUGFIX (row 1), `complexity: null`, `plan_exists: null` | T4 |
+| T3 | Broken behavior described: error / stack trace / crash / failing test / "not working" / "broken" / regression? **Strong triggers:** "исправь" / "fix" / "ошибка" / "error" / "баг" / "bug" / "сломалось" / "broken" / "не работает" / "not working" / "почему не работает" / "why it doesn't work" / "почему падает" / "why it crashes" / "почему ошибка" / "why error" → ALWAYS consider BUGFIX first | BUGFIX (row 1), `complexity: null`, `plan_exists: null` | T4 |
 | T4 | Main action = RUNNING operations (build / deploy / test-run / lint / git / env / deps / model migration), no code writing? | DEVOPS (row 2) | T5 |
 | T5 | Deliverable = markdown/docs only, zero logic change? | DOCS (row 7 or 8 by size) | T6 |
 | T6 | Deliverable = new or modified code? | DEV → complexity Q1–Q5 | Re-check T2 |
@@ -472,12 +472,14 @@ DEV SIMPLE has two variants depending on whether a plan exists:
 ### DEV COMPLEX
 
 ```
-dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
+dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
 ```
+
+**Rework is conditional:** `rework` is NOT in the base pipeline. It is inserted dynamically ONLY if dev-reviewer or consistency-checker reports issues (severity: concern/blocker). If no issues found → skip rework entirely.
 
 **Precondition:** DEV COMPLEX implies `plan_exists: false` — no plan file exists at classification time; `dev-planner` creates `dev_plan.md` in-pipeline. If a plan file DOES already exist, the task is either SIMPLE (with-plan variant, ≤3 steps — Q2a) or SUPERCOMPLEX (>3 steps + huge volume — Q2), never COMPLEX. Unplanned multi-step DEV tasks are NOT out of scope for the orchestrator — the Q3 decomposition path applies (see "DEV Complexity Classification" above).
 
-**Rework loop:** If consistency-checker finds critical issues after the initial rework, task returns to `rework` for additional fixes, then consistency-checker validates again. Loop repeats up to 3 iterations.
+**Rework loop:** `rework` is NOT in the base pipeline. If dev-reviewer or consistency-checker reports issues (severity: concern/blocker), `rework` is inserted at the current position, then consistency-checker validates again. If no issues found → skip rework entirely. Loop repeats up to 3 iterations.
 
 **Advisor step (v5, OMP Advisor Watchdog analog — step-boundary):** `advisor` (tencent/Hy4, strictly read-only: read/grep/glob + read-only serena) observes the implementation result between pipeline steps and returns severity-tagged notes (`nit|concern|blocker`, contract — §3 Reviewer Severity Field). Mid-turn intervention is NOT possible (our agents are atomic within a step) — advisor fires only at step boundaries. Safeguards: emission guard (max 4 non-blocker notes per run, session dedup, empty-phrase filter — plugin v5 + advisor prompt), immuneTurns analog (`NIT_ONLY_MODE` for 3 pipeline steps after a consumed blocker — concern/blocker notes downgrade to nit), separate cost accounting (advisor ≈ 1 extra model call per step; logged in plugin + orchestrator acks). Advisor never re-orders the pipeline; blocker → ⚠️ ack + notes to dev-reviewer/rework; persistence after 3rd rework iteration → failure report.
 
@@ -485,18 +487,18 @@ dev-planner → dev-professor → advisor → dev-reviewer → rework → consis
 
 ```
 PER PLAN STEP (repeated for each step in the step list):
-  dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
+  dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
 ```
 
 **🚨 CRITICAL: SUPERCOMPLEX executes the FULL pipeline for EACH plan step.**
 
-The pipeline `dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker → [rework loop] → utility` is executed **SEPARATELY for every step** of the plan.
+The pipeline `dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker → [rework loop] → utility` is executed **SEPARATELY for every step** of the plan.
 
 **Example:** If the plan has 8 steps, the orchestrator executes the full pipeline 8 times:
-- Step 1: dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker → utility
-- Step 2: dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker → utility
+- Step 1: dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker → utility
+- Step 2: dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker → utility
 - ...
-- Step 8: dev-planner → dev-professor → advisor → dev-reviewer → rework → consistency-checker → utility
+- Step 8: dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker → utility
 
 **Never** execute the pipeline once for the entire task. **Always** iterate over each plan step.
 
@@ -514,9 +516,9 @@ DECOMPOSITION paths set `plan_exists: true`, `plan_source: "DECOMPOSITION"`. **�
 2. **The plan/research file has a clear step structure** — headings like `## P0-1`, `## Phase 1`, `## Шаг 1`, `### P0-1` → the orchestrator extracts the steps via its ONE allowed classification `read` of the plan file, or — if it has not read the file — via a single `mcp-read` Task call listing the step headings (`mcp-read` is the orchestrator's whitelisted file-reading agent; `devops-readonly` is NOT callable by orchestrator — it belongs to plankestrator's routing table).
 3. **No step list anywhere** → ONE `dev-planner` call in DECOMPOSITION mode (`MODE: DECOMPOSITION` in the Task prompt): dev-planner analyzes the research file and returns JSON `{"decomposition": true, "steps": [{"id": "...", "title": "...", "description": "..."}, ...]}` WITHOUT writing `dev_plan.md`.
 
-**Per-step chain:** For each step, `dev-planner` writes the detailed plan for THIS step to `dev_plan.md`, `dev-professor` reads the plan file, critically reviews it, then implements the step, `advisor` observes the implementation result at the step boundary (see "Advisor step" under DEV COMPLEX), `dev-reviewer` reviews the code, `rework` applies reviewer fixes, `consistency-checker` validates architecture, then `utility` runs the syntax check before the orchestrator advances to the next step.
+**Per-step chain:** For each step, `dev-planner` writes the detailed plan for THIS step to `dev_plan.md`, `dev-professor` reads the plan file, critically reviews it, then implements the step, `advisor` observes the implementation result at the step boundary (see "Advisor step" under DEV COMPLEX), `dev-reviewer` reviews the code, `consistency-checker` validates architecture (`rework` inserted only if a reviewer reported issues), then `utility` runs the syntax check before the orchestrator advances to the next step.
 
-**Rework loop:** If consistency-checker finds critical issues within a step, the task returns to `rework` for fixes, then consistency-checker validates again. Loop repeats up to 3 iterations per step. If a step passes, the orchestrator advances to the next plan step and repeats the chain.
+**Rework loop:** If dev-reviewer or consistency-checker reports issues within a step (severity: concern/blocker), `rework` is inserted into the pipeline at the current position for fixes, then consistency-checker validates again. If no issues found → skip rework entirely. Loop repeats up to 3 iterations per step. If a step passes, the orchestrator advances to the next plan step and repeats the chain.
 
 **Note:** This pipeline overrides the standard "PLAN EXISTS OVERRIDE" complexity rule — when the plan is large (>3 steps), complexity is classified as `SUPERCOMPLEX` instead of `SIMPLE`.
 
@@ -532,9 +534,8 @@ devops-agent → devops-reviewer
 DOCS SIMPLE: docs-writer → utility
 DOCS DEEP:   docs-planner (writes docs_plan.md)
            → docs-writer (reads docs_plan.md)
-           → dev-reviewer
-           → rework
-           → consistency-checker
+            → dev-reviewer
+            → consistency-checker
            → [rework loop: rework → consistency-checker, max 3]
            → utility
 ```

@@ -1888,10 +1888,10 @@ function validatePipeline(agent: string, type: string | null, complexity: string
       "DEVOPS-null-null": ["devops-agent", "devops-reviewer"],
       "DEV-SIMPLE-false": ["worker", "utility"],
       "DEV-SIMPLE-true": ["worker", "consistency-checker", "utility"],
-      "DEV-COMPLEX-false": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"],
-      "DEV-SUPERCOMPLEX-true": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"],
+      "DEV-COMPLEX-false": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"],
+      "DEV-SUPERCOMPLEX-true": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"],
       "DOCS-SIMPLE-any": ["docs-writer", "utility"],
-      "DOCS-DEEP-any": ["docs-planner", "docs-writer", "dev-reviewer", "rework", "consistency-checker", "utility"]
+      "DOCS-DEEP-any": ["docs-planner", "docs-writer", "dev-reviewer", "consistency-checker", "utility"]
     },
     plankestrator: {
       "PLAN-SIMPLE": ["plan-writer-simple", "plan-reviewer-simple"],
@@ -1911,7 +1911,7 @@ function validatePipeline(agent: string, type: string | null, complexity: string
     "orchestrator:BUGFIX-null-null": [
       ["bugfix-triage"],  // Turn 1
       ["bugfix-triage", "worker", "utility"],  // TRIAGE_RESULT: SIMPLE
-      ["bugfix-triage", "plan-bug", "execute-bug", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"]  // TRIAGE_RESULT: DEEP
+      ["bugfix-triage", "plan-bug", "execute-bug", "advisor", "dev-reviewer", "consistency-checker", "utility"]  // TRIAGE_RESULT: DEEP
     ],
     // v6 (Phase 11.1б + correction F-7): provisional classification turns (complexity=null)
     "orchestrator:DEV-null-false": [
