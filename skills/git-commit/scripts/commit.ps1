@@ -187,9 +187,19 @@ try {
         exit 3
     }
 
-    # commit
-    git commit -m "$Message"
-    if ($LASTEXITCODE -ne 0) { Write-Output 'ERROR: git commit failed'; exit 2 }
+    # commit (use temp file for multiline messages)
+    $msgFile = [System.IO.Path]::GetTempFileName()
+    try {
+        [System.IO.File]::WriteAllText(
+            $msgFile, $Message,
+            (New-Object System.Text.UTF8Encoding($false))   # UTF-8 без BOM
+        )
+        git commit -F $msgFile
+        if ($LASTEXITCODE -ne 0) { Write-Output 'ERROR: git commit failed'; exit 2 }
+    }
+    finally {
+        Remove-Item -LiteralPath $msgFile -Force -ErrorAction SilentlyContinue
+    }
     $hash = git rev-parse --short HEAD
     Write-Output "COMMITTED: $hash $subject"
     Write-Output ("FILES: " + ($staged -join ', '))
