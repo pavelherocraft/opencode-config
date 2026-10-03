@@ -153,7 +153,10 @@ if ($added -eq 0 -and $removed -eq 0 -and $modified -eq 0) {
 
 if ($PlanOnly) {
     Write-Output "STATUS:PLAN_ONLY"
-    Write-Output "DIFF:$($diffOutput | ConvertTo-Json -Depth 10)"
+    # $diffOutput is an array of stdout lines; re-emit as raw JSON text so the
+    # DIFF: block is parseable. (ConvertTo-Json on a string[] yields a quoted
+    # array, not a JSON object -- see Python mirror for the correct shape.)
+    Write-Output "DIFF:$($diffOutput -join "`n")"
     exit 0
 }
 
