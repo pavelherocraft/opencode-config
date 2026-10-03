@@ -829,6 +829,18 @@
             }
           }
         },
+        "nvidia/nemotron-3-ultra-550b-a55b": {
+          "name": "nvidia/nemotron-3-ultra-550b-a55b",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          }
+        },
         "openrouter/deepseek-v4.1-flash": {
           "name": "openrouter/deepseek-v4.1-flash",
           "limit": {
@@ -1153,6 +1165,15 @@
       "type": "remote",
       "url": "http://localhost:8080/mcp",
       "enabled": true
+    },
+    "bq": {
+      "type": "remote",
+      "url": "http://46.225.84.219:8090/mcp/",
+      "enabled": true,
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer bqa_9a33eba7a06bed74814e9aa2a3f86c90e82284d80e31244b"
+      }
     }
   },
   "agent": {
