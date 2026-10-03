@@ -1,6 +1,6 @@
 ---
 name: git-commit
-description: 'Internal git commit toolkit for the git-commit agent. Runs commit.ps1 to analyze repo state (-Analyze flag: status, staged/unstaged stats, recent conventional-commit style, hygiene warnings) and to create gated commits (-Message with explicit -Files or -StagedOnly, optional -Push). Blocks secrets, sensitive filenames, and conflict markers; warns on large files and non-conventional subjects. Hidden from all other agents by skill permissions.'
+description: 'Internal git commit toolkit for the git-commit agent. Runs commit.ps1 to analyze repo state (-Analyze: status, staged/unstaged stats, recent conventional-commit style, hygiene warnings), to create gated commits (-Message with explicit -Files or -StagedOnly, optional -Push), and to push already-committed work without committing (-PushOnly). Blocks secrets, sensitive filenames, and conflict markers; warns on large files and non-conventional subjects. Hidden from all other agents by skill permissions.'
 ---
 
 # Git Commit (gated, conventional)
@@ -25,6 +25,26 @@ Commit (agent composes the message; script enforces the gates):
 & ".../commit.ps1" -Message "..." -Files ... -Push # commit then push current branch
 ```
 
+Push already-committed work (no staging, no commit — use when the commit exists
+locally but a separate step is needed to land it):
+
+```powershell
+& ".../commit.ps1" -PushOnly
+```
+
+`-PushOnly` preflights before touching the network and refuses unsafe states:
+
+| Preflight | Result |
+|-----------|--------|
+| branch has no upstream | ERROR exit 2, hint: `git push -u origin <branch>` |
+| ahead 0 / behind 0 | `STATUS:NOTHING_TO_PUSH`, exit 0 (no-op) |
+| ahead > 0, behind 0 | fast-forward push, `PUSHED: <branch> -> <upstream>` |
+| ahead > 0, behind > 0 | ERROR exit 2 — diverged, `pull --rebase` first |
+| ahead 0, behind > 0 | ERROR exit 2 — remote ahead, pull/rebase first |
+
+`-PushOnly` is mutually exclusive with `-Message`, `-Files`, `-StagedOnly` and
+`-Push`; combining them is an ERROR (exit 2). It never force-pushes.
+
 Output lines: `STATUS:/STAGED:/UNSTAGED:/STYLE:/WARN:/BLOCK:/COMMITTED:/PUSHED:/ERROR:`.
 Exit codes: 0 ok, 2 usage/environment error, 3 gate block.
 
@@ -37,7 +57,10 @@ Exit codes: 0 ok, 2 usage/environment error, 3 gate block.
    this repo uses English conventional commits like `feat(provider): ...`,
    `chore(sync): ...`; scope = area name; subject in lowercase, imperative).
 4. Commit via `-Files` (explicit list) or `-StagedOnly`. NEVER both blind.
-5. Push ONLY when the task explicitly asked to push.
+5. Push ONLY when the task explicitly asked to push:
+   - if the push follows a commit made in the same call — use `-Push` on that call;
+   - if the commit already exists and only needs landing — use `-PushOnly`
+     (no `-Message`/`-Files`/`-StagedOnly`; it refuses diverged/behind states).
 6. Report back: COMMITTED hash + subject + FILES list (and PUSHED if pushed).
    If BLOCK/ERROR — report the gate output verbatim; do not try to bypass.
 

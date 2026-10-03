@@ -1,10 +1,12 @@
-# git-commit skill script: analyze repo state and create gated conventional commits.
+# git-commit skill script: analyze repo state, create gated conventional commits, push.
 #
 # Modes:
 #   -Analyze                          dry-run: status, diff stats, log style, hygiene report
 #   -Message "..." [-Files a,b] [-StagedOnly] [-Push]
 #                                     stage (explicit files or already-staged), run safety
 #                                     gates, commit, optionally push
+#   -PushOnly                         push already-committed work; never stages, never commits.
+#                                     Preflight: upstream set, not behind, not diverged.
 #
 # Gates (BLOCK = refuse to commit):
 #   - git identity (user.name/user.email) missing
@@ -23,6 +25,7 @@ param(
     [string[]]$Files = @(),
     [switch]$StagedOnly,
     [switch]$Push,
+    [switch]$PushOnly,
     [switch]$Analyze,
     [string]$RepoDir = (Get-Location).Path
 )
@@ -80,6 +83,34 @@ function Test-SensitiveName([string]$Path) {
         if ($Path -match $p) { return $p }
     }
     return $null
+}
+
+# Resolve upstream for the current branch into $Script:Upstream ('' when unset).
+function Get-Upstream() {
+    $up = git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>$null
+    if ($LASTEXITCODE -ne 0) { $Script:Upstream = '' } else { $Script:Upstream = ($up | Select-Object -First 1) }
+    return $Script:Upstream
+}
+
+# Push current branch to its upstream. Sets $Script:PushExit (0 ok, 2 failure).
+# Never uses --force / --force-with-lease.
+function Invoke-Push() {
+    $branch = git branch --show-current
+    if (-not $branch) {
+        Write-Output 'ERROR: cannot determine current branch (detached HEAD?)'
+        $Script:PushExit = 2
+        return
+    }
+    $upstream = Get-Upstream
+    if (-not $upstream) {
+        Write-Output "ERROR: branch '$branch' has no upstream - set it with: git push -u origin $branch"
+        $Script:PushExit = 2
+        return
+    }
+    git push
+    if ($LASTEXITCODE -ne 0) { Write-Output 'ERROR: git push failed'; $Script:PushExit = 2; return }
+    Write-Output "PUSHED: $branch -> $upstream"
+    $Script:PushExit = 0
 }
 
 # ---------- main ----------
@@ -140,6 +171,50 @@ try {
         foreach ($hit in (Find-Secrets $stagedDiff)) { Block ("secret pattern in staged diff: $hit") }
         if ($stagedDiff -match '(?m)^(<{7}|>{7}) ') { Block 'conflict markers in staged diff' }
         Write-Output '=== END ANALYZE ==='
+        exit 0
+    }
+
+    # ------------- PUSH-ONLY MODE -------------
+    if ($PushOnly) {
+        if ($Message -or $Files.Count -gt 0 -or $StagedOnly -or $Push) {
+            Write-Output 'ERROR: -PushOnly cannot be combined with -Message/-Files/-StagedOnly/-Push (it never commits)'
+            exit 2
+        }
+        Write-Output '=== PUSH-ONLY (nothing staged, nothing committed) ==='
+        Write-Output ("REPO: " + (git rev-parse --show-toplevel))
+        $branch = git branch --show-current
+        if (-not $branch) { Write-Output 'ERROR: cannot determine current branch (detached HEAD?)'; exit 2 }
+        Write-Output ("BRANCH: " + $branch)
+
+        $upstream = Get-Upstream
+        if (-not $upstream) {
+            Write-Output "ERROR: branch '$branch' has no upstream - set it with: git push -u origin $branch"
+            exit 2
+        }
+        Write-Output ("UPSTREAM: " + $upstream)
+
+        $localHead  = (git rev-parse HEAD).Trim()
+        $remoteHead = (git rev-parse $upstream).Trim()
+        $ahead  = [int]((git rev-list --count "$remoteHead..$localHead") | Select-Object -First 1)
+        $behind = [int]((git rev-list --count "$localHead..$remoteHead") | Select-Object -First 1)
+        Write-Output ("AHEAD: $ahead  BEHIND: $behind")
+
+        if ($ahead -eq 0 -and $behind -eq 0) {
+            Write-Output 'STATUS:NOTHING_TO_PUSH (local and upstream in sync)'
+            exit 0
+        }
+        if ($behind -gt 0 -and $ahead -gt 0) {
+            Write-Output "ERROR: diverged - local ahead $ahead, remote ahead $behind; pull --rebase first (this script never force-pushes)"
+            exit 2
+        }
+        if ($behind -gt 0) {
+            Write-Output "ERROR: remote is ahead by $behind commit(s) - pull/rebase first"
+            exit 2
+        }
+
+        Invoke-Push
+        if ($Script:PushExit -ne 0) { exit $Script:PushExit }
+        Write-Output '=== END PUSH-ONLY ==='
         exit 0
     }
 
@@ -206,10 +281,8 @@ try {
 
     if ($Push) {
         $branch = git branch --show-current
-        git push
-        if ($LASTEXITCODE -ne 0) { Write-Output 'ERROR: git push failed (commit remains local)'; exit 2 }
-        $upstream = git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>$null
-        Write-Output "PUSHED: $branch -> $upstream"
+        Invoke-Push
+        if ($Script:PushExit -ne 0) { Write-Output 'ERROR: commit remains local'; exit 2 }
     }
     exit 0
 }
