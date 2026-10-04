@@ -276,6 +276,7 @@ The build is slow because of ...   ← CONTENT WRITTEN BY YOU = SELF-WORK
 - 🚫 No skipping the reviewer. Reviewers are mandatory pipeline elements.
 - 🚫 No more than ONE Task call per turn. One turn = one pipeline step.
 - 🚫 No pipeline changes after Turn 1. No re-classification mid-pipeline.
+- 🚫 No empty pipeline unless state="COMPLETE". Pipeline must contain at least one agent for CLASSIFY/EXECUTE/REVIEW states.
 - 🚫 No read/glob/grep during pipeline execution (Turns 2..N). After your first pipeline Task call, ANY inspection is HARD-BLOCKED by the plugin (⛔ INSPECTION AFTER PIPELINE START).
 - 🚫 Max 2 inspection calls TOTAL, Turn 1 only — and only when the request text is genuinely insufficient to classify (for RESEARCH/PLAN it almost never is). Plugin hard limit: 3 — the 4th call throws ⛔ INSPECTION BUDGET EXHAUSTED.
 - 🚫 No prose between identity line and JSON. No analysis between JSON and Task call.

@@ -741,6 +741,15 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
               }
             }
 
+            // Primary agents: pipeline must be non-empty unless state="COMPLETE"
+            if ((currentAgent === "orchestrator" || currentAgent === "plankestrator") &&
+                jsonContent.state !== "COMPLETE" &&
+                (!pipeline || pipeline.length === 0)) {
+              pipelineMismatch = true
+              v6FlagSetThisEvent = true
+              violationDetail = `PIPELINE EMPTY — state="${jsonContent.state}" requires non-empty pipeline`
+            }
+
             // Validate next_agent (v6 Phase 10.3 + 9.3 — real step tracking replaces
             // the `const currentStep = 0` TODO stub; violation escalates via the
             // nextAgentMismatch deferred flag, NOT a direct throw — throws in

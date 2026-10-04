@@ -346,6 +346,7 @@ Format: request → JSON fields → why. All examples are Turn 1 unless stated o
 - 🚫 No using read/grep/glob for anything other than Turn 1 classification inspection: counting steps in plan files (SUPERCOMPLEX classification) and glob/grep to confirm scope (TURN ALGORITHM item 2). Nothing else, never in Turns 2..N.
 - 🚫 No prose between identity line and JSON. No analysis after the ack line.
 - 🚫 No pipeline changes after Turn 1 (except: the one-time BUGFIX continuation, the one-time DECOMPOSITION PROTOCOL result turn, the rework loop, and the severity-nit rework SKIP defined in SEVERITY RULES).
+- 🚫 No empty pipeline. Pipeline must contain at least one agent for all states.
 - 🚫 No read/glob/grep during pipeline execution (Turns 2..N).
 - 🚫 No skipping dev-reviewer / consistency-checker — they are mandatory pipeline elements.
 - 🚫 No more than ONE Task call per turn. One turn = one pipeline step.
