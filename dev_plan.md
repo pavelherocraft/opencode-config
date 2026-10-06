@@ -1,371 +1,666 @@
-# Implementation Plan — Auto-DOCS fix, direct docs-writer, scout→M3.1, codebase-analyzer, sync, verify, commit
+# Phase 4: Testing — Multi-Phase Pipelines (MVP, plugin v7)
 
-> План составлен 2026-09-28 по результатам двух волн recon + прямой верификации якорей.
-> Все line numbers проверены прямым чтением на момент составления. Перед каждой string-replace
-> правкой проверять уникальность якоря: `rg -c "<pattern>" <file>` → 1 (per project convention).
+> **Источник:** `PLAN_MULTI_PHASE_PIPELINES.md` §Phase 4 (шаги 4.1–4.5), Verification Checklist V-22…V-24.
+> **Статус входа:** Phases 1–3 завершены. `plugins/workflow-enforcement.ts` (live `C:\Users\Admin\.config\opencode\plugins\` и repo `P:\Programming\Рефакторинг\plugins\`) — 2582 строки, **байт-в-байт идентичны** (проверено recon); все v7-маркеры на месте: VALID_VALUES.state (:65–68), pipelineState.phases/currentPhaseIdx (:176–182), константы MULTI_PHASE_* (:211–219), awaitingConfirmation/awaitingMsgId (:221–228), gate clearing (:578–599), mpEmptyShapeOk (:801–820), validateNextAgent whitelist кейсы 5–7 (:857–885), gate arming (:928–949), provisional fix (:994–1000), Turn-1 lock + resume detect (:1003–1032), MP-1..MP-6 whitelist (:1035–1085), blockerStop reset (:1098–1109), phases refresh в unchanged-ветке (:1159–1173), ack-формы 7–9 + regex (:1182–1209), confirmation gate throw (:1393–1411), phase-хелперы (:2150–2211), MULTI_PHASE-ветка validatePipeline (:2271–2334), conditional fields validateJSONOutput (:2452–2478).
+> **Язык плана:** русский (код/логи/asserts — английские, конвенция файлов).
+
+---
 
 ## Goal
 
-7 задач (пользовательские №1–7):
-1. Починить Auto-DOCS hook в `orchestrator.md` (строка 112 «don't analyze» против строки 61 — hook никогда не срабатывает, т.к. orchestrator не парсит JSON исполнителя).
-2. Разрешить dev-агентам (worker, dev-professor, execute-bug) прямой вызов `docs-writer` через Task для пользовательской документации.
-3. Мигрировать `scout` на `bifrost-litellm/MiniMax-M3.1-Flash-Preview`.
-4. Создать агента `codebase-analyzer` на `bifrost-litellm/Kimi K2.8` (read-only анализ кодовых баз); вызывается из orchestrator (routing table), dev-planner, plan-bug.
-5. Синхронизация live → repo.
-6. Верификация: `config-sync --plan` + `integrity-check`.
-7. Коммит через агента `git-commit` (Task tool). НИКАКИХ прямых `git commit`.
+1. Расширить harness `plugins/test-workflow-enforcement.mjs` (165 строк, T1–T8) симуляцией `message.updated` и хелперами `sendMessage` / `orchMsg` / `tryTask`.
+2. Добавить 20 новых тестов **T9–T26** (канонические id — таблица PLAN §4.2, строки 901–920), покрывающих: confirmation gate (+ fallback по messageID), per-phase валидацию, provisional trap, mutation whitelist MP-1..MP-6, structural fail-closed, terminal-shape, blockerStop reset, refinement-once, ack-формы 7–9, resume, single-phase регрессию.
+3. Прогнать harness против **live** и **repo** копий плагина (V-22): `RESULT: pass=<N> fail=0`.
+4. Выполнить живые пилоты **S1–S7** (PLAN §4.4) + V-pilot-1 (видимость user-role сообщений, PLAN §4.3) + телеметрию (PLAN §4.5) → V-23, V-24.
 
-## ⚠️ Discrepancies с исходным описанием задач (verified facts)
+**НЕ входит в Phase 4:** правки промптов/плагина/opencode.json (при выявлении бага — см. Dependencies), CHANGELOG/config-sync/коммит (Phase 5).
 
-| # | В задаче сказано | Фактическое состояние | Вывод |
-|---|---|---|---|
-| D1 | «scout.md: заменить MiniMax-M3 → M3.1» | `scout.md` line 4: `model: bifrost-litellm/mimo-v2.5` | Цель та же: заменить ТЕКУЩУЮ модель на `bifrost-litellm/MiniMax-M3.1-Flash-Preview` |
-| D2 | Задача 5: `deploy-package\*`, `opencode-config\ARCHITECTURE.md` | **Каталогов не существует** (удалены при реструктуризации, см. CHANGELOG [Unreleased] line 12). Синхронизация = skill `config-sync` (5 пар live↔repo). `ARCHITECTURE.md` — ЕДИНСТВЕННАЯ копия в корне репо (line 3: «exists ONLY here… NOT copied to the live config») | Задача 5 заменяется на `config-sync --save`; копирование ARCHITECTURE.md не нужно |
-| D3 | Задача 4: «добавить в task permissions» | integrity-check Check #3 требует: live agents count == repo count == **opencode.json `agent` entries count** → нужен ПОЛНЫЙ agent-блок `codebase-analyzer` в opencode.json, а не только task-разрешения | Блок создаёт skill `agent-add` (см. Phase 4) |
-| D4 | Задача 4: файлы — только .md/json/plugin/ARCH | `orchestrator.md` line 26 содержит зеркало `OPENCODE_ROUTING_TABLE = [...]` — должно совпадать с whitelist | Skill `agent-add` правит его автоматически (Update target #4) |
-| D5 | Первая волна recon давала opencode.json = 2089 строк | Прямое чтение: live и repo = **2119 строк** (идентичны), plugin live и repo = **1421** | Все якоря в этом плане — из прямого чтения (валидны). После вставки нового agent-блока скиллом номера строк СЪЕДУТ — далее только текстовые якоря |
+---
 
-## Architecture (подход и ключевые решения)
+## Architecture
 
-**Live-first:** все рантайм-правки — в `C:\Users\Admin\.config\opencode\` (единственное место правок, ARCHITECTURE.md §8 line 826). Repo `P:\Programming\Рефакторинг\` — зеркало (agents/, opencode.json, plugins/) + канонические ARCHITECTURE.md/CHANGELOG.md. Зеркало обновляется ТОЛЬКО `config-sync --save` (hard rule скиллов: «Never edit the repo agents/ mirror directly»).
+### Подход
 
-**Permission Authority (ARCHITECTURE.md lines 229–261):** frontmatter .md мержится ПОСЛЕ opencode.json (mergeDeep, frontmatter wins on shared keys); `task`-allowlists живут в opencode.json (line 252: «JSON keeps task allowlist»). worker/dev-professor/execute-bug НЕ имеют `task` в frontmatter → для задачи 2 достаточно правки opencode.json. dev-planner/plan-bug имеют `task` в frontmatter (прецедент scout — в обоих местах) → для задачи 4 правим оба места.
+- Harness остаётся **плоским скриптом** (без test-runner): новые хелперы вставляются после `tryTool` (:73–80), новые тесты — после T8 (:161), до итогового `RESULT` (:163–165). Существующие T1–T8 и хелперы **не изменяются** (регрессия).
+- Один инстанс плагина на весь файл (`:65`). Изоляция сценариев — через `lockSession('orchestrator')` (session.created сбрасывает ВСЁ состояние плагина: :342–367 — pipelineState, флаги, blockerStop, awaitingConfirmation, activeTaskDepth=0) + `logs.length = 0`.
+- Симуляция `message.updated` — через `plugin.event({ event: { type, properties: { message } } })`. Плагин читает: `properties.message` (:562), `message.id || message.info?.id` (:572), `message.role || message.info?.role` (:587), `message.content` — **строка** с ```json-блоком (extractJSONFromMessage :2122–2147; extractIdentityFromMessage :2105–2116).
+- Task-вызовы симулируются парой `tool.execute.before` + `tool.execute.after` (баланс `activeTaskDepth`: +1 при успешном task :1802/:1886, −1 в after :1906). **Разбалансировка depth молча отключает весь enforcement** (:1304, :487) — главный питч harness (см. Edge Cases #1).
+- Негативные проверки — через **probe**: `tryTool('read')` → gate 9.0в (:1364–1391) бросает `WORKFLOW VIOLATION — <CODE>` и **consume-once** сбрасывает флаги. Порядок кодов в gate: identityMissing > pipelineMismatch > nextAgentMismatch > invalidJSON > forbiddenIdentity > pipelineImmutable > blockerStop (:1366–1372); текст `violationDetail` в теле throw — **последний** записанный (важно для T14: code=PIPELINE VALIDATION FAILED, detail=PIPELINE IMMUTABLE (MULTI_PHASE)).
 
-**Стандартные скиллы проекта** (`.opencode\skills\`, запуск из корня репо):
-- `agent-add` — end-to-end добавление субагента (5 целей: live .md, live opencode.json (agent-блок + task allow primary), live plugin ROUTING_TABLES, live orchestrator.md OPENCODE_ROUTING_TABLE, ARCHITECTURE.md (whitelist+counters+Subagent Models+Model Roles)). All-or-nothing, fail-closed counter cross-check.
-- `config-sync` (`sync.ps1 -Save/-Plan`), `integrity-check` (`check.ps1`), `backup-snapshot` (`snapshot.ps1`).
-- `agent-model-migrate` для задачи 3 НЕ используем (обоснование в Phase 3) — правки ручные, якоря известны.
+### Соответствие нумерации (задание ↔ канон PLAN §4.2)
 
-**Порядок фаз:** backup → pre-check drift → задачи 1–3 (не трогают counters) → задача 4 (skill: counter cross-check gate требует согласованных счётчиков ДО запуска; ручные opencode.json task-правки для dev-planner/plan-bug делаем ДО скилла, т.к. скилл вставляет новый agent-блок в начало секции `"agent"` и сдвигает номера строк) → CHANGELOG → JSON-валидация → sync --save → verify → git-commit.
+Канон — таблица PLAN_MULTI_PHASE_PIPELINES.md :901–920. Обзор задания использует другую нумерацию; покрытие полное:
 
-**Ключевые тексты для правок** — в Implementation Details (byte-exact old → new).
+| Обзор задания | Канон PLAN | Где покрыто |
+|---|---|---|
+| T9 AWAITING валиден + same-turn Task блок | T9 | Step 4.2 / T9 |
+| T10 user-role clearing | T10 | T10 |
+| T10b fallback по messageID | T10b | T10b |
+| T11 executing-ход после AWAITING | T12 | T12 |
+| T12 «4 фазы → fail-closed» | T18(a) | T18a |
+| T13 single-phase регрессия | T26 | T26(a–e) |
+| T14 MP-1 refinement once per phase | T22 | T22 |
+| T15/T15b terminal exemption, финальный ход | T15b | T15b |
+| T16 MP-2 BUGFIX continuation | T13 | T13 |
+| T17 «MP-3 nit-skip» | T22 (MP-1/MP-3) + nit-skip single-phase | T22 + T26(d) |
+| T18 MP-4 Auto-DOCS hook | T20 | T20 |
+| T19 MP-5 phase transition | T15 | T15 |
+| T20 MP-6 SUPERCOMPLEX per-step | T23 | T23 |
+| T21 blockerStop reset | T21 | T21 |
+| T22 provisional trap | T14 | T14 |
+| T23 immutable pipeline | T16 + T17 | T16, T17 |
+| T24 ack format | T24 | T24 |
+| T25 «severity gate» | T25 канон = resume; severity gate — существующий механизм :765–773 | T25 + доп. sub-check T26(f) |
+| T26 «cross-routing prevention» | T26 канон = single-phase регрессия; cross-routing — существующий :1814–1831 | T26 + доп. sub-check T26(g) |
+
+Пилоты: S1 задания = канон S1; S2 задания = канон S5; S3 задания → опц. **S8**; S4 задания = канон S3 (edit) + S4 (reject) + S1 (approve); S5 задания → опц. **S9**; S6 задания → опц. **S10**; S7 задания = канон S7 + опц. **S7b** (invalid transition live).
+
+---
 
 ## Files to Modify
 
-### Live (`C:\Users\Admin\.config\opencode\`)
-1. `agents\orchestrator.md` (191 строк) — задача 1: replace line 112; задача 4: line 26 routing mirror (skill) + guidance в line 101
-2. `agents\worker.md` (54) — задача 2: новая секция перед «Output Specification» (line 36)
-3. `agents\dev-professor.md` (67) — задача 2: новая секция перед «Output Specification» (line 49)
-4. `agents\execute-bug.md` (67) — задача 2: новая секция перед «Output Specification» (line 46)
-5. `agents\docs-writer.md` (61) — задача 2: append к Trigger-line 13
-6. `agents\scout.md` (68) — задача 3: line 4 model
-7. `agents\dev-planner.md` (114) — задача 3: lines 31, 34 (mimo-v2.5 mentions); задача 4: frontmatter task + section point 5
-8. `agents\plan-bug.md` (51) — задача 3: line 32; задача 4: frontmatter task + section point 4
-9. `agents\plan-writer-complex.md` — задача 3: line 30 (mimo-v2.5 mention)
-10. `agents\research-writer-simple.md` — задача 3: line 41 (mimo-v2.5 mention)
-11. `agents\codebase-analyzer.md` — задача 4: **CREATE** (skill agent-add, body из temp-файла)
-12. `opencode.json` (2119) — задача 2: task-блоки worker (1431–1434), dev-professor (1604–1607), execute-bug (2014–2017); задача 4: task-блоки dev-planner (1342–1346), plan-bug (1543–1547) + новый agent-блок и orchestrator task allow (skill)
-13. `plugins\workflow-enforcement.ts` (1421) — задача 4: ROUTING_TABLES.orchestrator += "codebase-analyzer" (skill)
+1. **`P:\Programming\Рефакторинг\plugins\test-workflow-enforcement.mjs`** (repo-only, НЕ входит в 5 sync-пар) — единственная кодовая правка Phase 4:
+   - после `:80` (tryTool) — блок v7-хелперов (~60 строк);
+   - после `:83` — блок фикстур (ROW*, PH*, mp()) (~40 строк);
+   - после `:161` (T8) — секции T9–T26 (~450–550 строк);
+   - опционально: docblock `:2–22` — добавить строку «v7: + message.updated simulation, T9–T26 (Multi-Phase MVP)».
+   - Итоговый размер файла: ~700–800 строк. Ожидаемый результат: `RESULT: pass≈65–70 fail=0` (17 существующих check + ~50 новых).
+2. **`RESEARCH_MULTI_PHASE_PIPELINES.md`** §9.4 — append телеметрии пилотов S1/S5 (Step 4.5; 2–5 строк, опционально до Phase 5).
+3. Артефакты пилотов (не файлы repo): `PHASE_STATE.md` в пилотном проекте, записи в логах opencode, заметка результата V-pilot-1 для CHANGELOG Phase 5.
 
-### Repo (`P:\Programming\Рефакторинг\`)
-14. `ARCHITECTURE.md` (937) — задачи 1,2,3,4: см. Implementation Details (часть правок делает skill)
-15. `CHANGELOG.md` (370) — записи [Unreleased]
-16. Зеркала `agents\*`, `opencode.json`, `plugins\workflow-enforcement.ts` — ТОЛЬКО через `config-sync --save` (Phase 6)
-
-### Temp (gitignored)
-17. `output\codebase-analyzer-body.md` — body-файл для `-BodyFile` (output/ в .gitignore line 20)
+**НЕ修改:** `plugins/workflow-enforcement.ts` (live и repo), `agents/*.md`, `ARCHITECTURE.md`, `opencode.json`. Баг плагина, найденный тестами → отдельная правка live+repo с немедленным репрогоном (см. Dependencies #5).
 
 ---
 
 ## Implementation Details
 
-### Phase 0 — Backup + pre-checks
+### Step 4.0 — Baseline (до правок)
 
-```powershell
-# из корня репо P:\Programming\Рефакторинг
-& ".opencode\skills\backup-snapshot\scripts\snapshot.ps1" -Full -Label "before_docs_hook_analyzer"
-# pre-check: ожидаем ОТСУТСТВИЕ drift (live 2119 == repo 2119, plugin 1421 == 1421 — уже проверено)
-& ".opencode\skills\config-sync\scripts\sync.ps1" -Plan
-```
-Если `-Plan` показывает PRE-EXISTING drift, не относящийся к нашим правкам, — зафиксировать список в отчёте (он будет втянут в repo при `--save`; это штатная семантика снапшота, но пользователь должен знать).
+1. `node --version` → **≥ 22.6** (harness импортирует .ts через Node type-stripping, :44; без tsx/jiti).
+2. Прогон существующего harness (резолвит LIVE-плагин, candidate #2 :30–35):
+   ```powershell
+   cd P:\Programming\Рефакторинг
+   node plugins\test-workflow-enforcement.mjs
+   ```
+   **Verify:** `PLUGIN: C:\Users\Admin\.config\opencode\plugins\workflow-enforcement.ts`, `RESULT: pass=17 fail=0`, exit 0.
+3. Контроль идентичности live/repo (уже подтверждён recon; перепроверка):
+   ```powershell
+   (Get-FileHash "$env:USERPROFILE\.config\opencode\plugins\workflow-enforcement.ts").Hash -eq (Get-FileHash "P:\Programming\Рефакторинг\plugins\workflow-enforcement.ts").Hash
+   ```
+   **Verify:** `True`. Если False — сначала `config-sync --save` (порядок развёртывания PLAN :68), затем повторить baseline.
 
-### Phase 1 — Задача 1: Auto-DOCS hook (orchestrator.md)
+### Step 4.1 — Расширение harness: хелперы + фикстуры
 
-**1.1** `agents\orchestrator.md` line 112. Якорь уникален (`rg -c "advance, don't analyze" → 1`).
+**Вставка после `:80`** (после `tryTool`). Точный код (адаптирован из PLAN шага 4.1 с обязательными исправлениями — баланс depth, unique-id, probe-семантика):
 
-OLD (exact):
-```
-A subagent result arriving is your next turn — advance, don't analyze it.
-```
-NEW:
-```
-A subagent result arriving is your next turn — advance, don't analyze it. Mechanical field reads are NOT analysis: when an implementation agent (dev-professor / execute-bug / worker) returns JSON, parse its `requires_docs_update` field — if `true`, run `["docs-writer", "utility"]` after the final `utility` (Auto-DOCS hook). The same applies to the other fields this algorithm consumes mechanically: `TRIAGE_RESULT` (BUGFIX continuation), `severity` / `escalate_to` (SEVERITY RULES), `plan_gap`, `steps` (DECOMPOSITION).
-```
-(Покрывает и SUPERCOMPLEX-вариант hook'а line 95: флаг трекается между шагами тем же механическим чтением.)
+```js
+// ============================================================================
+// v7 (Multi-Phase MVP) helpers — message.updated simulation + task depth
+// ============================================================================
+let msgSeq = 0
 
-**1.2** Канон `ARCHITECTURE.md` §Auto-DOCS Hook (lines 493–513) — вставить ПОСЛЕ line 497 (`**Trigger:** call … requires_docs_update: true.`):
-```
-**Orchestrator-side parse (mandatory):** the orchestrator MUST parse the `requires_docs_update` field from the arriving implementation agent's JSON. This is a mechanical field read — an explicit exception to the orchestrator's "advance, don't analyze" turn rule (mirrored in `agents/orchestrator.md` TURN ALGORITHM).
-```
+/** message.updated. id уникален (msgSeq), кроме {id} — re-fire того же
+ *  сообщения (streaming-симуляция: gate НЕ снимается при том же messageID). */
+async function sendMessage(role, content, { id } = {}) {
+  const mid = id || `m${++msgSeq}`
+  await plugin.event({
+    event: { type: 'message.updated', properties: { message: { id: mid, role, content } } },
+  })
+  return mid
+}
 
-**1.3** Верификация флага у implementation-агентов — **УЖЕ ПРОВЕРЕНА, правок не требует**:
-- `worker.md` line 43 (`"requires_docs_update": true,`) + правила lines 48–54
-- `dev-professor.md` line 56 + правила lines 61–67
-- `execute-bug.md` line 53 + правила lines 59–65
-- Плагин валидирует тип поля: `workflow-enforcement.ts` lines 1364–1385, `DOCS_UPDATE_AGENTS = ["execute-bug", "dev-professor", "worker", "docs-writer"]` (line 1366) — boolean|null + enum docs_update_reason.
-В план-отчёт внести: «проверено, все три агента выставляют флаг, плагинная валидация присутствует».
+/** Сообщение orchestrator: identity line + ```json``` + ack-строка.
+ *  ВАЖНО: content НЕ должен содержать токены FORBIDDEN_VOCAB orchestrator
+ *  ("## PLAN", "# Implementation Plan", "plan-writer-", "research-writer-",
+ *  "research-reviewer", "plan-reviewer-") и SELF_WORK_MARKERS
+ *  ("## Findings", "## Analysis", "## Implementation", "## Root Cause"). */
+function orchMsg(jsonObj, { identity = true, ack } = {}) {
+  const ackLine = ack !== undefined ? ack
+    : (jsonObj.next_agent
+        ? `→ DELEGATED to ${jsonObj.next_agent} for: ${jsonObj.goal || 'goal'}`
+        : '')
+  return (identity ? '✓ IDENTITY VERIFIED: I am orchestrator (Conductor). I am NOT plankestrator.\n' : '') +
+    '```json\n' + JSON.stringify(jsonObj) + '\n```\n' + ackLine
+}
 
-### Phase 2 — Задача 2: прямой вызов docs-writer
+/** tool.execute.after для task — ОБЯЗАТЕЛЕН после успешного tryTask(keepDepth),
+ *  иначе activeTaskDepth>0 молча отключает enforcement до конца сессии. */
+async function endTask(args) {
+  await plugin['tool.execute.after']({ tool: 'task', args }, { args })
+}
 
-**2.1** `opencode.json` — три task-блока (паттерн `"task": {\n "*": "deny",\n "view-image": "allow"\n }` ПОВТОРЯЕТСЯ у десятков агентов → якорь ОБЯЗАН включать ключ агента; использовать regex-mode `serena_replace_content` с non-greedy `.*?`):
+/** Task-вызов. Успех → depth+1; баланс автоматом, кроме keepDepth=true
+ *  (нужно для T21: reviewer-сообщения валидны только при depth>0). */
+async function tryTask(subagent, { keepDepth = false } = {}) {
+  const args = { subagent_type: subagent, description: 'd', prompt: 'p' }
+  const r = await tryTool('task', args)
+  if (r.ok && !keepDepth) await endTask(args)
+  return r
+}
 
-- worker (блок line 1418, task 1431–1434): regex `"worker": \{.*?"task": \{\s*"\*": "deny",\s*"view-image": "allow"` → в repl после `"view-image": "allow"` добавить `,\n          "docs-writer": "allow"` (отступ записей task = 10 пробелов).
-- dev-professor (блок line 1591, task 1604–1607): regex `"dev-professor": \{.*?"task": \{\s*"\*": "deny",\s*"view-image": "allow"` → аналогично.
-- execute-bug (блок line 2001, task 2014–2017): regex `"execute-bug": \{.*?"task": \{\s*"\*": "deny",\s*"view-image": "allow"` → аналогично.
+/** Reviewer-JSON субагента (отправлять МЕЖДУ tryTask(keepDepth) и endTask).
+ *  agent ∈ SEVERITY_AGENTS (:90) = dev-reviewer | consistency-checker | advisor. */
+function reviewerMsg(agent, severity, text) {
+  return '```json\n' + JSON.stringify({ agent, severity, findings: [{ text, severity }] }) + '\n```'
+}
 
-Каждый regex перед применением: убедиться что находит РОВНО 1 вхождение (non-greedy останавливается на первом `"view-image": "allow"` внутри своего блока — проверено структурой). Frontmatter этих агентов `task` НЕ содержит (worker.md lines 6–11: только edit/bash) → merge сохранит JSON-allowlist (Permission Authority line 252). Frontmatter не правим.
+/** Probe gate 9.0в: 'clean' | текст throw (CONSUME-ONCE: флаг сбрасывается!).
+ *  После первого успешного Task read блокирован (:1452) — это НЕ violation. */
+async function probeGate() {
+  const r = await tryTool('read')
+  if (r.ok) return 'clean'
+  if (r.message.includes('PRIMARY AGENT FORBIDDEN')) return 'clean'
+  return r.message
+}
 
-**2.2** Промпты — вставить НОВУЮ секцию перед строкой `Output Specification (required for orchestrator auto-DOCS hook):` в трёх файлах (worker.md перед line 36; dev-professor.md перед line 49; execute-bug.md перед line 46). Текст одинаковый:
-
-```markdown
-## Direct docs-writer call (user-facing documentation)
-
-If DURING your work you realize that user-facing documentation is needed (instructions for users, portal guides, usage how-tos), call `docs-writer` directly via the Task tool (`subagent_type: "docs-writer"`):
-- Pass a SELF-CONTAINED prompt: what to document, which files/APIs/flows changed, target audience, language of the existing docs
-- docs-writer reads the code and writes the documentation itself — do NOT write user docs personally
-- This does NOT replace the `requires_docs_update` flag: set it in your final JSON per the Output Specification rules regardless of any direct docs-writer call
-- At most ONE docs-writer call per task, and ONLY for user-facing docs — code comments/docstrings remain your own job
-```
-
-**2.3** `docs-writer.md` line 13 — append к Trigger-предложению (после «…code comments, docstrings.»):
-```
- May also be called DIRECTLY by an implementation agent (worker / dev-professor / execute-bug) mid-task for user-facing docs — then the Task prompt is your full spec (no docs_plan.md, no DOCS pipeline).
-```
-
-**2.4** `ARCHITECTURE.md` — новая под-секция в конце §Auto-DOCS Hook: вставить ПОСЛЕ line 512 (`- PLAN, RESEARCH (out of orchestrator's scope)`), ПЕРЕД `### PLAN` (line 514):
-
-```markdown
-### Direct docs-writer Call (in-flight, BUGFIX/DEV)
-
-Implementation agents (worker, dev-professor, execute-bug) hold `task.docs-writer: allow` (opencode.json) and MAY call docs-writer directly DURING their step when user-facing documentation is needed (user instructions, portal guides). Rules: at most ONE call per task; the Task prompt must be self-contained (`docs_plan.md` is NOT written for direct calls); a direct call does NOT replace the `requires_docs_update` flag — the Auto-DOCS hook stays independent. Depth: primary(0) → implementation agent(1) → docs-writer(2) — within `subagent_depth: 3`.
-```
-
-**2.5** Depth-список ARCHITECTURE line 315 — правится ОДИН раз в Phase 4.5 (добавляет сразу docs-writer и codebase-analyzer).
-
-### Phase 3 — Задача 3: scout → MiniMax-M3.1-Flash-Preview
-
-**Обоснование ручного пути (вместо agent-model-migrate):** модель `MiniMax-M3.1-Flash-Preview` не имеет строки в Model Roles; skill с `-Role micro -Tier low` создал бы ВТОРУЮ строку `micro` (дубль) и оставил старую `micro | mimo-v2.5` с нулём агентов (WARN «role row left with zero agents») → ручная доочистка неизбежна. scout — ЕДИНСТВЕННЫЙ occupant роли `micro`, поэтому модель в строке роли меняется IN PLACE (Model Roles rule 2: «смена модели = правка таблицы ролей + frontmatter + Subagent Models — 2 синхронных места»). Скилл также не правит текстовые упоминания модели в промптах вызывающих агентов (5 мест ниже) — они вне его scope.
-
-**3.1** `agents\scout.md` line 4:
-- OLD: `model: bifrost-litellm/mimo-v2.5`
-- NEW: `model: bifrost-litellm/MiniMax-M3.1-Flash-Preview`
-
-**3.2** `ARCHITECTURE.md` line 109 (Subagent Models):
-- OLD: `| scout | bifrost-litellm/mimo-v2.5 |`
-- NEW: `| scout | bifrost-litellm/MiniMax-M3.1-Flash-Preview |`
-
-**3.3** `ARCHITECTURE.md` line 153 (Model Roles, роль micro — model cell in place):
-- OLD: `| micro | bifrost-litellm/mimo-v2.5 | low | scout |`
-- NEW: `| micro | bifrost-litellm/MiniMax-M3.1-Flash-Preview | low | scout |`
-
-**3.4** Устаревшие упоминания модели scout в промптах вызывающих агентов (verified grep, 4 файла / 5 мест; media-модели `voice/xiaomi/mimo-v2.5-*` в voice-*.md НЕ трогать):
-- `dev-planner.md` line 31: `(runs on mimo-v2.5; glob/grep/read only)` → `(runs on MiniMax-M3.1-Flash-Preview; glob/grep/read only)`
-- `dev-planner.md` line 34: `scout runs on a cheap model (mimo-v2.5)` → `scout runs on a cheap model (MiniMax-M3.1-Flash-Preview)`
-- `plan-bug.md` line 32: `(runs on mimo-v2.5; glob/grep/read only)` → `(runs on MiniMax-M3.1-Flash-Preview; glob/grep/read only)`
-- `plan-writer-complex.md` line 30: `(runs on mimo-v2.5; glob/grep/read only)` → `(runs on MiniMax-M3.1-Flash-Preview; glob/grep/read only)`
-- `research-writer-simple.md` line 41: `scout is cheaper (mimo-v2.5)` → `scout is cheaper (MiniMax-M3.1-Flash-Preview)`
-
-**3.5** Post-check: `rg -n "mimo-v2\.5" C:\Users\Admin\.config\opencode\agents\` → остаются ТОЛЬКО voice-* media models (`voice/xiaomi/mimo-v2.5-*`) и НИ одного `bifrost-litellm/mimo-v2.5`. Ключ модели существует в provider: `opencode.json` → `provider.bifrost-litellm.models."MiniMax-M3.1-Flash-Preview"` (подтверждено recon; перепроверить `rg -c '"MiniMax-M3.1-Flash-Preview"' opencode.json` ≥ 1).
-
-### Phase 4 — Задача 4: codebase-analyzer (Kimi K2.8)
-
-**4.1** Body-файл для скилла: создать `P:\Programming\Рефакторинг\output\codebase-analyzer-body.md` (output/ gitignored) с телом промпта (без frontmatter — его генерирует skill):
-
-```markdown
-You are Codebase Analyzer — a deep codebase analysis agent on a strong model (Kimi K2.8).
-
-Trigger: called via Task by orchestrator (classification-level structure questions), dev-planner or plan-bug when cheap recon (scout) is not enough: dependency analysis, architecture understanding, refactoring impact, cross-module coupling, blast-radius assessment.
-
-Your role:
-1. Receive a focused analysis question about the codebase
-2. Explore with read / glob / grep ONLY
-3. Return a structured analysis report: direct answer + evidence pointers + dependency/impact assessment
-
-## Difference from scout
-
-- scout = cheap file/line reconnaissance ("where is X") — pointers, NO analysis
-- codebase-analyzer = structural analysis ("how does X depend on Y", "what breaks if Z changes") — conclusions ARE your deliverable
-
-## Response Format (ALWAYS)
-
-1. **Answer** — direct answer to the question (2-5 sentences)
-2. **Evidence** — `path/to/file:LINE` pointers, each with a ≤3-line verbatim excerpt
-3. **Dependencies** — modules/symbols involved, coupling direction, call chains
-4. **Impact & Risks** — what a change would touch: hidden coupling, edge cases, contract violations
-
-Close every report with:
-- **Not found / Not analyzed** — what was searched and deliberately skipped (negative results are facts too)
-- **Coverage** — the globs/greps/reads performed, so the caller never repeats them
-
-## HARD PROHIBITIONS
-
-- NO modifications of any kind: edit / write / patch / bash / webfetch / todowrite / question / task are ALL denied by permissions — do not attempt them
-- NO invented paths, line numbers, or quotes — every pointer must come from an actual tool result in this session
-- NO implementation work beyond the asked question — you analyze, the CALLER decides and implements
-- NO dumping file contents beyond the excerpt limit — evidence stays "pointer, not transcript"
-
-## Working Style
-
-- Batch independent glob/grep calls in ONE message (parallel tool calls)
-- Start from entry points (public API, composition root, DI/config), follow the dependency direction
-- Prefer narrow reads around grep hits over whole-file reads
-- Stay on the QUESTION: exhaustive coverage of the question, not of the codebase
-
-## Output Discipline
-
-- Compact report: target ≤80 lines no matter how much you read
-- Facts and reasoned conclusions clearly separated (Evidence vs Impact)
+function hasLog(substr) { return logs.some((m) => m.includes(substr)) }
+async function newSession(agent = 'orchestrator') { await lockSession(agent); logs.length = 0 }
+const clonePhases = (ph) => ph.map((p) => ({ ...p, depends_on: [...p.depends_on] }))
 ```
 
-**4.2** Ручные task-allow правки в `opencode.json` ДО запуска скилла (скилл вставит новый agent-блок ПЕРВЫМ после `"agent": {` и сдвинет номера строк — поэтому сначала эти, якоря текстовые):
-- dev-planner (блок line 1325, task 1342–1346): regex `"dev-planner": \{.*?"scout": "allow"` → repl: `"codebase-analyzer": "allow"` новой строкой ПОСЛЕ `"scout": "allow"` (через запятую, 10 пробелов отступа). Т.е. old-fragment `"view-image": "allow",\n          "scout": "allow"` (внутри блока dev-planner) → new `"view-image": "allow",\n          "scout": "allow",\n          "codebase-analyzer": "allow"`.
-- plan-bug (блок line 1529, task 1543–1547): аналогично, regex-якорь `"plan-bug": \{.*?"scout": "allow"`.
+**Вставка после `:83`** (фикстуры; ключи сверены с PIPELINES :2222–2261):
 
-**4.3** Skill `agent-add` — PlanOnly, затем Apply:
+```js
+// v7 fixtures — canonical PIPELINE TABLE rows (validatePipeline keys)
+const ROW1 = ['bugfix-triage']                                             // BUGFIX-null-null (+variants :2248)
+const ROW1_SIMPLE = ['bugfix-triage', 'worker', 'utility']                 // BUGFIX variant SIMPLE
+const ROW5 = ['dev-planner', 'dev-professor', 'advisor', 'dev-reviewer', 'consistency-checker', 'utility'] // DEV-COMPLEX-false
+const DEVOPS_ROW = ['devops-agent', 'devops-reviewer']                     // DEVOPS-null-null
+const HOOK = ['docs-writer', 'utility']                                    // DOCS_HOOK_CHAIN / DOCS-SIMPLE-any
 
-```powershell
-& ".opencode\skills\agent-add\scripts\add.ps1" -Agent "codebase-analyzer" -Model "bifrost-litellm/Kimi K2.8" -Description "Codebase analysis agent. Deep structural analysis of dependencies, architecture, and refactoring impact. Read-only (read/glob/grep). Kimi K2.8." -Primary orchestrator -PermTemplate scout -Role "analyzer" -Tier "mid" -BodyFile ".\output\codebase-analyzer-body.md" -Temperature 0.1 -PlanOnly
-# изучить PLAN:/WARN:/DIFF: строки; если counter cross-check BLOCK (DIFF:) — СТОП, разобраться
-& ".opencode\skills\agent-add\scripts\add.ps1" ... те же параметры ... -Apply
+const PH2 = [
+  { id: 'P1', type: 'BUGFIX', complexity: null, plan_exists: null, goal: 'fix bug X', depends_on: [] },
+  { id: 'P2', type: 'DEV', complexity: 'COMPLEX', plan_exists: false, goal: 'add feature Y', depends_on: ['P1'] },
+]
+const PH3 = [
+  { id: 'P1', type: 'DEVOPS', complexity: null, plan_exists: null, goal: 'setup CI', depends_on: [] },
+  { id: 'P2', type: 'DEV', complexity: 'SIMPLE', plan_exists: false, goal: 'add tests', depends_on: ['P1'] },
+  { id: 'P3', type: 'DEVOPS', complexity: null, plan_exists: null, goal: 'deploy', depends_on: ['P2'] },
+]
+// Для T22: DEV-фаза первой (refinement complexity null→COMPLEX на DECOMPOSITION Turn B).
+// plan_exists:false ОБЯЗАТЕЛЕН с самого начала — DEV-null-null fail-closed (deviation D, :2313–2318).
+const PH_DEV_FIRST = [
+  { id: 'P1', type: 'DEV', complexity: null, plan_exists: false, goal: 'add feature Y', depends_on: [] },
+  { id: 'P2', type: 'BUGFIX', complexity: null, plan_exists: null, goal: 'fix bug X', depends_on: ['P1'] },
+]
+
+/** Валидный MULTI_PHASE-скелет со ВСЕМИ required-полями orchestrator (:56). */
+function mp(over = {}) {
+  return {
+    agent: 'orchestrator', type: 'MULTI_PHASE', complexity: null, plan_exists: null,
+    plan_source: null, goal: 'multi-phase task', next_agent: null, pipeline: [],
+    state: null, phases: PH2, current_phase: null, ...over,
+  }
+}
 ```
 
-Параметры и почему:
-- `-PermTemplate scout` — копирует permission-блоки scout: read/grep/glob allow; edit/write/bash/webfetch/patch/todowrite/question deny; task `{"*": "deny"}` — ТОЧНО spec пользователя «read/glob/grep allow, всё остальное deny» (JSON-блок scout lines 1878–1897 проверен).
-- `-Role "analyzer" -Tier "mid"` — Kimi K2.8 маппится на 0 role-строк → gate требует -Role; -Tier создаёт новую строку `| analyzer | bifrost-litellm/Kimi K2.8 | mid | codebase-analyzer |`. Tier=mid: не превышает tier вызывающих planner'ов (plan-bug = plan-flash/mid, dev-planner = plan-strong/top) — prewalk-инверсии нет; codebase-analyzer не входит в planner→executor пары rule 1. Обоснование НОВОЙ роли (rule 3, line 160) — записью в CHANGELOG (Phase 5).
-- `-Description` — без `": "` (YAML-грабля), ASCII-only.
-- **БЕЗ `-Commit`/`-Push`** — коммит ТОЛЬКО через агента git-commit (HARD RULE global).
+**Verify Step 4.1:** `node plugins\test-workflow-enforcement.mjs` → T1–T8 по-прежнему `fail=0` (хелперы инертны до использования); синтаксис без ошибок.
 
-Skill выполнит (Update targets 1–5): live `agents\codebase-analyzer.md` (CREATE, LF/UTF-8 no BOM); opencode.json — agent-блок (первым после `"agent": {`) + `"codebase-analyzer": "allow"` в orchestrator task-блоке (после `"voice-clone": "allow"`, line ~1760); plugin `ROUTING_TABLES.orchestrator` += `"codebase-analyzer"` (29 записей); `orchestrator.md` line 26 OPENCODE_ROUTING_TABLE += `"codebase-analyzer"`; ARCHITECTURE.md — whitelist header `(28 agents)`→`(29 agents)` + строка `| 29 | codebase-analyzer | <Description> |`, Agent Count Summary (28→29, 29→30, Grand Total **38**→**39**, **40**→**41**), Note line 65 counters, Subagent Models + Model Roles строки, intro line 132 «40 агентам»→41, Kontrol summy line 155 «38 subagents = 40»→«39 = 41».
+### Step 4.2 — Тесты T9–T26
 
-**4.4** Post-skill ручные правки (скилл их НЕ покрывает):
-
-(a) `orchestrator.md` line 101, Turn 1 step 2 — append в конец пункта (после «…find a root cause.»):
-```
- If scope assessment needs code-structure understanding (dependencies, blast radius), you MAY delegate ONE `codebase-analyzer` Task call before finalizing classification — one extra turn pair, same status as the DECOMPOSITION PROTOCOL exception; its findings inform classification ONLY.
-```
-(Без этого orchestrator — детерминированный автомат «No improvisation» — никогда не вызовет нового агента. Совместимо с PROHIBITIONS: line 190 «ONE Task call per turn» — вызов и есть единственный Task того хода; line 188 «No read/glob/grep during Turns 2..N» не затрагивается — инспекция только в Turn 1.)
-
-(b) `dev-planner.md` — frontmatter task-блок (после `    "scout": "allow"`, line 14) добавить строку `    "codebase-analyzer": "allow"`; и в секцию `## CODEBASE RECONNAISSANCE — SCOUT WAVES` (lines 29–37) добавить пункт 5 после пункта 4:
-```
-5. When a recon question needs STRUCTURAL ANALYSIS (dependency chains, architecture understanding, refactoring impact — beyond "locate files/lines"), call `codebase-analyzer` (read-only, strong model) instead of scout: scout locates, codebase-analyzer analyzes; you synthesize the plan from both
-```
-
-(c) `plan-bug.md` — frontmatter task-блок (после `    "scout": "allow"`, line 17) добавить `    "codebase-analyzer": "allow"`; в секцию `## BUG INVESTIGATION — SCOUT WAVES` (lines 30–37) добавить пункт 4:
-```
-4. For STRUCTURAL questions (call chains, coupling, blast radius of a candidate fix) call `codebase-analyzer` (read-only, strong model) — scout locates, codebase-analyzer analyzes; the root-cause conclusion stays YOUR job
-```
-
-(d) `ARCHITECTURE.md` line 315 (depth level-2 — ОДНА правка на задачи 2+4):
-- OLD: `Уровень 2 (depth 2): scout / mcp-search / mcp-read / mcp-github / devops-readonly`
-- NEW: `Уровень 2 (depth 2): scout / codebase-analyzer / mcp-search / mcp-read / mcp-github / devops-readonly / docs-writer (прямой вызов из worker/dev-professor/execute-bug)`
-
-(e) `ARCHITECTURE.md` line 712 (unity-mcp exceptions — codebase-analyzer без unity-mcp, как scout/advisor):
-- OLD: `### ALL Agents Have unity-mcp Access (exceptions: scout, advisor, voice-synthesizer, image-creator, video-generator, voice-transcriber, voice-clone)`
-- NEW: `### ALL Agents Have unity-mcp Access (exceptions: scout, codebase-analyzer, advisor, voice-synthesizer, image-creator, video-generator, voice-transcriber, voice-clone)`
-
-(f) `ARCHITECTURE.md` §8 File Locations (скилл не трогает эти счётчики):
-- line 829: `- \`agents/*.md\` — 40 определений агентов (frontmatter + промпт)` → `41 определений`
-- line 837: `- \`agents/\` — зеркало live agents/ (40 .md)` → `(41 .md)`
-
-(g) Проверить результат скилла в ARCHITECTURE.md: строка whitelist #29 содержит внятную Role-ячейку; Note line 65 — счётчики 39/38/39/41 согласованы; если skill оставил арифметику Note неконсистентной (fail-closed gate это исключает, но проверить) — поправить вручную.
-
-**4.5** Post-checks:
-- `rg -c "codebase-analyzer" plugins\workflow-enforcement.ts` → 1; `rg -c "codebase-analyzer" agents\orchestrator.md` → ≥2 (line 26 + guidance); в opencode.json: agent-блок + 4 task-allow (orchestrator, dev-planner, plan-bug) → `rg -c '"codebase-analyzer"' opencode.json` = 4 (3 allow в task + 1 ключ блока… ВНИМАНИЕ: ключ блока `"codebase-analyzer": {` + orchestrator allow + dev-planner allow + plan-bug allow = 4 вхождения).
-- Frontmatter нового файла: `model: bifrost-litellm/Kimi K2.8` байт-в-байт (пробел в имени!), description без YAML-ловушек.
-
-### Phase 5 — CHANGELOG.md ([Unreleased], line 8)
-
-- В `### Added` (line 26, по формату существующих записей `- **Bold title** (details)`):
-```
-- **codebase-analyzer agent** (bifrost-litellm/Kimi K2.8; orchestrator whitelist #29; also callable by dev-planner/plan-bug via task allowlists; read-only preset from scout template; NEW Model Roles row `analyzer`/mid — justification per §Model Roles rule 3: deep structural analysis requires a strong reasoning model absent from existing roles)
-- **Direct docs-writer calls from implementation agents** (worker/dev-professor/execute-bug get `task.docs-writer: allow`) for in-flight user-facing documentation; Auto-DOCS hook semantics unchanged; ARCHITECTURE §Direct docs-writer Call documents depth-2 chain
-```
-- В `### Changed` (line 10):
-```
-- **scout model migration**: bifrost-litellm/mimo-v2.5 → bifrost-litellm/MiniMax-M3.1-Flash-Preview (Model Roles `micro` row updated in place — scout is the sole occupant; caller prompts updated: dev-planner, plan-bug, plan-writer-complex, research-writer-simple)
-```
-- Добавить подсекцию `### Fixed` в [Unreleased] (после блока Added, формат как у `### Fixed` line 220 в старых релизах):
-```
-### Fixed
-
-- **orchestrator Auto-DOCS hook never fired**: TURN ALGORITHM line "advance, don't analyze it" contradicted the hook (PIPELINE TABLE) — added explicit `requires_docs_update` mechanical-parse exception to orchestrator.md and ARCHITECTURE §Auto-DOCS Hook
-```
-
-### Phase 6 — Задача 5: Синхронизация (live → repo)
-
-D2: `deploy-package\*` и `opencode-config\*` из формулировки задачи НЕ существуют — полный эквивалент:
-
-```powershell
-& ".opencode\skills\config-sync\scripts\sync.ps1" -Save
-```
-Покрывает пары: `agents\*.md` (7 изменённых + 1 новый codebase-analyzer.md), `opencode.json`, `plugins\workflow-enforcement.ts` (+ skills/git-commit и AGENTS.md — не изменялись, останутся OK). Ожидание: `SYNCED:` строки для изменённых файлов, `SUMMARY:mode=save ... failed=0`, `STATUS:SUCCESS`. EXTRA-файлы не удаляются (never delete). ARCHITECTURE.md и CHANGELOG.md — repo-native, правятся на месте, синхронизация не нужна (line 843: «в live НЕ копируется»).
-
-### Phase 7 — Задача 6: Верификация
-
-```powershell
-# 1. JSON validity (live)
-powershell -NoProfile -Command "Get-Content 'C:\Users\Admin\.config\opencode\opencode.json' -Raw | ConvertFrom-Json | Out-Null; 'JSON OK'"
-# 2. drift отсутствует
-& ".opencode\skills\config-sync\scripts\sync.ps1" -Plan   # ожидаем exit 0, ни одной DRIFT: строки
-# 3. целостность
-& ".opencode\skills\integrity-check\scripts\check.ps1"    # ожидаем exit 0
-```
-Ожидаемые производные счётчики integrity-check после всех фаз:
-- Check #3: live agents 41 == repo agents 41 == opencode.json agent entries 41 (имена совпадают)
-- Check #4 orchestrator: plugin ROUTING_TABLES 29 == opencode.json task allow-count 29 == ARCHITECTURE header `(29 agents)` == 29 строк таблицы; plankestrator: 10 (не менялся)
-- Check #5: `bifrost-litellm/Kimi K2.8` и `bifrost-litellm/MiniMax-M3.1-Flash-Preview` резолвятся в `provider.bifrost-litellm.models`
-Любой FAIL → исправить (live-first) → повторно `--save` → повторить checks.
-
-Дополнительно (не блокирующе): `fc /b` для 3–4 ключевых пар live↔repo (orchestrator.md, opencode.json, workflow-enforcement.ts) → «FC: no differences encountered».
-
-⚠️ Runtime-грабля: конфиг читается на старте сессии — изменения (новая модель scout, codebase-analyzer, task-разрешения) подхватятся ТОЛЬКО в НОВОЙ сессии opencode. Скриптовая верификация выше от сессии не зависит.
-
-### Phase 8 — Задача 7: Коммит
-
-ТОЛЬКО делегированием агенту `git-commit` (Task tool, `subagent_type: "git-commit"`). Прямые `git commit`/`git push` запрещены (HARD RULE). Push НЕ передавать (пользователь не просил).
-
-Ожидаемый набор файлов в коммите: `agents/` (8 .md: orchestrator, worker, dev-professor, execute-bug, docs-writer, scout, dev-planner, plan-bug, plan-writer-complex, research-writer-simple + новый codebase-analyzer.md — итого 11), `opencode.json`, `plugins/workflow-enforcement.ts`, `ARCHITECTURE.md`, `CHANGELOG.md`, опционально `dev_plan.md`.
-
-Подсказка для conventional-commit (агент сформирует сам): `feat(agents): add codebase-analyzer (Kimi K2.8), direct docs-writer calls, fix auto-DOCS hook, migrate scout to MiniMax-M3.1-Flash-Preview`.
+Каждый тест: `await newSession()` → `logs.length = 0` уже внутри → последовательность `sendMessage`/`tryTask`/`probeGate` → `check(...)`. Assert-подстроки копировать 1:1 из плагина (ссылки даны). Ниже — спецификация каждого теста.
 
 ---
 
-## Edge Cases
+#### T9 — Confirmation gate: AWAITING валиден + same-turn Task блокирован (механизм: arming :928–943, throw :1393–1411)
 
-1. **Повторяющиеся task-блоки в opencode.json** — `"*": "deny", "view-image": "allow"` встречается у десятков агентов; КАЖДЫЙ regex-якорь обязан начинаться с уникального ключа агента (`"worker": \{`, `"dev-professor": \{`, …) и быть non-greedy. Проверять 1 вхождение до замены.
-2. **Сдвиг номеров строк после agent-add** — скилл вставляет agent-блок первым после `"agent": {` → все правки opencode.json (Phase 2.1, 4.2) выполнять ДО скилла; после — только текстовые якоря.
-3. **Имена моделей байт-в-байт** — `Kimi K2.8` содержит ПРОБЕЛ (frontmatter + Model Roles + JSON-ключ provider'а); `MiniMax-M3.1-Flash-Preview` — точный регистр. В regex — экранировать `.` и `/`.
-4. **YAML-грабля description** — «`: `» в незакавыченном description ломает парсинг frontmatter; в `-Description` и в new agent .md не использовать «: » (skill auto-wraps + WARN, но лучше чисто).
-5. **Двойной docs-writer (direct + hook)** — агент может вызвать docs-writer напрямую И orchestrator позже запустит hook (т.к. `*.md` изменён → `requires_docs_update: true`). Приемлемо: разный scope (user docs vs project docs); промпт прямо говорит «does NOT replace the flag». docs-writer идемпотентен по контенту (пишет по фактическому коду).
-6. **Depth-лимит** — `subagent_depth: 3` (opencode.json line 3): primary(0)→worker(1)→docs-writer(2) — в лимите; вложенный Task из docs-writer на depth 2 → depth 3 БУДЕТ ОТКЛОНЁН ядром (не нужно: docs-writer ничего не вызывает; в промпте прямой вызов «at most ONE call»). dev-planner(1)→codebase-analyzer(2) — в лимите.
-7. **Counter cross-check gate (agent-add) fail-closed** — если источники счётчиков рассогласованы ДО запуска (BLOCK + DIFF: строки) — не обходить, разобраться; наши Phase 1–3 счётчики не трогают, так что запуск после них безопасен.
-8. **`micro` роль после миграции** — строка роли остаётся единственной (model cell in place); НЕ создавать вторую `micro`; не оставлять строк с 0 агентов.
-9. **Не трогать media-модели** — `voice/xiaomi/mimo-v2.5-tts|-asr|-voiceclone|-voicedesign` в voice-*.md и ARCHITECTURE §Voice media models — это НЕ модель scout'а.
-10. **Plugin-валидация requires_docs_update уже есть** (DOCS_UPDATE_AGENTS lines 1364–1385) — менять workflow-enforcement.ts для задач 1–2 НЕ нужно (единственная правка плагина — ROUTING_TABLES, делает скилл).
-11. **`bugfix`-агент** вне DOCS_UPDATE_AGENTS и вне pipeline-строк — не расширять scope (задача 1 говорит только о dev-professor/execute-bug/worker).
-12. **Repo-зеркала не редактировать напрямую** — только `config-sync --save`; `fc /b` как контроль.
-13. **git-commit только через Task-агента**; скилловые флаги `-Commit`/`-Push` у agent-add НЕ использовать (прямой git в обход HARD RULE).
-14. **Новая сессия** — рантайм подхватит конфиги только в новой сессии; пилот-проверка (опционально): `opencode --agent orchestrator`, DEV SIMPLE задача с изменением .md → ожидать срабатывание Auto-DOCS hook (`→ docs-writer` после финального utility).
-15. **dev_plan.md** не в .gitignore — решение о включении в коммит оставить git-commit агенту (упомянуть в его промпте).
+```js
+await newSession()
+const awaitId = await sendMessage('assistant', orchMsg(mp({ state: 'AWAITING_CONFIRMATION' }),
+  { ack: '→ PHASE PLAN AWAITING CONFIRMATION (2 phases)' }))
+check('T9a AWAITING turn is VALID (no deferred flags)', await probeGate() === 'clean', ...)
+check('T9b gate armed log', hasLog('Task calls blocked until the user replies'), logs.join(' | '))
+const r = await tryTask('bugfix-triage')   // ТОТ ЖЕ ход (messageID = awaitId)
+check('T9c same-turn Task blocked', !r.ok && r.message.includes('AWAITING USER CONFIRMATION'), ...)
+check('T9d gate log', hasLog('CONFIRMATION GATE — Task blocked while AWAITING_CONFIRMATION'), ...)
+// T9e: streaming re-fire ТОГО ЖЕ messageID не снимает gate (:583–585, :593)
+await sendMessage('assistant', orchMsg(mp({ state: 'AWAITING_CONFIRMATION' }),
+  { ack: '→ PHASE PLAN AWAITING CONFIRMATION (2 phases)' }), { id: awaitId })
+const r2 = await tryTask('bugfix-triage')
+check('T9e re-fire same messageID keeps gate armed', !r2.ok && r2.message.includes('AWAITING USER CONFIRMATION'), ...)
+```
 
-## Dependencies (что проверить перед стартом)
+Примечания: (a) AWAITING-проход валиден благодаря mpEmptyShapeOk (:808–820) + явной ветке validatePipeline (:2282–2292) + `next_agent:null` → validateNextAgent valid (:2417); (b) blocked Task НЕ инкрементирует depth (throw до :1886) — endTask не нужен; (c) blocked Task не потребляет per-turn quota (gate до :1419).
 
-- [ ] `backup-snapshot -Full` выполнен, `backup\<date>_before_docs_hook_analyzer\` создан
-- [ ] `config-sync -Plan` pre-check: drift отсутствует (или зафиксирован pre-existing)
-- [ ] `rg -c '"MiniMax-M3.1-Flash-Preview"' opencode.json` ≥ 1 и `rg -c '"Kimi K2.8"' opencode.json` ≥ 1 (ключи в provider.bifrost-litellm.models — recon подтвердил, перепроверить)
-- [ ] `rg -c "codebase-analyzer"` = 0 везде (live + repo) — gate «Agent already exists»
-- [ ] Счётчики orchestrator согласованы ДО agent-add: plugin array 28 == orchestrator task allows 28 == ARCH header `(28 agents)` == 28 rows == OPENCODE_ROUTING_TABLE (line 26) 28 — скилл проверит сам (counter cross-check), но пред-проверка экономит цикл
-- [ ] Все якоря из этого плана уникальны (`rg -c` → 1) в момент правки (файлы могли измениться — перечитать окно перед edit)
-- [ ] PowerShell-скрипты скиллов запускаются из корня репо (`P:\Programming\Рефакторинг`)
+#### T10 — Gate cleared user-role сообщением (clearing :586–592)
 
-## Quick reference — сводка правок по задачам
+Продолжение T9 (та же сессия) или свежая:
 
-| Задача | Live-файлы | Repo-файлы | Инструмент |
+```js
+await sendMessage('user', 'да')
+check('T10a USER RESPONSE log', hasLog('USER RESPONSE RECEIVED — confirmation gate cleared'), ...)
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1, next_agent: 'bugfix-triage' }),
+  { ack: '→ PHASE 1/2 (P1): DELEGATED to bugfix-triage for: fix bug X' }))
+const r = await tryTask('bugfix-triage')
+check('T10b Task allowed after user reply', r.ok, r.message)
+```
+
+Примечание: user-сообщение НЕ армит identityMissing — `hasOutputtedJSON` уже true от AWAITING-хода (:635–637, :926).
+
+#### T10b — Gate fallback: новый assistant messageID без user-role (:593–598)
+
+```js
+await newSession()
+await sendMessage('assistant', orchMsg(mp({ state: 'AWAITING_CONFIRMATION' })))       // msgId A
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1, next_agent: 'bugfix-triage' }))) // msgId B
+check('T10b-1 fallback log', hasLog('user reply implied'), ...)
+const r = await tryTask('bugfix-triage')
+check('T10b-2 Task allowed via messageID fallback', r.ok, r.message)
+```
+
+#### T11 — `state` с type≠MULTI_PHASE → invalid (validateJSONOutput v7 :2466–2469)
+
+```js
+await newSession()
+await sendMessage('assistant', orchMsg({
+  agent: 'orchestrator', type: 'DEV', complexity: 'SIMPLE', plan_exists: false, plan_source: null,
+  goal: 'single dev', next_agent: 'worker', pipeline: ['worker', 'utility'],
+  state: 'AWAITING_CONFIRMATION',
+}))
+const p = await probeGate()
+check('T11a INVALID JSON via deferred gate',
+  p !== 'clean' && p.includes('INVALID JSON OUTPUT') && p.includes('state field is only valid with type=MULTI_PHASE'), p)
+check('T11b confirmation gate NOT armed for non-MULTI_PHASE', !hasLog('AWAITING USER CONFIRMATION'), ...)
+```
+
+**Питч:** pipeline обязан быть валидной DEV-строкой (`DEV-SIMPLE-false` = `['worker','utility']`), иначе pipelineMismatch (приоритет :1367) замаскирует invalidJSON-код.
+
+#### T12 — Executing-ход MULTI_PHASE: per-phase валидация (ветка :2303–2333)
+
+```js
+await newSession()
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1, next_agent: 'bugfix-triage' }),
+  { ack: '→ PHASE 1/2 (P1): DELEGATED to bugfix-triage for: fix bug X' }))
+check('T12a no PIPELINE VALIDATION FAILED', !hasLog('PIPELINE VALIDATION FAILED'), logs.join(' | '))
+const r = await tryTask('bugfix-triage')
+check('T12b executing turn Task ok (key BUGFIX-null-null)', r.ok, r.message)
+```
+
+#### T13 — In-phase BUGFIX continuation (MP-2, whitelist :1050–1054, next-agent кейс 7 :878–883)
+
+Продолжение T12 (depth сбалансирован):
+
+```js
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1_SIMPLE, next_agent: 'worker' }),
+  { ack: '→ PHASE 1/2 (P1): DELEGATED to worker for: fix bug X' }))
+check('T13a MP-2 allowed', hasLog('MULTI_PHASE MUTATION ALLOWED — MP-2 in-phase BUGFIX continuation'), logs.join(' | '))
+const r = await tryTask('worker')
+check('T13b continuation Task ok', r.ok, r.message)
+```
+
+Валидность: key BUGFIX-null-null + variant ROW1_SIMPLE (:2250); next='worker' = newPipeline[1] → isBugfixContMP.
+
+#### T14 — Provisional trap fixed: нелегальная замена внутри frozen-фазы (fix :994–1000; ветка MP :1035–1085)
+
+```js
+await newSession()
+const PHR = [
+  { id: 'P1', type: 'DEV', complexity: 'COMPLEX', plan_exists: false, goal: 'add feature Y', depends_on: [] },
+  { id: 'P2', type: 'BUGFIX', complexity: null, plan_exists: null, goal: 'fix bug X', depends_on: ['P1'] },
+]
+await sendMessage('assistant', orchMsg(mp({ phases: PHR, current_phase: 'P1', pipeline: ROW5, next_agent: 'dev-planner' })))
+const r1 = await tryTask('dev-planner')
+check('T14a Turn1 lock ok', r1.ok, r1.message)
+await sendMessage('assistant', orchMsg(mp({ phases: clonePhases(PHR), current_phase: 'P1',
+  pipeline: ['worker', 'utility'], next_agent: 'worker' })))   // подмена цепочки
+const p = await probeGate()
+check('T14b illegal swap blocked (F-4 provisional НЕ срабатывает)',
+  p !== 'clean' && p.includes('WORKFLOW VIOLATION') && p.includes('PIPELINE IMMUTABLE (MULTI_PHASE)'), p)
+```
+
+Примечание: code в throw будет `PIPELINE VALIDATION FAILED` (приоритет флагов), но `violationDetail` в теле — `PIPELINE IMMUTABLE (MULTI_PHASE): illegal mutation …` (:1131–1137) — assert по detail. До v7 этот ход прошёл бы через F-4 (top-level complexity null → provisional=true).
+
+#### T15 — Legal phase transition (MP-5, :1070–1073; next-agent кейс 5 :860–865)
+
+```js
+await newSession()
+// P1 (BUGFIX) полностью: Turn1 → continuation → utility (advance step до 2)
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1, next_agent: 'bugfix-triage' })))
+await tryTask('bugfix-triage')
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1_SIMPLE, next_agent: 'worker' })))
+await tryTask('worker')
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1_SIMPLE, next_agent: 'utility' })))
+await tryTask('utility')
+// Barrier → transition
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P2', pipeline: ROW5, next_agent: 'dev-planner' }),
+  { ack: '→ PHASE 2/2 (P2): DELEGATED to dev-planner for: add feature Y' }))
+check('T15a MP-5 allowed', hasLog('MULTI_PHASE MUTATION ALLOWED — MP-5 phase transition'), logs.join(' | '))
+const r = await tryTask('dev-planner')
+check('T15b transition Task ok', r.ok, r.message)
+```
+
+Turn `next_agent:'utility'` — pipeline unchanged, nextIdx=2 → advance (:1157–1158); validateNextAgent effectiveStep=2=pipeline[2] ✓.
+
+#### T15b — Final turn clean (terminal-shape early return внутри ветки :2293–2302)
+
+Продолжение T15 (или отдельная сессия с P2, доведённой до utility):
+
+```js
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P2', pipeline: [], next_agent: null })))
+check('T15b-1 no PIPELINE VALIDATION FAILED', !hasLog('PIPELINE VALIDATION FAILED'), ...)
+check('T15b-2 no INVALID JSON OUTPUT', !hasLog('INVALID JSON OUTPUT'), ...)
+check('T15b-3 no DEFERRED VIOLATION', !hasLog('DEFERRED VIOLATION ENFORCED'), ...)
+check('T15b-4 probe clean', await probeGate() === 'clean', ...)
+```
+
+Форма: `state:null` + `pipeline:[]` + `next_agent:null` + `current_phase:'P2'` (id последней фазы) + phases без изменений → mpEmptyShapeOk (:808–813) + early return (:2299–2301); state block не трогается (newPipeline.length===0, :988); ack-audit пропущен (next_agent null, :1194).
+
+#### T16 — Transition-skip (P1→P3) запрещён (MP-5 требует строго +1, :1051)
+
+```js
+await newSession()
+await sendMessage('assistant', orchMsg(mp({ phases: PH3, current_phase: 'P1', pipeline: DEVOPS_ROW, next_agent: 'devops-agent' })))
+await tryTask('devops-agent')
+await sendMessage('assistant', orchMsg(mp({ phases: clonePhases(PH3), current_phase: 'P3', pipeline: DEVOPS_ROW, next_agent: 'devops-agent' })))
+const p = await probeGate()
+check('T16 skip transition blocked', p !== 'clean' && p.includes('PIPELINE IMMUTABLE (MULTI_PHASE)'), p)
+```
+
+Примечание: validatePipeline per-phase для P3 (DEVOPS-null-null) ПРОХОДИТ, nextAgent — isLoopback; единственный флаг — pipelineImmutable (newIdx 2 ≠ prevIdx 0+1) → code в throw = `PIPELINE IMMUTABLE`.
+
+#### T17 — Phases tampering на transition (phasesStableOrRefined :2168–2183)
+
+```js
+// как T16, но легальный переход P1→P2 с изменённым goal у P2:
+const tampered = clonePhases(PH3); tampered[1].goal = 'TAMPERED goal'
+await sendMessage('assistant', orchMsg(mp({ phases: tampered, current_phase: 'P2',
+  pipeline: ['worker', 'utility'], next_agent: 'worker' })))
+const p = await probeGate()
+check('T17 phases tampering blocked', p !== 'clean' && p.includes('PIPELINE IMMUTABLE (MULTI_PHASE)'), p)
+```
+
+(P2 = DEV-SIMPLE-false → `['worker','utility']` валиден per-phase; падает только whitelist: goal отличается → stableOrRefined=false.)
+
+#### T18 — Структурные нарушения phases → fail-closed (validatePhasesStructure :2160–2166…; 5 sub-checks, каждая в свежей сессии)
+
+Отправлять как AWAITING-ход (`state:'AWAITING_CONFIRMATION'`, pipeline [], next null) — structErr проверяется в обеих валидациях (:2287–2290, :2456–2460):
+
+| Sub | Мутация phases | Assert (probe ≠ 'clean' И message/logs содержит) |
+|---|---|---|
+| T18a | 4 фазы (PH3 + P4 DEVOPS depends_on ['P3']) | `out of range [2..3]` |
+| T18b | `[P1, {...P1}]` (дубль id) | `duplicate phase id` |
+| T18c | P1.depends_on = ['P2'] (forward ref) | `depends_on must be []` |
+| T18d | 2 фазы SUPERCOMPLEX (обе plan_exists:true) | `at most ONE SUPERCOMPLEX` |
+| T18e | P2.depends_on = [] (два корня) | `depends_on must be ["P1"]` |
+
+Каждая: `await newSession()` → `sendMessage(orchMsg(mp({ state:'AWAITING_CONFIRMATION', phases: <bad> })))` → `probeGate()` → check подстроки + `hasLog('PIPELINE VALIDATION FAILED')`. Дополнительно T18a: assert что gate НЕ вооружён (`!hasLog('Task calls blocked')`) — arming только в valid-ветке (:925–943).
+
+#### T19 — CANCELLED shape (:2282–2292, defensive disarm :944–949)
+
+```js
+await newSession()
+await sendMessage('assistant', orchMsg(mp({ state: 'AWAITING_CONFIRMATION' })))
+await sendMessage('user', 'отмена')
+await sendMessage('assistant', orchMsg(mp({ state: 'CANCELLED' })))
+check('T19a no DEFERRED VIOLATION', !hasLog('DEFERRED VIOLATION ENFORCED'), ...)
+check('T19b no PIPELINE VALIDATION FAILED', !hasLog('PIPELINE VALIDATION FAILED'), ...)
+check('T19c probe clean (gate disarmed)', await probeGate() === 'clean', ...)
+```
+
+#### T20 — In-phase Auto-DOCS hook (MP-4, :1055–1058; validatePipeline :2309–2312; next-agent кейс 6 :866–874)
+
+```js
+await newSession()
+// P1 BUGFIX до конца (3 хода как в T15: triage → worker → utility; currentStep=2 = len-1)
+... (ROW1/next bugfix-triage; ROW1_SIMPLE/next worker; ROW1_SIMPLE/next utility — каждый с tryTask)
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: HOOK, next_agent: 'docs-writer' }),
+  { ack: '→ PHASE 1/2 (P1): DELEGATED to docs-writer for: docs update' }))
+check('T20a MP-4 allowed', hasLog('MULTI_PHASE MUTATION ALLOWED — MP-4 in-phase Auto-DOCS hook'), logs.join(' | '))
+const r = await tryTask('docs-writer')
+check('T20b hook Task ok', r.ok, r.message)
+```
+
+Условие isDocsHookMP: `pState.currentStep >= pState.pipeline.length - 1` (2 ≥ 2) ✓, phase.type BUGFIX ∈ [BUGFIX, DEV] ✓.
+
+#### T21 — blockerStop reset (edge case #2; escalation :507–531, gate :1364–1372, reset :1098–1109)
+
+Двухчастный (consume-once gate заставляет реармить). R12-фолбэк: если depth-баланс в harness не сойдётся — деградировать до интеграционной проверки в живом пилоте (3 blocker → BLOCKER STOP → transition), зафиксировав в отчёте.
+
+```js
+await newSession()
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1, next_agent: 'bugfix-triage' })))
+// Part A: 3 blocker → gate блокирует
+await tryTask('bugfix-triage', { keepDepth: true })
+for (let i = 1; i <= 3; i++)
+  await sendMessage('assistant', reviewerMsg('dev-reviewer', 'blocker', `blocking issue ${i}`))
+await endTask({ subagent_type: 'bugfix-triage', description: 'd', prompt: 'p' })
+check('T21a escalation counted 3/3', hasLog('BLOCKER ESCALATION COUNTED — 3/3'), ...)
+const pA = await probeGate()
+check('T21b gate blocks after 3 blockers', pA !== 'clean' && pA.includes('BLOCKER STOP AFTER 3'), pA)
+// Part B: continuation (MP-2) → 4-й blocker (реарм) → transition MP-5 → reset
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1_SIMPLE, next_agent: 'worker' })))
+await tryTask('worker', { keepDepth: true })
+await sendMessage('assistant', reviewerMsg('dev-reviewer', 'blocker', 'blocking issue 4'))
+await endTask({ subagent_type: 'worker', description: 'd', prompt: 'p' })
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P2', pipeline: ROW5, next_agent: 'dev-planner' }),
+  { ack: '→ PHASE 2/2 (P2): DELEGATED to dev-planner for: add feature Y' }))
+check('T21c BLOCKERSTOP RESET logged on MP-5', hasLog('BLOCKERSTOP RESET — legal multi-phase transition'), logs.join(' | '))
+const r = await tryTask('dev-planner')
+check('T21d Task ok after reset', r.ok, r.message)
+```
+
+Механика: reviewer-сообщения при depth>0 → subagent-ветка (:487–559); unique messageID (msgSeq) обходит дедуп `:blocker` (:519–521); 4-й blocker → bCount=4 ≥ 3 → rearm (:527–530); MP-5-ветка сбрасывает blockerStop + violationDetail (:1098–1109).
+
+#### T22 — Phase refinement once (MP-1/MP-3 :1059–1062; unchanged-ветка refresh :1159–1173)
+
+```js
+await newSession()
+// Turn A: DECOMPOSITION-диспетч внутри P1 (key DEV-null-false → variant ['dev-planner'], deviation D :2313–2318)
+await sendMessage('assistant', orchMsg(mp({ phases: clonePhases(PH_DEV_FIRST), current_phase: 'P1',
+  pipeline: ['dev-planner'], next_agent: 'dev-planner' })))
+const rA = await tryTask('dev-planner')
+check('T22a Turn A (decomposition dispatch) ok', rA.ok, rA.message)
+// Turn B: refinement null→COMPLEX (ОДИН раз) + row5
+const phB = clonePhases(PH_DEV_FIRST); phB[0].complexity = 'COMPLEX'
+await sendMessage('assistant', orchMsg(mp({ phases: phB, current_phase: 'P1', plan_source: 'DECOMPOSITION',
+  pipeline: ROW5, next_agent: 'dev-planner' })))
+check('T22b refinement allowed (MP-1/MP-3)', hasLog('MP-1/MP-3 phase refinement / DECOMPOSITION'), logs.join(' | '))
+const rB = await tryTask('dev-planner')   // isLoopback: slice(0,1) содержит dev-planner (:841–842)
+check('T22c Turn B Task ok', rB.ok, rB.message)
+// Turn C: ВТОРОЙ refinement COMPLEX→SIMPLE → заблокирован
+const phC = clonePhases(phB); phC[0].complexity = 'SIMPLE'
+await sendMessage('assistant', orchMsg(mp({ phases: phC, current_phase: 'P1',
+  pipeline: ['worker', 'utility'], next_agent: 'worker' })))
+const p = await probeGate()
+check('T22d second refinement blocked', p !== 'clean' && p.includes('PIPELINE IMMUTABLE (MULTI_PHASE)'), p)
+```
+
+Ключевое: refresh phases в unchanged-ветке (:1169–1173) гарантирует, что после Turn B снапшот хранит COMPLEX → Turn C не null→value → stableOrRefined=false. Turn C validatePipeline проходит (DEV-SIMPLE-false = ['worker','utility']) — падает только whitelist.
+
+#### T23 — SUPERCOMPLEX phase (plan-структура :2172–2176; next-agent exempt :852–856)
+
+```js
+await newSession()
+const PHS = [
+  { id: 'P1', type: 'DEV', complexity: 'SUPERCOMPLEX', plan_exists: true, goal: 'big migration', depends_on: [] },
+  { id: 'P2', type: 'DEVOPS', complexity: null, plan_exists: null, goal: 'deploy', depends_on: ['P1'] },
+]
+await sendMessage('assistant', orchMsg(mp({ phases: PHS, current_phase: 'P1', pipeline: ROW5, next_agent: 'dev-planner' }),
+  { ack: '→ PHASE 1/2 (P1), STEP 1/5 (S-1): DELEGATED to dev-planner' }))
+const r1 = await tryTask('dev-planner')
+check('T23a SUPERCOMPLEX phase turn ok (key DEV-SUPERCOMPLEX-true)', r1.ok, r1.message)
+// per-step re-emission того же массива (unchanged-ветка, advance)
+await sendMessage('assistant', orchMsg(mp({ phases: clonePhases(PHS), current_phase: 'P1', pipeline: ROW5, next_agent: 'dev-professor' }),
+  { ack: '→ PHASE 1/2 (P1), STEP 2/5 (S-2): DELEGATED to dev-professor' }))
+check('T23b no violation on per-step re-emission', !hasLog('DEFERRED VIOLATION ENFORCED') && !hasLog('PIPELINE IMMUTABLE'), ...)
+const r2 = await tryTask('dev-professor')
+check('T23c per-step Task ok', r2.ok, r2.message)
+// Негатив: SUPERCOMPLEX без plan_exists на executing-ходе → structErr
+await newSession()
+const PHX = clonePhases(PHS); PHX[0].plan_exists = null
+await sendMessage('assistant', orchMsg(mp({ phases: PHX, current_phase: 'P1', pipeline: ROW5, next_agent: 'dev-planner' })))
+const p = await probeGate()
+check('T23d SUPERCOMPLEX requires plan_exists=true (executing)', p !== 'clean' && p.includes('SUPERCOMPLEX requires plan_exists=true'), p)
+```
+
+Примечание: MP-6 label (:1064–1069) достижим только если массив ФАКТИЧЕСКИ меняется при SUPERCOMPLEX-фазе (identical re-emission идёт по unchanged-ветке) — assert на label не ставим (log-only паритет F-11), достаточно ok:true.
+
+#### T24 — Ack audit: формы 7–9 без warn (regex :1204, warn :1205–1209)
+
+```js
+await newSession()
+// Форма 7: PHASE + ':' + DELEGATED (audit срабатывает: next_agent truthy, :1194)
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1, next_agent: 'bugfix-triage' }),
+  { ack: '→ PHASE 1/2 (P1): DELEGATED to bugfix-triage for: fix bug X' }))
+check('T24a form 7 no warn', !hasLog('ACK FORMAT INVALID'), logs.join(' | '))
+await tryTask('bugfix-triage')
+// Форма 8: PHASE + ',' + STEP (нужен новый msgId для ack-дeduп и quota)
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1_SIMPLE, next_agent: 'worker' }),
+  { ack: '→ PHASE 1/2 (P1), STEP 2/5 (S-2): DELEGATED to worker' }))
+check('T24b form 8 no warn', !hasLog('ACK FORMAT INVALID'), ...)
+// Форма 9: AWAITING (next_agent null → audit пропущен; warn тоже не должно быть)
+await newSession()
+await sendMessage('assistant', orchMsg(mp({ state: 'AWAITING_CONFIRMATION' }),
+  { ack: '→ PHASE PLAN AWAITING CONFIRMATION (2 phases)' }))
+check('T24c form 9 no warn', !hasLog('ACK FORMAT INVALID'), ...)
+// Регрессия старой формы 1
+await newSession()
+await sendMessage('assistant', orchMsg({ agent: 'orchestrator', type: 'BUGFIX', complexity: null, plan_exists: null,
+  plan_source: null, goal: 'fix bug X', next_agent: 'bugfix-triage', pipeline: ROW1 }))
+check('T24d legacy form 1 no warn', !hasLog('ACK FORMAT INVALID'), ...)
+```
+
+**Питч:** ack-строка — ПОСЛЕДНЯЯ строка content, без хвостовых пробелов (regex `^→…$/m`); `→` — U+2192.
+
+#### T25 — Resume в новой сессии (warn :1016–1032)
+
+```js
+await newSession()   // свежее состояние = «новая сессия»
+await sendMessage('assistant', orchMsg(mp({ current_phase: 'P2', pipeline: ROW5, next_agent: 'dev-planner' }),
+  { ack: '→ PHASE 2/2 (P2): DELEGATED to dev-planner for: add feature Y' }))
+check('T25a RESUME warn logged', hasLog('MULTI_PHASE RESUME DETECTED'), logs.join(' | '))
+const r = await tryTask('dev-planner')
+check('T25b resume Turn1 lock + Task ok', r.ok, r.message)
+```
+
+(Turn-1 lock с mpIdx=1>0 — warn-only, ход легален.)
+
+#### T26 — Single-phase регрессия (R4: v7 не ломает существующие сценарии) + sub-checks из обзора задания
+
+Каждый сценарий в свежей сессии, JSON — обычный single-phase (БЕЗ полей state/phases/current_phase):
+
+- **(a) BUGFIX Turn1 + continuation:** `type:'BUGFIX', pipeline:ROW1, next:'bugfix-triage'` → tryTask ok; затем `pipeline:ROW1_SIMPLE, next:'worker'` → ok (F-1/BUGFIX-исключение single-phase ветки :1075–1082).
+- **(b) DECOMPOSITION A/B:** Turn A `type:'DEV', complexity:null, plan_exists:false, pipeline:['dev-planner'], next:'dev-planner'` → ok (variant DEV-null-false); Turn B `plan_source:'DECOMPOSITION', complexity:'COMPLEX', pipeline:ROW5, next:'dev-planner'` → ok (isLoopback).
+- **(c) Auto-DOCS hook single-phase:** после BUGFIX-цепочки (3 хода как в T20) ход `type:'DOCS', complexity:'SIMPLE', plan_exists:null, pipeline:HOOK, next:'docs-writer'` → ok (F-12 + isDocsHook :848–849).
+- **(d) nit-skip:** после Turn-1 lock ROW5 ход `severity:'nit', pipeline:['worker','utility'], complexity:'SIMPLE', plan_exists:false, next:'worker'` → ok (nit-исключение single-phase whitelist); assert `!hasLog('PIPELINE IMMUTABLE')`.
+- **(e) F-4 provisional single-phase ЖИВ:** Turn A `type:'DEV', complexity:null, plan_exists:false, pipeline:['dev-planner'], next:'dev-planner'`; Turn B `complexity:'SIMPLE', plan_exists:false, pipeline:['worker','utility'], next:'worker'` → ok (provisional=true, т.к. type≠MULTI_PHASE — v7 fix не затрагивает single-phase).
+- **(f) severity gate (обзор «T25»):** ход с `severity:'critical'` (вне nit|concern|blocker, :91) → probe ≠ clean, message содержит `INVALID SEVERITY` (:765–773).
+- **(g) cross-routing prevention (обзор «T26»):** в сессии (a) после валидного JSON `tryTask('plan-writer-simple')` → `!ok` и message содержит `ROUTING TABLE ENFORCEMENT (identity lock active)` (:1814–1831).
+
+**Verify Step 4.2 (итог):** все check T9–T26 PASS; T1–T8 без изменений.
+
+### Step 4.2v — Прогон против live и repo (V-22)
+
+```powershell
+cd P:\Programming\Рефакторинг
+node plugins\test-workflow-enforcement.mjs                     # LIVE (default candidate)
+$env:WORKFLOW_PLUGIN = 'P:\Programming\Рефакторинг\plugins\workflow-enforcement.ts'
+node plugins\test-workflow-enforcement.mjs                     # REPO (mirror check)
+Remove-Item Env:\WORKFLOW_PLUGIN
+```
+
+**Verify:** оба прогона — `RESULT: pass=<N> fail=0`, exit 0; первая строка `PLUGIN:` указывает ожидаемый путь. Провал только в repo-прогоне ⇒ drift live/repo ⇒ `config-sync --save` и повтор.
+
+### Step 4.3 — Пилоты S1–S7 (живые сессии)
+
+**Предусловия (обязательны до первого пилота):**
+1. **Restart opencode** — плагин и промпты подхватываются только новыми сессиями (PLAN :68, :971).
+2. **Пилотный проект-песочница** (НЕ `P:\Programming\Рефакторинг`): S1/S5 вносят реальные изменения кода и deploy-операции. Рекомендация: scratch-repo с минимальным приложением; для S5 фаза «задеплой» = локальный тестовый скрипт (не прод).
+3. Каждый пилот = **новая сессия** orchestrator. Логи opencode: `~\.local\share\opencode\log\` (Windows: `$env:USERPROFILE\.local\share\opencode\log\`).
+
+**Канонические пилоты (PLAN §4.4 :930–938):**
+
+| # | Запрос пользователя | Ожидание | Verify |
 |---|---|---|---|
-| 1 Auto-DOCS | orchestrator.md L112 | ARCHITECTURE.md §Auto-DOCS (+L497 insert) | manual edit |
-| 2 docs-writer direct | opencode.json ×3 task-блока; worker/dev-professor/execute-bug .md (+секция); docs-writer.md L13 | ARCHITECTURE.md §Direct docs-writer Call (+L512 insert) | manual edit |
-| 3 scout model | scout.md L4; dev-planner L31,L34; plan-bug L32; plan-writer-complex L30; research-writer-simple L41 | ARCHITECTURE.md L109, L153 | manual edit (skill не подходит — dубль role row) |
-| 4 codebase-analyzer | НОВЫЙ agents\codebase-analyzer.md; opencode.json (agent-блок + orchestrator/dev-planner/plan-bug task); plugin ROUTING_TABLES; orchestrator.md L26+L101; dev-planner/plan-bug frontmatter+секции | ARCHITECTURE.md (whitelist/counts/tables — skill; L315/L712/L829/L837 — manual) | **agent-add skill** (-PermTemplate scout, -Role analyzer -Tier mid) + manual |
-| 5 sync | — | agents/, opencode.json, plugins/ (зеркала) | config-sync --save |
-| 6 verify | — | — | JSON one-liner + sync --plan + integrity-check |
-| 7 commit | — | все изменённые repo-файлы | Task → git-commit агент |
+| S1 | «Auth middleware падает с race condition — исправь, и сразу добавь refresh-токены» | T0 YES → AWAITING (2 фазы, таблица «## MULTI-PHASE PLAN», ack form 9, Task НЕТ) → «да» → P1 BUGFIX (triage→continuation) → barrier (envelope + PHASE_STATE.md секция) → P2 DEV (Q1–Q5 с учётом конверта, refinement null→значение) → final summary по 2 фазам | Логи: `MULTI_PHASE AWAITING CONFIRMATION`, clearing-лог (см. Step 4.4), `MP-5 phase transition`, НЕТ `DEFERRED VIOLATION`/`ACK FORMAT INVALID`/`PIPELINE VALIDATION FAILED`. PHASE_STATE.md: `# PHASE_STATE` + секция P1. Envelope в Task-prompt P2 (storage: `~\.local\share\opencode\storage\`) — verbatim + фраза-контекст |
+| S2 | «Исправь баг с авторизацией и обнови README» | Анти-триггер: single-phase BUGFIX (+ Auto-DOCS hook при requires_docs_update); **НЕТ** AWAITING-хода | В логах нет `MULTI_PHASE`; JSON-ходы type=BUGFIX |
+| S3 | S1 + после показа плана ответ «измени: фичу делай SIMPLE» | Edit-round: повторный AWAITING с phases[P2].complexity=SIMPLE (пересчёт + каскад), лимит ≤2 раундов → «да» → старт P1 | Второй AWAITING-ход в логах; после «да» — executing P1 |
+| S4 | S1 + ответ «отмена» | `state:"CANCELLED"`, pipeline [], next null, ноль Task, краткое резюме предложенного | Лог defensive disarm (:944–949); Task-вызовов в сессии нет |
+| S5 | «1. Настрой CI github-actions. 2. Добавь unit-тесты для X. 3. Задеплой» | 3 фазы DEVOPS+DEV+DEVOPS (повтор типа легален); конверты передаются: имя workflow P1→P2, статус тестов P2→P3; две MP-5 границы | Логи: 2× `MP-5`; PHASE_STATE.md: секции P1, P2 (P3 — DEVOPS-хвост, секция НЕ пишется — MVP-ограничение, финальный summary текстом); ack `→ PHASE i/3 …` |
+| S6 | «Исправь баг X и добавь фичу Y, без подтверждений — делай сразу» | Auto-approve override: план информативно + НЕМЕДЛЕННЫЙ старт P1 в том же ходе (без AWAITING JSON); Task не блокируется | В логах НЕТ `Task calls blocked`; есть Turn-1 lock MULTI_PHASE |
+| S7 (негатив) | «Составь план рефакторинга и реализуй его» | T0 scope-guard: plan-deliverable → OUT OF SCOPE (type:null, pipeline []), НЕ multi-phase | JSON type=null; нет MULTI_PHASE-логов |
+
+**Дополнительные пилоты (покрытие сценариев из обзора задания; выполнять после канонических, время permitting):**
+
+| # | Сценарий | Запрос / действие | Verify |
+|---|---|---|---|
+| S7b | Негатив: invalid phase transition live (обзор S7) | В сессии S1 после старта P1: «пропусти P1 и сразу запускай P2» | Оркестратор отказывает ИЛИ плагин блокирует (`PIPELINE IMMUTABLE (MULTI_PHASE)` в логах) и модель восстанавливается; «тихого» скачка фаз нет |
+| S8 | SUPERCOMPLEX + DEVOPS (обзор S3; research §3.3 Вариант A) | «Реализуй миграцию по шагам (SUPERCOMPLEX), затем прогони тесты и задеплой» (в проекте с готовым dev_plan.md) | ≤1 SUPERCOMPLEX-фаза; двухуровневый ack `→ PHASE 1/3 (P1), STEP j/m (S-j): DELEGATED to …` (форма 8, без warn); per-step механика внутри P1 без изменений; P2/P3 DEVOPS |
+| S9 | Resume после fail-fast (обзор S5; PLAN Stage 5) | Довести фазу до FAILED (3× blocker в живой сессии — попросить reviewer-сценарий или спровоцировать на песочнице) → **новая сессия**: «продолжи с фазы P2» | ОДИН classification read PHASE_STATE.md; план не пересоздаётся; старт с P2 без повторного подтверждения; warn `MULTI_PHASE RESUME DETECTED` |
+| S10 | Auto-DOCS dedup (обзор S6; R7 — prompt-level) | План BUGFIX + DEV + DOCS(3-я фаза), фикс требует docs (requires_docs_update:true) | Hook после P1/ P2 **подавлен**; envelope P1 несёт `docs_deferred_to:"P3"`; Task-prompt P3 получает envelope verbatim; проверка — storage Task-prompts + PHASE_STATE.md |
+
+**Критерии приёмки всех пилотов (PLAN :940):** нет `WORKFLOW VIOLATION` в логах; ack-формы без warn-дрейфа; PHASE_STATE.md append-only с секциями всех utility-терминированных фаз; конверты в Task-prompts соответствуют «pointer, not transcript» (summary ≤3 предложений, facts ≤10 ключей).
+
+**Команды проверки логов (после каждого пилота):**
+
+```powershell
+$log = Get-ChildItem "$env:USERPROFILE\.local\share\opencode\log\*.log" |
+  Sort-Object LastWriteTime -Descending | Select-Object -First 1
+Select-String -Path $log.FullName -Pattern 'MULTI_PHASE|USER RESPONSE RECEIVED|user reply implied|MP-\d|BLOCKERSTOP|DEFERRED VIOLATION|ACK FORMAT INVALID|PIPELINE VALIDATION FAILED|PIPELINE IMMUTABLE|ROUTING TABLE'
+```
+
+**Verify Step 4.3:** чек-лист S1–S7 (таблица) выполнен; отклонения зафиксированы (какой пилот, какой лог, гипотеза). Провал пилота НЕ блокирует Phase 4-отчёт, но блокирует объявление стабильности (PLAN R2) и требует отдельного разбора перед Phase 5.
+
+### Step 4.4 — V-pilot-1: видимость user-role сообщений (PLAN §4.3)
+
+Выполняется по логам S1/S3 (или отдельным мини-экспериментом):
+
+1. Живая сессия: multi-phase запрос → AWAITING-ход → ответ «да».
+2. В логе opencode искать ОДИН из двух маркеров (оба легальны, резолюция #10 PLAN :48):
+   - `USER RESPONSE RECEIVED — confirmation gate cleared` → **opencode доставляет user-role сообщения в message.updated** (путь (a) :586–592 — основной);
+   - `NEW ASSISTANT TURN after AWAITING — user reply implied` → user-role НЕ виден плагину → **fallback по messageID (turn-based гарантия) — постоянный основной механизм** (риск R1).
+3. Результат зафиксировать письменно (заметка в отчёте Phase 4 → Phase 5 внесёт в CHANGELOG/Limitations): какой путь сработал, стабильно ли (проверить в S1, S3, S4 — три user-ответа).
+
+**Дополнительная проверка (рекомендуется):** во время AWAITING-хода в живой сессии убедиться, что оркестратор НЕ делает Task (гейт не срабатывал — в логах нет `CONFIRMATION GATE — Task blocked`; модель сама остановилась). Если срабатывал — это нормально (throw обучает модель), зафиксировать частоту.
+
+**Verify Step 4.4:** механизм clearing определён и задокументирован; подтверждение работает в живых сессиях стабильно (3 из 3 user-ответов сняли gate).
+
+### Step 4.5 — Телеметрия (PLAN §4.5, данные для Stage 2)
+
+В пилотах S1 и S5 зафиксировать:
+- число ходов сессии (assistant-сообщений orchestrator) от старта до final summary;
+- субъективная деградация JSON/ack-дисциплины к концу цепочки (дрейф полей, warn-логи);
+- размер контекста: признаки приближения к лимиту (summarize-события opencode, если видны).
+
+Append 2–5 строк в `RESEARCH_MULTI_PHASE_PIPELINES.md` §9.4 (follow-up: решение о summarizer между фазами). **Verify:** данные записаны; выводов о Stage 2 не принимаем (только факты).
+
+---
+
+## Edge Cases (питчи harness — проверены по коду плагина)
+
+1. **Баланс activeTaskDepth.** Успешный `tryTool('task', …)` инкрементирует depth (:1802/:1886); пока depth>0, `tool.execute.before` байпасит ВСЕ гейты (:1304–1339), а `message.updated` уходит в subagent-ветку (:487). Поэтому: `tryTask` автоматически вызывает `endTask`; `keepDepth:true` — только в T21, и сразу после reviewer-сообщений — `endTask`. Заблокированный throw'ом Task depth НЕ трогает (F-3, :1310–1312) — endTask после него не нужен.
+2. **Один Task на ход** (:1419–1445). Счётчик сбрасывается только новым messageID (:573–576). Перед КАЖДЫМ `tryTask` — свой `sendMessage` (новый ход). Второй Task в том же ходе → `MAX ONE TASK CALL PER TURN` (не путать с ожидаемыми violation в негативных тестах).
+3. **Consume-once gate 9.0в** (:1376–1379): probe-вызов СБРАСЫВАET флаги. На одно нарушение — один probe; для повторной проверки — реарм (T21 Part B: 4-й blocker).
+4. **Приоритет кодов vs detail** (:1366–1372): при нескольких флагах code в throw = старший (pipelineMismatch), а `violationDetail` в теле = последний записанный. В T14 assert делать по подстроке detail `PIPELINE IMMUTABLE (MULTI_PHASE)`, а не по коду.
+5. **probeGate после первого Task**: `read` блокирован (:1452–1468) — хелпер трактует `PRIMARY AGENT FORBIDDEN` как 'clean' (гейт 9.0в срабатывает РАНЬШЕ :1364 — deferred-флаги всё равно проявятся).
+6. **FORBIDDEN_VOCAB / SELF_WORK_MARKERS** (:235–246, :269–279): в content тестовых сообщений запрещены токены `## PLAN`, `# Implementation Plan`, `plan-writer-`, `research-writer-`, `research-reviewer`, `plan-reviewer-`, `## Findings/Analysis/Implementation/Root Cause`. Identity-строка хелпера безопасна («I am NOT plankestrator» не содержит «I am plankestrator»). Goals в фикстурах — нейтральные («fix bug X»).
+7. **content — только строка** (:2106, :2123): `message.content` string c ```json-fence; parts-массивы НЕ поддерживаются экстракторами — sendMessage шлёт строку.
+8. **Deviation D** (:2313–2318): ключ `DEV-null-null` fail-closed — DECOMPOSITION-ход внутри DEV-фазы ОБЯЗАН нести `plan_exists:false` (PH_DEV_FIRST уже содержит). `DOCS-null-any` тоже неизвестен — DOCS-фазы только SIMPLE/DEEP.
+9. **Уникальность id blocker-сообщений** (:519–521): дедуп `:blocker` по messageID — msgSeq гарантирует уникальность; НЕ слать одно id дважды в T21.
+10. **Мутация общих фикстур**: phases-массивы ОБЪЕКТОВ разделяются между тестами — везде, где тест меняет фазы, использовать `clonePhases()` (T14, T17, T22, T23d), иначе последующие тесты ломаются неявно.
+11. **mpEmptyShapeOk** (:808–820) освобождает от `PIPELINE EMPTY` только MULTI_PHASE-формы — в T11 (type=DEV) pipeline обязан быть непустым и валидным, иначе код gate замаскирует целевую ошибку state.
+12. **session.created child-guard** (:312–328): `lockSession` шлёт сессию БЕЗ parentID — полный сброс; не добавлять parentID в фикстуры.
+13. **Не менять существующие хелперы** (`tryTool` c `sessionID:'s1'` ≠ topLevelSessionID `s-orchestrator`): при depth>0 параллельный Task с 's1' атрибутируется как nested (легальный) — в тестах не вызывать tryTask при depth>0 кроме T21-схемы (keepDepth→reviewer→endTask без промежуточных task).
+14. **ack-regex построчный** (`/m`, :1204): ack — последняя строка, точно начинается с `→ ` (U+2192 + пробел), без trailing whitespace; JSON-блок выше не мешает.
+15. **hasOutputtedJSON и user-сообщения**: user-сообщение ДО первого валидного JSON вооружило бы identityMissing (:635–637) — во всех тестах user-реплики идут ПОСЛЕ assistant-JSON (как в реальном flow).
+16. **Node type-stripping**: .ts-импорт (:44) требует Node ≥22.6; при `cannot import plugin` — exit 2, проверить версию.
+17. **logs accumulate**: mock-client (:63) пишет ВСЕ уровни в один массив — `newSession()` обязан обнулять logs, иначе hasLog ловит строки прошлых тестов (ложные PASS).
+
+---
+
+## Dependencies
+
+1. **Phases 1–3 завершены** — подтверждено recon (live==repo, 2582 строки, все v7-маркеры). Перепроверить хешем в Step 4.0.3.
+2. **Baseline T1–T8 зелёный** до правок harness (Step 4.0.2) — иначе сначала чинить окружение/плагин.
+3. **Node ≥ 22.6** в PATH (type-stripping).
+4. **Restart opencode** перед Step 4.3 (пилоты) — новые сессии подхватывают плагин v7 + orchestrator.md с секцией MULTI-PHASE PIPELINES (Phase 2 live уже содержит).
+5. **Если тест T9–T26 выявляет баг плагина** (assert не сходится с документированным поведением PLAN Phase 3): правка в **live** → перепрогон harness (live) → `config-sync --save` → перепрогон (repo) → фикс входит в тот же атомарный коммит Phase 5.3 (промпт/плагин/harness неразделимы). НЕ маскировать баг ослаблением assert без пометки в отчёте.
+6. **Пилоты**: песочница-проект (не production repo); для S8 — dev_plan.md в песочнице; для S9 — воспроизводимый FAILED фазы.
+7. **Phase 5 не запускается** до: `fail=0` в обоих прогонах (V-22) + S1–S7 пройдены/задокументированы (V-23) + V-pilot-1 зафиксирован.
+
+## Verification (маппинг на PLAN Verification Checklist)
+
+- **V-22** ← Steps 4.0, 4.2v: T1–T8 + T9–T26 зелёные против LIVE и REPO (`WORKFLOW_PLUGIN`), `RESULT: fail=0`, exit 0.
+- **V-23** ← Steps 4.3, 4.4: S1–S7 (+S7b/S8–S10 опц.) пройдены; V-pilot-1: механизм clearing (user-role vs messageID-fallback) определён по логам и записан.
+- **V-24** ← Step 4.3 verify-колонка: PHASE_STATE.md создаётся (`# PHASE_STATE`) и дописывается append-only; конверты в Task-prompts — small data (summary ≤3 предложений, facts ≤10 ключей), verbatim + фраза-контекст на границе фаз.
+- Финальный отчёт Phase 4: таблица «тест → статус», «пилот → статус → артефакты», вывод V-pilot-1, телеметрия S1/S5, список отклонений/багов (если есть) — вход для Phase 5 (CHANGELOG, коммит через агента git-commit).

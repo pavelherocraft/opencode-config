@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Multi-Phase Pipelines (MVP):** поддержка выполнения 2-3 фаз последовательно с подтверждением пользователя
+  - Новый тип `MULTI_PHASE` в orchestrator с состояниями AWAITING_CONFIRMATION/EXECUTING/COMPLETE
+  - Phase Result envelope для передачи контекста между фазами
+  - PHASE_STATE.md журнал для resume после fail-fast
+  - Auto-DOCS hook dedup через `docs_deferred_to`
+  - Fail-fast при blocker в любой фазе
+  - Supercomplex disambiguation (SUPERCOMPLEX = фаза, не обёртка)
+
+### Changed
+- **Plugin v7:** event-shape совместимость с opencode 1.18.34+
+  - Новый обработчик `session.updated` для детекта агента (B1 фикс)
+  - Буферизация `message.part.updated`/`message.part.delta` с reasoning-фильтром (B2 фикс)
+  - Child-guard через `properties.info.parentID` (C3 фикс)
+  - Harness обновлён под новый shape (C4 фикс)
+  - 88/88 тестов PASS (T1-T27)
+- **ARCHITECTURE.md:** обновлены §5 (Identity Lock) и §9 (Plugin Hooks) под новый event-shape
+- **orchestrator.md:** добавлена секция MULTI-PHASE PIPELINES (Stage 0-5), расширены TURN ALGORITHM, JSON FORMAT, EDGE CASES, Examples 13-16, PROHIBITIONS, PLUGIN ENFORCEMENT
+- **utility.md:** добавлена роль PHASE_STATE scribe (append-only журнал)
+
+### Fixed
+- **P0 event-shape blocker:** message-level enforcement был инертен в live-сессиях opencode 1.18.34
+  - Identity lock не срабатывал (агент приходит в session.updated, не в session.created)
+  - Текст сообщения недоступен (приходит через message.part.*, не в message.content)
+  - Child-guard читал parentID не из того поля
+  - Harness симулировал устаревший shape
+- **MP-1 invariant:** снапшот phases обновляется в обеих ветках (легальная мутация + pipeline unchanged)
+- **State enum:** orchestrator PROHIBITIONS не противоречит MULTI_PHASE формам (AWAITING/CANCELLED/final)
+- **Read-lock:** разрешено чтение PHASE_STATE.md для resume (Stage 5)
+
+### Technical Details
+- Плагин: 2161 → 2807 строк (+646)
+- Harness: 165 → 812 строк (+647)
+- orchestrator.md: 364 → 539 строк (+175)
+- ARCHITECTURE.md: 1066 → 1243 строк (+177)
+- Тесты: 88/88 PASS (T1-T26 + T27 reasoning-фильтр)
+- Пилоты: S7, S6, S2 выполнены (headless CLI)
+
 ### Changed
 
 - **scout model migration**: bifrost-litellm/mimo-v2.5 → bifrost-litellm/MiniMax-M3.1-Flash-Preview (Model Roles `micro` row updated in place — scout is the sole occupant; caller prompts updated: dev-planner, plan-bug, plan-writer-complex, research-writer-simple)

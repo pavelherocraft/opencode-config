@@ -20,4 +20,7 @@ __pycache__/
 output/
 backup/
 
+# Multi-phase journal (transient, deleted after chain completes)
+PHASE_STATE.md
+
 

@@ -60,8 +60,12 @@ const REQUIRED_JSON_FIELDS: Record<string, string[]> = {
 const VALID_VALUES: Record<string, Record<string, (string | null)[]>> = {
   orchestrator: {
     agent: ["orchestrator"],
-    type: ["BUGFIX", "DEVOPS", "DEV", "DOCS", null],
-    complexity: ["SIMPLE", "COMPLEX", "DEEP", "SUPERCOMPLEX", null]
+    type: ["BUGFIX", "DEVOPS", "DEV", "DOCS", "MULTI_PHASE", null],
+    complexity: ["SIMPLE", "COMPLEX", "DEEP", "SUPERCOMPLEX", null],
+    // v7 (Multi-Phase MVP): optional state — validated only if present (null is a
+    // legal value; single-phase turns never carry the field). state is
+    // MULTI_PHASE-only for orchestrator — enforced in validateJSONOutput (v7 block).
+    state: ["AWAITING_CONFIRMATION", "CANCELLED", null]
   },
   plankestrator: {
     agent: ["plankestrator"],
@@ -169,7 +173,13 @@ let topLevelSessionID: string | null = null
 // codebase-analyzer helper, BUGFIX/DEVOPS Turn 1) — the pipeline is NOT frozen yet and
 // may be freely replaced by the next turn (correction F-4).
 // type: last locked type — used by the Auto-DOCS hook exception (correction F-12).
-const pipelineState = new Map<string, { pipeline: string[]; currentStep: number; provisional: boolean; type: string | null }>()
+// v7 (Multi-Phase MVP): + phases/currentPhaseIdx — MULTI_PHASE-only snapshot for the
+// phase-mutation whitelist MP-1..MP-6 (undefined for single-phase entries; existing
+// fields and semantics untouched).
+const pipelineState = new Map<string, {
+  pipeline: string[]; currentStep: number; provisional: boolean; type: string | null;
+  phases?: any[]; currentPhaseIdx?: number
+}>()
 
 // v6 (Phase 13.1): max ONE Task call per turn
 const taskCallsPerTurn = new Map<string, number>()   // agent → Task calls in current turn
@@ -196,6 +206,41 @@ const AUXILIARY_NEXT_AGENTS = [...IDENTITY_PROBE_AGENTS, "view-image"]
 // may vary the array. Strict 10.3/17.2 checks would produce GUARANTEED false
 // positives → log-only for complexity==="SUPERCOMPLEX" until the format is formalized.
 const SUPERCOMPLEX_STRICT = false
+
+// ============================================================
+// v7 (Multi-Phase MVP) — phase-level state + confirmation gate.
+// MVP: linear chain, MULTI_PHASE_MIN..MAX phases, depends_on = [previous].
+// Stage 2 backlog: MAX → 4, explicit DAG, continue_on_error.
+// ============================================================
+const MULTI_PHASE_MIN = 2
+const MULTI_PHASE_MAX = 3
+const MULTI_PHASE_TYPES = ["BUGFIX", "DEVOPS", "DEV", "DOCS"]
+const MULTI_PHASE_STATES = ["AWAITING_CONFIRMATION", "CANCELLED"]
+const DOCS_HOOK_CHAIN = ["docs-writer", "utility"]
+
+// Confirmation gate: true between an AWAITING_CONFIRMATION JSON and the user's
+// reply. Clearing: (a) a user-role message (role pattern of the self-work guard
+// below), or (b) ANY new assistant messageID — turn-based guarantee: the primary
+// only wakes on user input or Task completion, and Task is blocked while awaiting,
+// so a new assistant turn IMPLIES a user reply (fallback if opencode does not
+// surface user-role messages to plugins — risk R1, V-pilot-1 in Phase 4).
+let awaitingConfirmation = false
+let awaitingMsgId: string | null = null
+
+// ============================================================
+// v7.1 (P0 event-shape fix, opencode 1.18.34) — message TEXT transport.
+// message.updated carries NO content: the assistant's text arrives as
+// `message.part.updated` (type="text", cumulative `part.text`) and
+// `message.part.delta` (incremental chunks). Buffers are keyed by messageID /
+// partID; a message is only validated once FINALIZED (finish="stop" or
+// time.completed). Reasoning parts are ignored ENTIRELY — their deltas also use
+// field="text" and would corrupt JSON extraction if merged.
+// ============================================================
+const TEXT_BUFFER_CAP = 200
+let partTypes: Map<string, string> = new Map()       // partID → type (text|reasoning|…)
+let partTexts: Map<string, string> = new Map()       // partID → latest full text (from part.updated)
+let partDeltas: Map<string, string> = new Map()      // partID → accumulated deltas
+let messageParts: Map<string, string[]> = new Map()  // messageID → ordered unique TEXT partIDs
 
 // ============================================================
 // Forbidden vocabulary per agent — sanity check on message text.
@@ -279,9 +324,10 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         // INSPECTION GATE на остаток сессии родителя. Вызовы инструментов
         // субагентов атрибутируются отдельно через activeTaskDepth
         // (depth-guard в tool.execute.before / message.updated).
-        const childCheckData = (event as any).properties?.session
-          || (event as any).properties
-          || event
+        // v7.1 (P0 event-shape fix): opencode 1.18.34 ships the session as
+        // properties.info (legacy: properties.session). resolveSessionData()
+        // preserves the legacy fallbacks for backward compatibility.
+        const childCheckData = resolveSessionData(event)
         const parentSessionID = childCheckData?.parentID
           || (event as any).properties?.parentID
           || (event as any).parentID
@@ -332,17 +378,24 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         blockerEscalations.clear()
         maxStepReached.clear()
         processedMessageIDs.clear()
+        // v7.1 (P0): message-text transport buffers (reset per top-level session).
+        partTypes.clear()
+        partTexts.clear()
+        partDeltas.clear()
+        messageParts.clear()
+        // v7 (Multi-Phase MVP): confirmation gate state (V-21)
+        awaitingConfirmation = false
+        awaitingMsgId = null
         // v6 (Phase 13.2б): remember the top-level session ID for parallel-Task
         // attribution. childCheckData is in scope (defined above, before the guard).
         // If extraction fails (field names differ), topLevelSessionID stays null and
         // 13.2б degrades to the pre-existing warn (safe fallback).
-        topLevelSessionID = String(childCheckData?.id || (event as any).sessionID
-          || (event as any).session_id || (event as any).properties?.sessionID || "") || null
+        topLevelSessionID = String((event as any).properties?.sessionID
+          || (event as any).sessionID || (event as any).session_id
+          || childCheckData?.id || "") || null
 
-        // Try to detect agent from event data
-        const sessionData = (event as any).properties?.session
-          || (event as any).properties
-          || event
+        // Try to detect agent from event data (v7.1: resolve properties.info too)
+        const sessionData = resolveSessionData(event)
 
         // NEW: Detect OpenCode's built-in Plan mode (Shift+Tab toggle).
         // Built-in Plan mode is a UI-level read-only mode that uses the
@@ -427,6 +480,62 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
       }
 
       // ----------------------------------------------------------
+      // session.updated — identity detection for opencode 1.18.34.
+      // session.created fires BEFORE the agent is bound (its info has no agent
+      // field); the authoritative agent arrives on the NEXT session.updated
+      // (info.agent = "orchestrator"). Without this handler currentAgent stays
+      // null and ALL message-level enforcement is inert (P0).
+      // ----------------------------------------------------------
+      if (event.type === "session.updated") {
+        const suData = resolveSessionData(event)
+        const suParentID = suData?.parentID
+          || (event as any).properties?.parentID
+          || (event as any).parentID
+        if (suParentID) {
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "info",
+              message: `CHILD session updated (parentID=${suParentID}) — primary-agent state PRESERVED`,
+              extra: { parentID: String(suParentID) }
+            }
+          })
+          return
+        }
+        // Plan-mode re-check (detectPlanMode is guarded: a custom primary agent
+        // is NEVER built-in Plan mode — see the permission-rule guard below).
+        const suMode = detectPlanMode(suData)
+        if (suMode !== currentMode) {
+          const prevMode = currentMode
+          currentMode = suMode
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "info",
+              message: `Mode changed (session.updated): ${prevMode} → ${suMode} — ${suMode === "plan" ? "enforcement BYPASSED" : "enforcement ACTIVE"}`
+            }
+          })
+        }
+        const suDetected = detectAgentFromSessionData(suData)
+        if (suDetected && (!identityLocked || lockedAgentName !== suDetected)) {
+          currentAgent = suDetected
+          identityLocked = true
+          lockedAgentName = suDetected
+          if (!hasOutputtedJSON.has(suDetected)) hasOutputtedJSON.set(suDetected, false)
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "info",
+              message: `Session updated — agent LOCKED: ${suDetected} (identity will be enforced strictly)`,
+              extra: { sessionId: (event as any).properties?.sessionID, locked: true }
+            }
+          })
+        }
+        // NOTE: do NOT reset workflow state here — only session.created resets.
+        return
+      }
+
+      // ----------------------------------------------------------
       // session.idle — log workflow summary
       // ----------------------------------------------------------
       if (event.type === "session.idle") {
@@ -445,9 +554,71 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
       }
 
       // ----------------------------------------------------------
+      // message.part.updated / message.part.delta — TEXT transport (v7.1).
+      // opencode 1.18.34 delivers the assistant's text here, not in
+      // message.updated. Only part.type === "text" is buffered; reasoning parts
+      // (whose deltas ALSO use field="text") are ignored to keep JSON extraction
+      // clean. Buffers are reset per top-level session and capped (LRU ~200).
+      // ----------------------------------------------------------
+      if (event.type === "message.part.updated") {
+        const part = (event as any).properties?.part || (event as any).part
+        if (!part) return
+        const pType = String(part.type || "")
+        const pid = String(part.id || "")
+        const mid = String(part.messageID || "")
+        if (pid) {
+          partTypes.set(pid, pType)
+          if (partTypes.size > TEXT_BUFFER_CAP * 4) {
+            const oldest = partTypes.keys().next().value
+            if (oldest !== undefined && oldest !== pid) partTypes.delete(oldest)
+          }
+        }
+        if (pType === "text" && mid && pid) {
+          partTexts.set(pid, String(part.text ?? ""))
+          rememberMessagePart(mid, pid)
+        }
+        return
+      }
+      if (event.type === "message.part.delta") {
+        const props = (event as any).properties || {}
+        const pid = String(props.partID || "")
+        const mid = String(props.messageID || "")
+        // Reasoning filter: only deltas of a KNOWN text part are accumulated.
+        if (String(props.field) === "text" && pid && mid && partTypes.get(pid) === "text") {
+          partDeltas.set(pid, (partDeltas.get(pid) ?? "") + String(props.delta ?? ""))
+          rememberMessagePart(mid, pid)
+        }
+        return
+      }
+
+      // ----------------------------------------------------------
       // message.updated — validate JSON output + detect agent
       // ----------------------------------------------------------
       if (event.type === "message.updated") {
+        // v7.1 (P0 event-shape fix): opencode 1.18.34 ships the message as
+        // properties.info (legacy: properties.message) and carries NO content —
+        // text arrives via message.part.updated/delta and is assembled from the
+        // per-messageID buffer. A message is validated ONLY once FINALIZED
+        // (finish="stop" or time.completed), when the full text is available.
+        const resolvedMessage = resolveMessage(event)
+        if (!resolvedMessage) return
+        const turnMsgId = String((resolvedMessage as any).id || (resolvedMessage as any).info?.id || "")
+        const msgRole = String((resolvedMessage as any).role || (resolvedMessage as any).info?.role || "assistant")
+        const msgFinish = String((resolvedMessage as any).finish || (resolvedMessage as any).info?.finish || "")
+        const msgCompleted = !!(resolvedMessage as any).time?.completed
+          || !!(resolvedMessage as any).info?.time?.completed
+        // Backward compatibility: a LEGACY message carrying inline content is
+        // complete by definition (old transport) — validate it immediately.
+        const hasInlineContent = typeof (resolvedMessage as any).content === "string"
+          || typeof (resolvedMessage as any).text === "string"
+        const finalized = msgFinish === "stop" || msgCompleted || hasInlineContent
+        const message: any = {
+          ...resolvedMessage,
+          id: turnMsgId,
+          role: msgRole,
+          content: assembleMessageContent(turnMsgId, resolvedMessage),
+        }
+
         // v4: сообщения, созданные ПОКА выполняется Task-субагент, принадлежат
         // субагенту (writer легально пишет "## Findings" и свой JSON) —
         // enforcement атрибутирован родителю, пропускаем.
@@ -456,7 +627,7 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
           // НО JSON reviewer-агентов проверяется на severity (warn-only: плагин
           // не может блокировать вывод субагента; fail-closed потребление —
           // в промпте orchestrator'а: missing severity = concern).
-          const subMessage = (event as any).properties?.message || (event as any).message
+          const subMessage = message
           const subJson = subMessage ? extractJSONFromMessage(subMessage) : null
           const subAgent = subJson?.agent ? String(subJson.agent) : null
           if (subJson && subAgent && SEVERITY_AGENTS.includes(subAgent)) {
@@ -526,21 +697,43 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
           return
         }
 
-        const message = (event as any).properties?.message
-          || (event as any).message
-
-        if (!message) return
-
         // v6 (Phase 13.3): turn boundary = a NEW primary message. Dedup by messageID:
         // message.updated fires per streaming chunk — the counter resets ONLY when the
         // message changes (an unconditional reset would zero the counter between two Task
         // calls of the SAME message, making the 13.2 gate inert — source-plan correction).
         // Subagent messages never reach here (the depth>0 branch returns earlier).
-        const turnMsgId = String((message as any).id || (message as any).info?.id || "")
         if (currentAgent && turnMsgId && lastTurnMessageID.get(currentAgent) !== turnMsgId) {
           lastTurnMessageID.set(currentAgent, turnMsgId)
           taskCallsPerTurn.set(currentAgent, 0)
         }
+
+        // v7 (Multi-Phase MVP): confirmation gate CLEARING. (a) explicit user-role
+        // message (role pattern of the self-work guard below); (b) FALLBACK — any NEW
+        // assistant messageID: the primary only wakes on user input or Task completion,
+        // and Task is blocked while awaiting ⇒ a new assistant turn implies the user
+        // replied (robust even if user messages never reach message.updated — R1).
+        // Streaming re-fires of the SAME AWAITING message (turnMsgId === awaitingMsgId)
+        // do NOT clear — same-messageID Task calls stay blocked (gate in
+        // tool.execute.before). Subagent messages never reach here (depth guard above).
+        if (awaitingConfirmation) {
+          const gateRole = String((message as any).role || (message as any).info?.role || "assistant")
+          if (gateRole === "user") {
+            awaitingConfirmation = false
+            awaitingMsgId = null
+            await client.app.log({ body: { service: "workflow-enforcement", level: "info",
+              message: "USER RESPONSE RECEIVED — confirmation gate cleared" } })
+          } else if (turnMsgId && turnMsgId !== awaitingMsgId) {
+            awaitingConfirmation = false
+            awaitingMsgId = null
+            await client.app.log({ body: { service: "workflow-enforcement", level: "info",
+              message: "NEW ASSISTANT TURN after AWAITING — user reply implied (turn-based guarantee); gate cleared" } })
+          }
+        }
+
+        // v7.1 (P0): only FINALIZED messages are validated — user messages were
+        // already handled by the gate-clearing block above; streaming chunks without
+        // finish/completed cannot be trusted for identity/JSON extraction.
+        if (!finalized) return
 
         // v6 (Phase 9.0г, correction F-9): per-event marker — "a deferred flag was set
         // DURING THIS message.updated run". The recovery in the valid-JSON else-branch
@@ -742,8 +935,21 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
             }
 
             // Primary agents: pipeline must be non-empty unless state="COMPLETE"
+            // v7 (Multi-Phase MVP): AWAITING_CONFIRMATION / CANCELLED / terminal shapes
+            // of a MULTI_PHASE session legally carry pipeline=[] + next_agent=null (the
+            // explicit MULTI_PHASE branch of validatePipeline validates them). Without
+            // this exemption every such turn arms pipelineMismatch — the deferred gate
+            // 9.0в would then mask the confirmation-gate message (T9) and break the
+            // "AWAITING turn is VALID" design (T15b/T19). Single-phase semantics
+            // (incl. OUT OF SCOPE type=null) are UNCHANGED (R4).
+            const mpEmptyShapeOk = currentAgent === "orchestrator" &&
+              String(jsonContent.type) === "MULTI_PHASE" &&
+              (jsonContent.state === "AWAITING_CONFIRMATION" ||
+               jsonContent.state === "CANCELLED" ||
+               ((jsonContent.state === null || jsonContent.state === undefined) &&
+                (jsonContent.next_agent === null || jsonContent.next_agent === undefined)))
             if ((currentAgent === "orchestrator" || currentAgent === "plankestrator") &&
-                jsonContent.state !== "COMPLETE" &&
+                jsonContent.state !== "COMPLETE" && !mpEmptyShapeOk &&
                 (!pipeline || pipeline.length === 0)) {
               pipelineMismatch = true
               v6FlagSetThisEvent = true
@@ -780,9 +986,40 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
                   jsonContent.type === "DOCS" && String(nextAgent) === pipeline[0]
                 // (4) F-11 (R15): SUPERCOMPLEX row-6 semantics not fully formalized
                 //     (rework absent from the base array; per-step re-emission) → log-only.
+                //     v7: extended to a SUPERCOMPLEX PHASE inside a MULTI_PHASE session.
                 const isSupercomplexExempt = !SUPERCOMPLEX_STRICT &&
-                  jsonContent.complexity === "SUPERCOMPLEX"
-                if (!(isLoopback || isReworkSkip || isDocsHook || isSupercomplexExempt)) {
+                  (jsonContent.complexity === "SUPERCOMPLEX" ||
+                   (jsonContent.type === "MULTI_PHASE" &&
+                    String(resolveCurrentPhase(jsonContent)?.complexity) === "SUPERCOMPLEX"))
+                // (5) v7 (Multi-Phase MVP): phase transition (MP-5) — next_agent = the
+                //     first agent of the NEW phase's chain; effectiveStep still points
+                //     into the OLD phase's pipeline → the mismatch is structural.
+                const isPhaseTransitionMP = !!pState && pState.type === "MULTI_PHASE" &&
+                  jsonContent.type === "MULTI_PHASE" &&
+                  (pState.currentPhaseIdx ?? -1) >= 0 &&
+                  Array.isArray(jsonContent.phases) &&
+                  jsonContent.phases.findIndex((p: any) => p?.id === jsonContent?.current_phase) === (pState.currentPhaseIdx ?? -1) + 1 &&
+                  String(nextAgent) === String((Array.isArray(jsonContent.pipeline) ? jsonContent.pipeline[0] : ""))
+                // (6) v7: MULTI_PHASE in-phase Auto-DOCS hook (MP-4) — next_agent =
+                //     "docs-writer" = newPipeline[0] of the canonical hook chain (case (3)
+                //     isDocsHook keys on jsonContent.type === "DOCS", which never holds
+                //     for MULTI_PHASE turns).
+                const isDocsHookMP = !!pState && pState.type === "MULTI_PHASE" &&
+                  jsonContent.type === "MULTI_PHASE" &&
+                  JSON.stringify(jsonContent.pipeline ?? null) === JSON.stringify(DOCS_HOOK_CHAIN) &&
+                  String(nextAgent) === "docs-writer" &&
+                  (pState.currentStep >= pState.pipeline.length - 1)   // hook fires after the phase's final step
+                // (7) v7: MULTI_PHASE in-phase BUGFIX continuation (MP-2) — same phase,
+                //     prev pipeline ["bugfix-triage"], new pipeline = a BUGFIX variant
+                //     (re-validated by validatePipeline), next_agent = newPipeline[1].
+                const isBugfixContMP = !!pState && pState.type === "MULTI_PHASE" &&
+                  jsonContent.type === "MULTI_PHASE" &&
+                  (pState.currentPhaseIdx ?? -1) === (Array.isArray(jsonContent.phases)
+                    ? jsonContent.phases.findIndex((p: any) => p?.id === jsonContent?.current_phase) : -2) &&
+                  JSON.stringify(pState.pipeline) === JSON.stringify(["bugfix-triage"]) &&
+                  String(nextAgent) === String((jsonContent.pipeline ?? [])[1] ?? "")
+                if (!(isLoopback || isReworkSkip || isDocsHook || isSupercomplexExempt ||
+                      isPhaseTransitionMP || isDocsHookMP || isBugfixContMP)) {
                   nextAgentMismatch = true  // Phase 9.3 → THROW via gate 9.0в
                   v6FlagSetThisEvent = true
                   violationDetail = `NEXT_AGENT MISMATCH at step ${effectiveStep} — ${nextAgentValidation.error}`
@@ -793,7 +1030,8 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
                     level: "error",
                     message: `NEXT_AGENT VALIDATION FAILED — ${nextAgentValidation.error}`,
                     extra: { agent: currentAgent, nextAgent, pipeline, effectiveStep,
-                      whitelisted: isLoopback || isReworkSkip || isDocsHook || isSupercomplexExempt }
+                      whitelisted: isLoopback || isReworkSkip || isDocsHook || isSupercomplexExempt ||
+                        isPhaseTransitionMP || isDocsHookMP || isBugfixContMP }
                   }
                 })
               }
@@ -823,6 +1061,29 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
             violationDetail = `INVALID JSON OUTPUT — errors: ${validation.errors.join("; ")}, missing: ${validation.missingFields.join(", ")}`
           } else {
             hasOutputtedJSON.set(currentAgent, true)
+
+            // v7 (Multi-Phase MVP): confirmation gate ARMING — a VALID
+            // AWAITING_CONFIRMATION JSON arms the gate; Task calls are blocked until
+            // the user replies (direct throw in tool.execute.before — a throw here in
+            // message.updated would be inert). Idempotent assignments; the warn is
+            // deduped because message.updated re-fires per streaming chunk.
+            if (currentAgent === "orchestrator" && String(jsonContent.type) === "MULTI_PHASE" &&
+                String(jsonContent.state) === "AWAITING_CONFIRMATION") {
+              const alreadyArmed = awaitingConfirmation && awaitingMsgId === (turnMsgId || null)
+              awaitingConfirmation = true
+              awaitingMsgId = turnMsgId || null
+              if (!alreadyArmed) {
+                await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
+                  message: "MULTI_PHASE AWAITING CONFIRMATION — Task calls blocked until the user replies",
+                  extra: { agent: currentAgent, msgId: turnMsgId } } })
+              }
+            }
+            // v7: CANCELLED — defensive disarm (normally already cleared by the new
+            // messageID in the gate-clearing block)
+            if (currentAgent === "orchestrator" && jsonContent?.state === "CANCELLED") {
+              awaitingConfirmation = false
+              awaitingMsgId = null
+            }
 
             // v6 (Phase 9.0г-2): recovery — latest-message-wins. A clean valid-JSON
             // message clears message-derived deferred flags left by PREVIOUS messages /
@@ -867,32 +1128,116 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
                 // F-4: classification turns with complexity=null (DECOMPOSITION Turn A,
                 // codebase-analyzer helper, BUGFIX/DEVOPS Turn 1) lock a PROVISIONAL
                 // pipeline — the next turn may replace it freely.
-                const provisional = jsonContent.complexity === null || jsonContent.complexity === undefined
+                // v7 fix (provisional trap — research §7.3-2, risk R9): top-level
+                // complexity of MULTI_PHASE turns is ALWAYS null → without this guard
+                // F-4 would allow ANY pipeline replacement for the whole multi-phase
+                // session. MULTI_PHASE immutability is governed by the MP-1..MP-6
+                // whitelist instead (below). Single-phase semantics unchanged.
+                const provisional = (jsonContent.complexity === null || jsonContent.complexity === undefined) &&
+                  String(jsonContent.type) !== "MULTI_PHASE"
                 const newType = jsonContent.type !== undefined && jsonContent.type !== null
                   ? String(jsonContent.type) : null
                 if (!prev) {
                   // Turn 1 — lock the pipeline (Phase 17.1: first valid JSON wins;
                   // the dedup guard above protects against streaming overwrites).
+                  // v7 (Multi-Phase MVP): + phases[]/current_phase snapshot for the
+                  // MP-1..MP-6 whitelist. For MULTI_PHASE the Turn-1 lock happens on
+                  // the first EXECUTING turn (the AWAITING turn carries pipeline=[]
+                  // and never locks state).
+                  const mpPhases = newType === "MULTI_PHASE" && Array.isArray(jsonContent.phases)
+                    ? jsonContent.phases : undefined
+                  const mpIdx = newType === "MULTI_PHASE"
+                    ? (Array.isArray(jsonContent.phases)
+                        ? jsonContent.phases.findIndex((p: any) => p?.id === jsonContent?.current_phase)
+                        : -1)
+                    : undefined
                   pipelineState.set(currentAgent, {
                     pipeline: newPipeline,
                     currentStep: nextIdx >= 0 ? nextIdx : 0,
                     provisional,
-                    type: newType
+                    type: newType,
+                    phases: mpPhases,
+                    currentPhaseIdx: mpIdx
                   })
-                } else if (JSON.stringify(newPipeline) !== JSON.stringify(prev.pipeline)) {
+                  // v7: resume scenario (MULTI-PHASE Stage 5, prefer-new-session) —
+                  // the session starts mid-chain; prior phase results must exist in
+                  // PHASE_STATE.md (orchestrator reads it as a classification read).
+                  if (mpIdx !== undefined && mpIdx > 0) {
+                    await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
+                      message: `MULTI_PHASE RESUME DETECTED — current_phase ≠ phases[0]; verify prior phase results exist in PHASE_STATE.md`,
+                      extra: { agent: currentAgent, currentPhaseIdx: mpIdx } } })
+                  }
+                } else if (JSON.stringify(newPipeline) !== JSON.stringify(prev.pipeline) ||
+                    // v7 fix (test T16 — unchanged-pipeline phase jump): phases sharing an
+                    // IDENTICAL chain (DEVOPS→DEVOPS, DEV-SIMPLE→DEV-SIMPLE) must still pass
+                    // the MP-1..MP-6 whitelist. Previously such a turn landed in the
+                    // unchanged-advance branch below, which blindly refreshed
+                    // currentPhaseIdx — a phase SKIP (P1→P3) or a backward jump with an
+                    // unchanged pipeline was silently accepted. Route any MULTI_PHASE turn
+                    // whose phase index CHANGES into this whitelist branch: a legal +1
+                    // transition gets full MP-5 semantics (stability check, counters +
+                    // blockerStop reset, observability log); anything else fails closed.
+                    // Single-phase turns (R4) never match — types are not MULTI_PHASE.
+                    ((prev.type === "MULTI_PHASE" || newType === "MULTI_PHASE") &&
+                     Array.isArray(jsonContent.phases) &&
+                     jsonContent.phases.findIndex((p: any) => p?.id === jsonContent?.current_phase) !== prev.currentPhaseIdx)) {
                   // Phase 17.2 — pipeline changed after being locked
-                  const isException =
-                    prev.provisional ||                                     // F-4: provisional classification pipeline
-                    jsonContent.type === "BUGFIX" ||                        // BUGFIX continuation (one-time expansion)
-                    jsonContent.plan_source === "DECOMPOSITION" ||          // DECOMPOSITION Turn B (Q3)
-                    jsonContent.severity === "nit" ||                       // nit-skip re-emission
-                    (prev.type !== "DOCS" && newType === "DOCS") ||         // F-12: Auto-DOCS hook
-                    (!SUPERCOMPLEX_STRICT && jsonContent.complexity === "SUPERCOMPLEX") // F-11 / R15
+                  // v7 (Multi-Phase MVP): TWO branches — a CLOSED whitelist MP-1..MP-6
+                  // for MULTI_PHASE sessions (F-4 provisional does NOT apply — see the
+                  // provisional fix above) vs the legacy single-phase exceptions
+                  // (verbatim, UNCHANGED — R4 regression safety).
+                  let isException: boolean
+                  let mpCase: string | null = null
+                  if (prev.type === "MULTI_PHASE" || newType === "MULTI_PHASE") {
+                    const newPhases = Array.isArray(jsonContent.phases) ? jsonContent.phases : []
+                    const prevIdx = prev.currentPhaseIdx ?? -1
+                    const newIdx = newPhases.findIndex((p: any) => p?.id === jsonContent?.current_phase)
+                    const samePhase = prevIdx >= 0 && newIdx === prevIdx
+                    const phaseAdvanced = prevIdx >= 0 && newIdx === prevIdx + 1   // MVP: strictly +1
+                    const stableOrRefined = phasesStableOrRefined(prev.phases ?? [], newPhases, jsonContent?.current_phase)
+                    const prevPhase = (prev.phases ?? [])[prevIdx]
+                    const newPhase = newPhases[newIdx]
+                    // MP-2: in-phase BUGFIX continuation (triage → expanded variant;
+                    // variants are re-validated by validatePipeline)
+                    const isBugfixContinuationMP = samePhase && String(prevPhase?.type) === "BUGFIX" &&
+                      JSON.stringify(prev.pipeline) === JSON.stringify(["bugfix-triage"]) &&
+                      newPipeline.length > 1 && newPipeline[0] === "bugfix-triage"
+                    // MP-4: in-phase Auto-DOCS hook (canonical 2-agent chain only —
+                    // mechanical check, safe)
+                    const isDocsHookMP = samePhase && JSON.stringify(newPipeline) === JSON.stringify(DOCS_HOOK_CHAIN) &&
+                      ["BUGFIX", "DEV"].includes(String(newPhase?.type ?? prevPhase?.type))
+                    // MP-1/MP-3: phase refinement (null→resolved, once) / in-phase
+                    // DECOMPOSITION dispatch
+                    const isDecompMP = samePhase && (jsonContent.plan_source === "DECOMPOSITION" ||
+                      (newPipeline.length === 1 && ["dev-planner", "codebase-analyzer"].includes(newPipeline[0])))
+                    if (samePhase && stableOrRefined && (isDecompMP || isBugfixContinuationMP || isDocsHookMP ||
+                        String(newPhase?.complexity) === "SUPERCOMPLEX" /* MP-6, F-11 parity — log-only */)) {
+                      isException = true
+                      mpCase = isDocsHookMP ? "MP-4 in-phase Auto-DOCS hook"
+                        : isBugfixContinuationMP ? "MP-2 in-phase BUGFIX continuation"
+                        : isDecompMP ? "MP-1/MP-3 phase refinement / DECOMPOSITION"
+                        : "MP-6 SUPERCOMPLEX per-step re-emission"
+                    } else if (phaseAdvanced && stableOrRefined) {
+                      // MP-5: legal phase transition (+1, phases stable)
+                      isException = true
+                      mpCase = "MP-5 phase transition"
+                    } else {
+                      isException = false
+                    }
+                  } else {
+                    isException =
+                      prev.provisional ||                                     // F-4: provisional classification pipeline (single-phase only — v7)
+                      jsonContent.type === "BUGFIX" ||                        // BUGFIX continuation (one-time expansion)
+                      jsonContent.plan_source === "DECOMPOSITION" ||          // DECOMPOSITION Turn B (Q3)
+                      jsonContent.severity === "nit" ||                       // nit-skip re-emission
+                      (prev.type !== "DOCS" && newType === "DOCS") ||         // F-12: Auto-DOCS hook
+                      (!SUPERCOMPLEX_STRICT && jsonContent.complexity === "SUPERCOMPLEX") // F-11 / R15
+                  }
                   if (isException) {
                     // v6 (advisor Note 2): pipeline replacement = a new chain/stage
                     // context (SUPERCOMPLEX per-plan-step re-emission, BUGFIX
-                    // continuation, DECOMPOSITION Turn B, Auto-DOCS hook) → the
-                    // previous rework loop is finished; reset its counters.
+                    // continuation, DECOMPOSITION Turn B, Auto-DOCS hook; v7: MP-1..MP-6)
+                    // → the previous rework loop is finished; reset its counters.
                     if ((reworkCount.get(currentAgent) || 0) > 0 || (blockerEscalations.get(currentAgent) || 0) > 0) {
                       await client.app.log({ body: { service: "workflow-enforcement", level: "info",
                         message: `REWORK/BLOCKER COUNTERS RESET — pipeline replaced, new loop context`,
@@ -900,6 +1245,22 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
                     }
                     reworkCount.delete(currentAgent)
                     blockerEscalations.delete(currentAgent)
+                    // v7 (Multi-Phase MVP): blockerStop reset is SCOPED to the legal
+                    // phase transition ONLY (MP-5 = new fail-fast context; resume after
+                    // fail-fast in the SAME session — R10). Single-phase semantics
+                    // "cumulative, only session.created clears" are UNCHANGED (V-17).
+                    // The detail is cleared only if THIS message set no other flag
+                    // (otherwise the fresh violation detail must survive).
+                    if (mpCase === "MP-5 phase transition" && blockerStop) {
+                      blockerStop = false
+                      if (!v6FlagSetThisEvent) violationDetail = ""
+                      await client.app.log({ body: { service: "workflow-enforcement", level: "info",
+                        message: "BLOCKERSTOP RESET — legal multi-phase transition (new phase = new fail-fast context)" } })
+                    }
+                    if (mpCase) {
+                      await client.app.log({ body: { service: "workflow-enforcement", level: "info",
+                        message: `MULTI_PHASE MUTATION ALLOWED — ${mpCase}`, extra: { agent: currentAgent, mpCase } } })
+                    }
                     maxStepReached.set(currentAgent, nextIdx >= 0 ? nextIdx : 0)
                     prev.pipeline = newPipeline
                     // F-1: currentStep = indexOf(next_agent), NO "-1". The message
@@ -911,10 +1272,18 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
                     if (nextIdx >= 0) prev.currentStep = nextIdx
                     prev.provisional = provisional
                     prev.type = newType
+                    // v7: refresh the multi-phase snapshot (refined phases + new index)
+                    if (newType === "MULTI_PHASE") {
+                      prev.phases = Array.isArray(jsonContent.phases) ? jsonContent.phases : prev.phases
+                      const idx = (prev.phases ?? []).findIndex((p: any) => p?.id === jsonContent?.current_phase)
+                      if (idx >= 0) prev.currentPhaseIdx = idx
+                    }
                   } else {
                     pipelineImmutable = true
                     v6FlagSetThisEvent = true
-                    violationDetail = `PIPELINE IMMUTABLE: pipeline changed after Turn 1 — [${prev.pipeline.join(", ")}] → [${newPipeline.join(", ")}] (exceptions: provisional classification, BUGFIX continuation, DECOMPOSITION, nit-skip, Auto-DOCS hook)`
+                    violationDetail = (prev.type === "MULTI_PHASE" || newType === "MULTI_PHASE")
+                      ? `PIPELINE IMMUTABLE (MULTI_PHASE): illegal mutation — allowed: phase refinement (null→resolved, once), in-phase BUGFIX continuation / DECOMPOSITION / Auto-DOCS hook, phase transition (+1, phases stable). Got: [${prev.pipeline.join(", ")}] → [${newPipeline.join(", ")}], current_phase idx ${prev.currentPhaseIdx} → ${jsonContent?.current_phase}`
+                      : `PIPELINE IMMUTABLE: pipeline changed after Turn 1 — [${prev.pipeline.join(", ")}] → [${newPipeline.join(", ")}] (exceptions: provisional classification, BUGFIX continuation, DECOMPOSITION, nit-skip, Auto-DOCS hook)`
                   }
                 } else if (nextIdx >= 0) {
                   // pipeline unchanged — advance the step to the actual next_agent
@@ -937,6 +1306,21 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
                   }
                   maxStepReached.set(currentAgent, Math.max(prevMax, nextIdx))
                   prev.currentStep = nextIdx
+                  // v7 fix (advisor MP-1 "refinement once per phase"): a phase
+                  // refinement (complexity/plan_exists null→resolved) does NOT
+                  // change the pipeline agent array, so this turn lands in the
+                  // "pipeline unchanged" branch — yet the phases snapshot MUST be
+                  // refreshed here too. Otherwise the stale nulls let
+                  // `phasesStableOrRefined` accept the same refinement again on a
+                  // later turn (unbounded refinement). This mirrors the legal-
+                  // mutation branch above (refresh phases + recompute the index
+                  // from current_phase id; never assign the id as an index).
+                  // Guard = the multiphase context, on either side of the turn.
+                  if (prev.type === "MULTI_PHASE" || newType === "MULTI_PHASE") {
+                    if (Array.isArray(jsonContent.phases)) prev.phases = jsonContent.phases
+                    const idx = (prev.phases ?? []).findIndex((p: any) => p?.id === jsonContent?.current_phase)
+                    if (idx >= 0) prev.currentPhaseIdx = idx
+                  }
                 }
               }
             }
@@ -944,23 +1328,33 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
             // v6 (Phase 16): strict ack format audit (WARN-ONLY — never blocks; a
             // measurable format-drift signal before any future escalation). Only for
             // delegation turns (next_agent truthy); OUT OF SCOPE and final turns
-            // (next_agent=null) require no ack. Correction F-5 — SIX legal ack variants
-            // verified against the CURRENT prompts (post-Part I):
+            // (next_agent=null) require no ack. Correction F-5 — NINE legal ack variants
+            // verified against the CURRENT prompts (post-Part I; v7 Multi-Phase adds 7–9):
             //   1. "→ DELEGATED to <agent> for: <goal>"                 (both TURN ALGORITHMs)
             //   2. "→ STEP <i>/<N> (<id>): DELEGATED to <agent>"        (orchestrator SUPERCOMPLEX Stage 2)
             //   3. "→ DELEGATED to advisor (step <N>, notes so far: <c>)" (orchestrator ADVISOR STEP RULES)
             //   4. "→ rework SKIPPED (dev-reviewer severity=nit)"       (orchestrator SEVERITY RULES)
             //   5. "→ SUPERCOMPLEX steps (<N>): [...] (source: ...)"    (orchestrator SUPERCOMPLEX Stage 1 echo)
             //   6. "→ DECOMPOSITION requested from dev-planner for: <goal>" (orchestrator Q3)
+            //   7. "→ PHASE <i>/<n> (<id>): DELEGATED to <agent> for: <goal>"           (v7 MULTI-PHASE Stage 2–4)
+            //   8. "→ PHASE <i>/<n> (<id>), STEP <j>/<m> (<sid>): DELEGATED to <agent>" (v7 SUPERCOMPLEX inside a phase)
+            //   9. "→ PHASE PLAN AWAITING CONFIRMATION (<n> phases)"                    (v7 AWAITING turn; future-proof — next_agent=null skips the audit today)
             // `[\w-]+` (not `\w+`) — agent names contain hyphens (plan-writer-simple).
             // Post-ack prose checking ("no analysis after the ack") is OUT of scope (R16).
             if (jsonContent.next_agent && msgId && !processedMessageIDs.has(msgId + ":ack")) {
               processedMessageIDs.add(msgId + ":ack")
               const ackContent = String(message.content || message.text || "")
-              const ackPattern = /^→ (?:(?:STEP \d+\/\d+\s*(?:\([^)]*\))?\s*:\s*)?DELEGATED to [\w-]+(?:\s*\(step [^)]*\)| for: .+)?|DECOMPOSITION requested from [\w-]+ for: .+|rework SKIPPED \(.+\)|SUPERCOMPLEX steps \(\d+\):.*\(source: .+\))\s*$/m
+              // v7: + optional "PHASE <i>/<n> (<id>)" prefix with ":" OR "," separator
+              // (forms 7–8), + barrier form "PHASE <i>/<n> (<id>): <STATUS>" and
+              // "PHASE PLAN AWAITING CONFIRMATION (<n> phases)" (form 9).
+              // FIX of the master-plan regex (deviation B): the prefix MUST accept ":"
+              // — "PHASE 1/2 (P1): DELEGATED …" is the primary phase-ack form; the
+              // plan's "(?:,\s*)?" matched only the comma form and would warn on every
+              // phase delegation (T24). Old forms 1–6 are untouched (regression-safe).
+              const ackPattern = /^→ (?:(?:PHASE \d+\/\d+\s*\([^)]*\)\s*(?::\s*|,\s*))?(?:(?:STEP \d+\/\d+\s*(?:\([^)]*\))?\s*:\s*)?DELEGATED to [\w-]+(?:\s*\(step [^)]*\)| for: .+)?|PHASE \d+\/\d+\s*\([^)]*\)\s*:\s*[A-Z+]+|PHASE PLAN AWAITING CONFIRMATION \(\d+ phases?\)|DECOMPOSITION requested from [\w-]+ for: .+|rework SKIPPED \(.+\)|SUPERCOMPLEX steps \(\d+\):.*\(source: .+\)))\s*$/m
               if (!ackPattern.test(ackContent)) {
                 await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
-                  message: `ACK FORMAT INVALID — ${currentAgent}: expected one of the 6 legal ack forms (see the Phase 16 comment)`,
+                  message: `ACK FORMAT INVALID — ${currentAgent}: expected one of the 9 legal ack forms (see the Phase 16 comment)`,
                   extra: { agent: currentAgent, excerpt: ackContent.slice(0, 200) } } })
               }
             }
@@ -1143,6 +1537,26 @@ could run. Fix: re-issue a corrected message in the required order:
 1. "IDENTITY VERIFIED: I am ${currentAgent}..."
 2. Valid JSON block (all required fields, pipeline per PIPELINE TABLE)
 3. THEN the Task call.
+        `)
+      }
+
+      // v7 (Multi-Phase MVP): CONFIRMATION GATE — direct throw (blocks the call itself;
+      // a throw inside message.updated would be inert). Scope: Task ONLY — read/glob/grep
+      // stay legal (re-planning on edit rounds may need a classification read).
+      // Same-turn violation: the AWAITING JSON and a Task call in one message share the
+      // messageID → the gate is still armed. Placed AFTER gate 9.0в (deferred violations
+      // take priority) and BEFORE the Phase 13.2 counter (a blocked call must not
+      // consume the per-turn Task quota).
+      if (awaitingConfirmation && currentAgent === "orchestrator" && input.tool === "task") {
+        await client.app.log({ body: { service: "workflow-enforcement", level: "error",
+          message: "CONFIRMATION GATE — Task blocked while AWAITING_CONFIRMATION",
+          extra: { agent: currentAgent, awaitingMsgId } } })
+        throw new Error(`
+⛔ AWAITING USER CONFIRMATION (MULTI_PHASE):
+You presented a phase plan with state="AWAITING_CONFIRMATION". Do NOT dispatch any
+Task until the USER replies. Your turn ended with the plan + ack line.
+On the user's approval: identity line → JSON (state: null, current_phase: "P1",
+pipeline = P1's chain, next_agent = pipeline[0]) → ONE Task call.
         `)
       }
 
@@ -1749,6 +2163,17 @@ function detectAgentFromSessionData(sessionData: any): string | null {
 function detectPlanMode(sessionData: any): "plan" | "build" {
   if (!sessionData) return "build"
 
+  // v7.1 (P0 event-shape fix): an explicit CUSTOM primary agent (orchestrator /
+  // plankestrator) is NEVER built-in Plan mode — built-in Plan uses agent "plan".
+  // session.updated.info carries agent + a permission RULE list ({permission,
+  // pattern, action}); the permission heuristics below would misread that list as
+  // read-only and return "plan", silently bypassing ALL enforcement (the P0 root
+  // cause). Guard BEFORE every heuristic.
+  if (typeof sessionData.agent === "string" &&
+      (sessionData.agent === "orchestrator" || sessionData.agent === "plankestrator")) {
+    return "build"
+  }
+
   // Method 1 (PRIMARY): agent name itself is the mode indicator.
   // OpenCode switches the primary agent from "build" to "plan" on Shift+Tab.
   // This is verified from real LLM-request logs (agent=plan, mode=primary).
@@ -1805,6 +2230,13 @@ function detectPlanMode(sessionData: any): "plan" | "build" {
     }
   }
   if (Array.isArray(perm)) {
+    // v7.1 (P0): a permission-rule LIST (opencode 1.18.34 ships
+    // [{permission,pattern,action}]) is NOT a read-only tool-name set — it must
+    // NOT be interpreted as Plan mode. Without this guard the whole enforcement
+    // is bypassed on every orchestrator session.
+    if (perm.some((p: any) => p && typeof p === "object" && "permission" in p)) {
+      return "build"
+    }
     // permission array of allowed tool names
     const writeLike = new Set(["edit", "write", "bash", "task", "patch", "apply"])
     const hasWriteLike = perm.some((p: any) => typeof p === "string" && writeLike.has(p))
@@ -1883,6 +2315,127 @@ function extractJSONFromMessage(message: any): any | null {
 }
 
 // ============================================================
+// v7.1 (P0 event-shape fix) — payload normalization + text-buffer helpers.
+// opencode 1.18.34 wraps every payload as properties.info; legacy shapes used
+// properties.session / properties.message. These helpers keep BOTH.
+// ============================================================
+
+/** Resolve the SESSION object from an event payload (new: properties.info). */
+function resolveSessionData(event: any): any {
+  const props = event?.properties
+  return props?.info ?? props?.session ?? props ?? event
+}
+
+/** Resolve the MESSAGE object from a message.updated payload (new: properties.info). */
+function resolveMessage(event: any): any {
+  const props = event?.properties
+  return props?.info ?? props?.message ?? event?.message ?? null
+}
+
+/** Track a text part's id under its messageID (ordered, LRU-capped). */
+function rememberMessagePart(messageID: string, partID: string): void {
+  let parts = messageParts.get(messageID)
+  if (!parts) {
+    parts = []
+    messageParts.set(messageID, parts)
+  }
+  if (!parts.includes(partID)) parts.push(partID)
+  while (messageParts.size > TEXT_BUFFER_CAP) {
+    const oldest = messageParts.keys().next().value
+    if (oldest === undefined || oldest === messageID) break
+    const oldParts = messageParts.get(oldest) ?? []
+    for (const pid of oldParts) {
+      partTexts.delete(pid)
+      partDeltas.delete(pid)
+      partTypes.delete(pid)
+    }
+    messageParts.delete(oldest)
+  }
+}
+
+/** Assemble the full text of a message from its buffered TEXT parts.
+ *  Inline content (legacy shape / harness) wins; otherwise the cumulative
+ *  part.updated text supersedes the delta accumulation when it is at least as
+ *  long (final part.updated carries the complete text). */
+function assembleMessageContent(messageID: string, message: any): string {
+  const inline = message?.content ?? message?.text
+  if (typeof inline === "string" && inline) return inline
+  const parts = messageParts.get(messageID)
+  if (!parts || parts.length === 0) return ""
+  let out = ""
+  for (const pid of parts) {
+    const full = partTexts.get(pid)
+    const delta = partDeltas.get(pid)
+    out += (full != null && full.length >= (delta?.length ?? 0)) ? full : (delta ?? full ?? "")
+  }
+  return out
+}
+
+// ============================================================
+// v7 (Multi-Phase MVP) — phase helpers (module-level; hoisted —
+// used by message.updated, validatePipeline and validateJSONOutput)
+// ============================================================
+
+/** v7: current phase object of a MULTI_PHASE JSON, or null. */
+function resolveCurrentPhase(json: any): any | null {
+  if (String(json?.type) !== "MULTI_PHASE" || !Array.isArray(json?.phases)) return null
+  if (json?.current_phase == null) return null
+  return json.phases.find((p: any) => p?.id === json?.current_phase) ?? null
+}
+
+/** v7: structural validation of phases[] (fail-closed). Returns error string or null. */
+function validatePhasesStructure(phases: any, state: string | null): string | null {
+  if (!Array.isArray(phases)) return "phases must be an array"
+  if (phases.length < MULTI_PHASE_MIN || phases.length > MULTI_PHASE_MAX)
+    return `phases.length ${phases.length} out of range [${MULTI_PHASE_MIN}..${MULTI_PHASE_MAX}] (MVP; >3 → ask the user to split the request)`
+  const ids = new Set<string>()
+  let supercomplexCount = 0
+  for (let i = 0; i < phases.length; i++) {
+    const p = phases[i]
+    if (!p || typeof p.id !== "string" || !p.id) return `phases[${i}].id missing`
+    if (ids.has(p.id)) return `duplicate phase id "${p.id}"`
+    ids.add(p.id)
+    if (!MULTI_PHASE_TYPES.includes(String(p.type))) return `phases[${i}].type invalid: ${p.type}`
+    if (p.complexity != null && !["SIMPLE", "COMPLEX", "DEEP", "SUPERCOMPLEX"].includes(String(p.complexity)))
+      return `phases[${i}].complexity invalid: ${p.complexity}`
+    if (p.plan_exists != null && typeof p.plan_exists !== "boolean")
+      return `phases[${i}].plan_exists must be boolean|null`
+    if (String(p.complexity) === "SUPERCOMPLEX") {
+      supercomplexCount++
+      // AWAITING time: plan_exists may still be null (in-phase DECOMPOSITION pending)
+      if (state !== "AWAITING_CONFIRMATION" && p.plan_exists !== true)
+        return `phases[${i}]: SUPERCOMPLEX requires plan_exists=true`
+    }
+    // MVP linear chain: depends_on = exactly [previous id]; root = phases[0] with []
+    const deps = Array.isArray(p.depends_on) ? p.depends_on : null
+    if (!deps) return `phases[${i}].depends_on must be an array`
+    const expectedDeps = i === 0 ? [] : [phases[i - 1].id]
+    if (JSON.stringify(deps) !== JSON.stringify(expectedDeps))
+      return `phases[${i}].depends_on must be ${JSON.stringify(expectedDeps)} (MVP: linear chain)`
+  }
+  if (supercomplexCount > 1) return `at most ONE SUPERCOMPLEX phase allowed (got ${supercomplexCount})`
+  return null
+}
+
+/** v7: true iff phases arrays are identical EXCEPT null→value refinement of the
+ *  current phase's complexity/plan_exists (once; other fields frozen). */
+function phasesStableOrRefined(prevPhases: any[], newPhases: any[], currentPhaseId: any): boolean {
+  if (!Array.isArray(prevPhases) || prevPhases.length !== newPhases.length) return false
+  for (let i = 0; i < prevPhases.length; i++) {
+    const a = prevPhases[i] ?? {}, b = newPhases[i] ?? {}
+    if (a.id !== b.id || a.type !== b.type || a.goal !== b.goal ||
+        JSON.stringify(a.depends_on) !== JSON.stringify(b.depends_on)) return false
+    const isCurrent = a.id === currentPhaseId
+    const complexOk = a.complexity === b.complexity ||
+      (isCurrent && (a.complexity === null || a.complexity === undefined) && b.complexity != null)
+    const planOk = a.plan_exists === b.plan_exists ||
+      (isCurrent && (a.plan_exists === null || a.plan_exists === undefined) && typeof b.plan_exists === "boolean")
+    if (!complexOk || !planOk) return false
+  }
+  return true
+}
+
+// ============================================================
 // Pipeline & Identity Validation
 // ============================================================
 
@@ -1938,6 +2491,71 @@ function validatePipeline(agent: string, type: string | null, complexity: string
     return pipeline.length === 0
       ? { valid: true }
       : { valid: false, error: "type=null (OUT OF SCOPE) requires empty pipeline and next_agent=null" }
+  }
+
+  // v7 (Multi-Phase MVP): explicit MULTI_PHASE branch — AWAITING/CANCELLED/terminal
+  // shapes are handled HERE, BEFORE the terminal-turn exemption below, so an AWAITING
+  // turn is distinguishable from a final turn (research §7.5 row 4 — the shape-based
+  // exemption would silently swallow it; risk R8, V-15). Rule 3 is not reached either:
+  // top-level complexity=null is LEGAL for MULTI_PHASE (classification lives in
+  // phases[] — per-phase keys are checked below instead).
+  if (agent === "orchestrator" && type === "MULTI_PHASE") {
+    const mpState = jsonContent?.state != null ? String(jsonContent.state) : null
+    const phases = jsonContent?.phases
+    if (mpState !== null && !MULTI_PHASE_STATES.includes(mpState))
+      return { valid: false, error: `Invalid state for MULTI_PHASE: ${mpState}` }
+    if (mpState === "AWAITING_CONFIRMATION" || mpState === "CANCELLED") {
+      if (pipeline.length !== 0 || (jsonContent?.next_agent !== null && jsonContent?.next_agent !== undefined))
+        return { valid: false, error: `state=${mpState} requires pipeline=[] and next_agent=null` }
+      if (jsonContent?.current_phase != null)
+        return { valid: false, error: `state=${mpState} requires current_phase=null` }
+      if (mpState === "AWAITING_CONFIRMATION") {
+        const structErr = validatePhasesStructure(phases, mpState)
+        if (structErr) return { valid: false, error: structErr }
+      }
+      return { valid: true }
+    }
+    // v7: TERMINAL TURN of a multi-phase session (final summary / fail-fast report):
+    // state=null, pipeline=[], next_agent=null. Same shape exemption as the terminal
+    // block below, replicated HERE because this branch intercepts ALL MULTI_PHASE
+    // turns BEFORE it — without this early return the final turn would fall into the
+    // per-phase key check and [] would never match the phase chain (false
+    // pipelineMismatch on every multi-phase completion; test T15b).
+    if (mpState === null && pipeline.length === 0 &&
+        (jsonContent?.next_agent === null || jsonContent?.next_agent === undefined)) {
+      return { valid: true }
+    }
+    // Executing turn: phases structure + per-phase key
+    const structErr = validatePhasesStructure(phases, mpState)
+    if (structErr) return { valid: false, error: structErr }
+    const phase = resolveCurrentPhase(jsonContent)
+    if (!phase)
+      return { valid: false, error: `current_phase "${jsonContent?.current_phase}" not found in phases[].id` }
+    // In-phase Auto-DOCS hook (canonical 2-agent chain only — mechanical, safe; MP-4)
+    if (JSON.stringify(pipeline) === JSON.stringify(DOCS_HOOK_CHAIN) &&
+        ["BUGFIX", "DEV"].includes(String(phase.type)))
+      return { valid: true }
+    // Per-phase key against the EXISTING table + variants (fail-closed preserved,
+    // V-14). No new PIPELINE_VARIANTS entries (deviation D): a provisional DEV phase
+    // MUST refine plan_exists null→false on the in-phase DECOMPOSITION dispatch turn
+    // (orchestrator.md Q3 parity: Turn A shape plan_exists=false → key DEV-null-false
+    // → existing variants [dev-planner]/[codebase-analyzer]); DEV-null-null stays
+    // fail-closed and the error message guides the model to re-emit with refinement.
+    const pKey = String(phase.type) === "DOCS"
+      ? `${phase.type}-${phase.complexity}-any`
+      : `${phase.type}-${phase.complexity}-${String(phase.plan_exists ?? null)}`
+    const pExpected = PIPELINES.orchestrator?.[pKey]
+    const pVariants = PIPELINE_VARIANTS[`orchestrator:${pKey}`]
+    if (!pExpected && !pVariants)
+      return { valid: false, error: `MULTI_PHASE: unknown phase combination "${pKey}" for phase ${phase.id} (fail-closed)` }
+    const pMatches = pVariants
+      ? pVariants.some(v => JSON.stringify(pipeline) === JSON.stringify(v))
+      : JSON.stringify(pipeline) === JSON.stringify(pExpected)
+    if (!pMatches)
+      return { valid: false, error: `MULTI_PHASE: pipeline mismatch for phase ${phase.id} (${pKey}). Expected: ${
+        pVariants ? pVariants.map(v => `[${v.join(", ")}]`).join(" | ") : `[${pExpected!.join(", ")}]`
+      }, got: [${pipeline.join(", ")}]` }
+    return { valid: true }
   }
 
   // v6 (advisor Note 1 fix): TERMINAL TURN exemption — the final turn carries
@@ -2054,6 +2672,34 @@ function validateJSONOutput(json: any, agent: string): {valid: boolean, errors: 
     if (!(field in json)) {
       missingFields.push(field)
     }
+  }
+
+  // v7 (Multi-Phase MVP): MULTI_PHASE conditional requirements (research §7.3-1:
+  // state/phases/current_phase are REQUIRED iff type=MULTI_PHASE and ABSENT otherwise —
+  // backward compatible; REQUIRED_JSON_FIELDS stays untouched — deviation C).
+  if (agent === "orchestrator" && String(json.type) === "MULTI_PHASE") {
+    if (!("phases" in json)) missingFields.push("phases")
+    if (!("current_phase" in json)) missingFields.push("current_phase")
+    if (!Array.isArray(json.phases)) {
+      errors.push(`Invalid phases: expected array`)
+    } else {
+      const structErr = validatePhasesStructure(json.phases, json.state != null ? String(json.state) : null)
+      if (structErr) errors.push(structErr)
+    }
+    const mpState = json.state != null ? String(json.state) : null
+    if (mpState === "AWAITING_CONFIRMATION" || mpState === "CANCELLED") {
+      if (json.current_phase != null) errors.push(`state=${mpState} requires current_phase=null`)
+    } else {
+      // executing AND final turns carry current_phase (final = last phase id —
+      // orchestrator.md Stage 5; the pipeline=[] terminal shape is exempted in
+      // validatePipeline, but current_phase stays required here)
+      if (json.current_phase == null) errors.push(`MULTI_PHASE executing turn requires current_phase`)
+    }
+  }
+  // v7: state is MULTI_PHASE-only for orchestrator (single-phase turns never carry it;
+  // plankestrator has its own state enum — untouched)
+  if (agent === "orchestrator" && json.state != null && String(json.type) !== "MULTI_PHASE") {
+    errors.push(`state field is only valid with type=MULTI_PHASE (got type=${json.type})`)
   }
 
   // Check valid values

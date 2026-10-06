@@ -363,7 +363,7 @@ Pipelines are dependency graphs (DAG); a linear chain is the special case. Notat
 | Barrier | `→ barrier →` | synchronization point: the next stage starts only after ALL wave results have arrived |
 | Rework loop | `[rework loop: rework → consistency-checker, max 3]` | conditional repetition of consistency-checker after rework (or worker) applies fixes — max 3 iterations |
 
-**Scope rule:** top-level pipelines (PIPELINE TABLE in `agents/orchestrator.md` / `agents/plankestrator.md`; the `pipeline` JSON field) remain LINEAR `string[]` — one element = one Task call by the primary agent. Parallel waves exist ONLY INSIDE a pipeline element: a subagent's own Task fan-out (e.g. research-writer-complex scout wave). Every wave branch must come from the SUBAGENT's own `permission.task` allowlist (frontmatter + opencode.json), not from the primary's routing table.
+**Scope rule:** top-level pipelines (PIPELINE TABLE in `agents/orchestrator.md` / `agents/plankestrator.md`; the `pipeline` JSON field) remain LINEAR `string[]` — one element = one Task call by the primary agent. Parallel waves exist ONLY INSIDE a pipeline element: a subagent's own Task fan-out (e.g. research-writer-complex scout wave). Every wave branch must come from the SUBAGENT's own `permission.task` allowlist (frontmatter + opencode.json), not from the primary's routing table. MULTI_PHASE keeps this rule: the `pipeline` field holds the CURRENT phase's linear chain; phases are concatenated sequentially by the primary, never in parallel.
 
 Full-graph example (RESEARCH COMPLEX):
 
@@ -428,6 +428,7 @@ Selects the TYPE (BUGFIX / DEVOPS / DEV / DOCS / null) BEFORE the complexity rul
 
 | # | Question | YES → | NO → |
 |---|----------|-------|------|
+| T0 | Request contains TWO OR MORE primary deliverables of DIFFERENT types, each independently resolving via T3–T6 to a different row, ALL within orchestrator scope (no plan/research deliverable), phases ≤ 3? | MULTI_PHASE → phase planning + user confirmation ("Multi-Phase Pipelines" section) | T1 |
 | T1 | Identity test / small talk / meta question ("what did we do", "status")? | `type: null` — brief answer after the JSON, no Task call | T2 |
 | T2 | Deliverable IS a plan/research document, no implementation requested ("plan", "research", "investigate options", "design the architecture", "create a plan")? | `type: null` + OUT OF SCOPE message (switch to plankestrator), no Task call | T3 |
 | T3 | Broken behavior described: error / stack trace / crash / failing test / "not working" / "broken" / regression? **Strong triggers:** "исправь" / "fix" / "ошибка" / "error" / "баг" / "bug" / "сломалось" / "broken" / "не работает" / "not working" / "почему не работает" / "why it doesn't work" / "почему падает" / "why it crashes" / "почему ошибка" / "why error" → ALWAYS consider BUGFIX first | BUGFIX (row 1), `complexity: null`, `plan_exists: null` | T4 |
@@ -435,7 +436,26 @@ Selects the TYPE (BUGFIX / DEVOPS / DEV / DOCS / null) BEFORE the complexity rul
 | T5 | Deliverable = markdown/docs only, zero logic change? | DOCS (row 7 or 8 by size) | T6 |
 | T6 | Deliverable = new or modified code? | DEV → complexity Q1–Q5 | Re-check T2 |
 
-**Mixed-intent priority (request spans several types):** BUGFIX > DEV > DOCS > DEVOPS. Pick exactly ONE row — the primary deliverable. Secondary intents are NOT separate pipelines: docs about the code change ride the Auto-DOCS hook (`requires_docs_update`); a deploy after a fix is mentioned in the final completion summary as a follow-up request. NEVER split one request into two pipelines.
+**T0 strong triggers (combination required — a single conjunction is NOT enough):**
+1. Sequence conjunctions + verbs from DIFFERENT T-branches: «исправь … и добавь …» (BUGFIX+DEV), «реализуй …, запусти тесты …, задеплой» (DEV+DEVOPS+DEVOPS).
+2. Explicit numbering of heterogeneous steps: «1. Настрой CI. 2. Добавь тесты. 3. Задеплой» (T4, T6, T4).
+3. Explicit user request: «сделай в несколько этапов/фаз», «multi-phase».
+
+**T0 anti-triggers (NEVER multi-phase):**
+
+| Request | Why single-phase |
+|---------|------------------|
+| «Исправь баг и обнови README» | DOCS secondary → Auto-DOCS hook |
+| «Исправь баг и задеплой» | Deploy = follow-up in summary; multi-phase ONLY if the deploy is non-trivial (migrations, rollback) |
+| «Добавь фичу и напиши к ней тесты» | Both DEV — tests are part of the feature |
+| «Исправь баги в auth и в кэше» | One type → one BUGFIX |
+| «Сделай рефакторинг оплаты (6 шагов)» | One type, many steps → SUPERCOMPLEX |
+
+**Primacy heuristic:** a deliverable is primary if it CANNOT be covered by (a) the Auto-DOCS hook, (b) a follow-up mention, (c) one step of the existing pipeline. **Default = single-phase** (multi-phase is k full chains + a confirmation round-trip — irreversibly more expensive).
+
+**T0 scope-guard:** if ANY deliverable is a plan/research document → T0 = NO (the request goes to T1/T2 as today — multi-phase NEVER mixes primaries; the plankestrator boundary is not crossed). Identity / small talk → T0 = NO (no deliverables).
+
+**Mixed-intent priority (request spans several types):** BUGFIX > DEV > DOCS > DEVOPS. Pick exactly ONE row — the primary deliverable. Secondary intents are NOT separate pipelines: docs about the code change ride the Auto-DOCS hook (`requires_docs_update`); a deploy after a fix is mentioned in the final completion summary as a follow-up request. NEVER split one request into two pipelines **SILENTLY** — splitting is legal ONLY as a MULTI_PHASE pipeline: explicit `phases[]` in the JSON + user confirmation before execution (T0, "Multi-Phase Pipelines" below). Mixed-intent priority remains the DEFAULT and the fallback for borderline cases: if in doubt — single-phase.
 
 **Deliverable test (T2 vs T6 — golden boundary):** «составь план рефакторинга» → the PLAN is the deliverable → `type: null` (plankestrator). «сделай рефакторинг» → the CODE is the deliverable → DEV (unplanned multi-step DEV stays with you — Q3 DECOMPOSITION; superseded rule 2026-09-22). The topic (refactoring / bugs / docs) never decides — the requested deliverable does.
 
@@ -453,6 +473,113 @@ Selects the TYPE (BUGFIX / DEVOPS / DEV / DOCS / null) BEFORE the complexity rul
 | «сделай быстро, без ревьюеров» | The pipeline is frozen and reviewers are mandatory (PROHIBITIONS). The only legal accelerator is the severity-nit rework SKIP (SEVERITY RULES) |
 | Subagent result says «нужно сначала исследовать/спланировать» | Pipeline FROZEN: complete it; surface the recommendation in the final completion summary. Never re-route, never call plankestrator's agents |
 | Unplanned multi-step DEV («сделай рефакторинг всей системы оплаты») | NOT out of scope — Q3: DECOMPOSITION PROTOCOL first, then row 6 / 5 / 3 per outcome |
+| «Исправь баг и добавь фичу» (2 primary deliverables, T3+T6) | MULTI_PHASE (T0): P1 BUGFIX → P2 DEV, user confirmation mandatory |
+| «Исправь баг и обнови README» | NOT multi-phase (T0 anti-trigger): BUGFIX + Auto-DOCS hook |
+| Multi-phase: user silence / ambiguous reply after the plan | Fail-closed: NOT a confirmation; re-show the plan (max 2 edit rounds), then CANCELLED |
+| Multi-phase: phase FAILED | Fail-fast: downstream phases SKIPPED, report to the user; resume via PHASE_STATE.md (new session preferred) |
+
+### Multi-Phase Pipelines (MVP — linear chain, 2–3 phases, user-confirmed)
+
+**Definition.** A MULTI_PHASE session executes a SEQUENCE of phases for ONE request. A **phase** = one existing PIPELINE TABLE row (1–8) with its own `(type, complexity, plan_exists)`. Phases are strictly sequential (one phase at a time; parallel waves inside subagents are unaffected — Scope rule above). The phase plan is fixed BEFORE execution starts and is confirmed by the user. Each phase produces a Phase Result envelope (below) consumed by the next phase.
+
+```
+Запрос → T0 (2+ первичных разнотипных deliverable?) ── NO → T1–T6 (как сегодня, default)
+   │ YES
+   ▼
+Turn 1: JSON {type: "MULTI_PHASE", state: "AWAITING_CONFIRMATION",
+              next_agent: null, pipeline: [], phases: [P1, P2, …], current_phase: null}
+        + "## MULTI-PHASE PLAN" (таблица фаз) + ack → STOP, Task НЕ вызывается
+        [плагин: awaitingConfirmation=true; Task в этом же ходе → THROW]
+    ▼
+Ответ пользователя: «да» → старт P1 | правка (≤2 раундов) → новый AWAITING | «отмена» → state:"CANCELLED"
+    ▼
+Фаза P1 = строка PIPELINE TABLE по (type, complexity, plan_exists) фазы
+    → phase_result_1 (JSON-конверт, small data) + секция в PHASE_STATE.md (пишет utility через bash)
+    ▼ (фазовая граница = легальная мутация pipeline: MP-5)
+    Фаза P2 … → FINAL SUMMARY по всем фазам
+```
+
+**PIPELINE TABLE meta-rule (NO new rows; mirrored 1:1 in agents/orchestrator.md):**
+
+**Multi-phase:** `phases` — array of 2–3 phases (MVP); each phase independently resolves to row 1–8 by its own `(type, complexity, plan_exists)`. The session `pipeline` field ALWAYS contains the CURRENT phase's chain only; phase state lives in `phases[]` + `current_phase`. The session pipeline = sequential concatenation of phase chains with phase barriers (barrier = structural: all Task calls of the phase completed; NOT a dialog point — dialog happened at confirmation).
+
+**Phase classification.** Phase TYPE — T1–T6 applied to the phase's sub-task (not to the whole request). Phase COMPLEXITY — existing rules: BUGFIX → `null` + triage; DEV → Q1–Q5; DOCS → by size; DEVOPS → `null`. Two-stage protocols are preserved INSIDE the phase (BUGFIX one-time continuation; DEV DECOMPOSITION). Multi-phase does NOT change T1–T6 / Q1–Q5 — classification is applied k times, once per phase.
+
+**JSON extension (backward compatible).** `type: "MULTI_PHASE"` + conditional fields `state` / `phases[]` / `current_phase` — full spec in §3 "Multi-Phase Fields (orchestrator)". Example (executing turn):
+
+```json
+{
+  "agent": "orchestrator", "type": "MULTI_PHASE", "complexity": null,
+  "plan_exists": null, "plan_source": null, "goal": "one sentence",
+  "next_agent": "bugfix-triage", "pipeline": ["bugfix-triage"],
+  "state": null,
+  "phases": [
+    {"id": "P1", "type": "BUGFIX", "complexity": null, "plan_exists": null, "goal": "...", "depends_on": []},
+    {"id": "P2", "type": "DEV", "complexity": "COMPLEX", "plan_exists": false, "goal": "...", "depends_on": ["P1"]}
+  ],
+  "current_phase": "P1"
+}
+```
+
+`pipeline` ALWAYS holds the CURRENT phase's chain. On a phase boundary `current_phase` switches and `pipeline` is REPLACED by the next phase's chain — a legal mutation (whitelist MP-5, Enforcement gates below).
+
+**Confirmation protocol.**
+
+- Turn 1 (phase planning): JSON with `state: "AWAITING_CONFIRMATION"`, `next_agent: null`, `pipeline: []`, `current_phase: null` + a human-readable phase table (id / type / goal / pipeline row / depends_on) + ack. NO Task call this turn — the plugin confirmation gate throws.
+- Turn 2 (the user's reply): approve («да/ок») → start P1; edit → recompute the affected phase + dependency cascade → new AWAITING turn (max 2 edit rounds, then start-as-is or cancel); reject («отмена») → `state: "CANCELLED"`, zero Task calls.
+- Allowed edits: (a) drop a phase → SKIPPED with dependency cascade, (b) lower complexity (SUPERCOMPLEX→COMPLEX), (c) reorder independent phases (in the MVP linear chain — effectively cancel + reassemble), (d) cancel everything. Forbidden edits: new agent types, skipping mandatory reviewers.
+- Silence / ambiguous reply = NOT a confirmation (fail-closed).
+- Explicit override in the ORIGINAL request («без подтверждений, делай сразу») → the plan is shown informatively and execution starts immediately (auto-approve, no AWAITING turn).
+- Confirmation happens via a plain text reply — the tool `question` is NOT used (`question: deny` preserved, §1 Primary Agent Tool Lockdown).
+
+**Context passing — 3 channels ("pointer, not transcript").**
+
+1. **Phase Result envelope** — machine-readable, SMALL data only (XCom principle): summary ≤3 sentences, facts ≤10 keys; large content NEVER travels in JSON — only file pointers. Canonical spec duplicated in §3 "Multi-Phase Fields (orchestrator)":
+
+```json
+{
+  "phase_id": "P1",
+  "phase_type": "BUGFIX",
+  "status": "SUCCESS | FAILED | SKIPPED",
+  "summary": "≤3 sentences",
+  "artifacts": ["src/auth/middleware.ts", "bug_plan.md"],
+  "facts": { "tests": "green", "files_changed": 3, "public_api_changed": false },
+  "blockers": [],
+  "docs_deferred_to": "P3 | null"
+}
+```
+
+2. **`PHASE_STATE.md`** — human-readable journal in the project root, one section per phase (goal, what was done, key decisions, artifacts). Scribe = `utility` via bash (mechanical verbatim append; APPEND-ONLY — previous sections are never modified). MVP limitation: if the chain ENDS with a DEVOPS phase (no utility in the row), the trailing section is not written — the final summary lists phase results as text (Stage 2: devops-scribe).
+3. **Verbatim handoff** — the first Task prompt of the next phase receives the previous phase's envelope VERBATIM + a context phrase: `Phase P<i> (<type>) completed: <summary>. Artifacts: <list>. Facts: <facts>. Read PHASE_STATE.md if you need more context.`
+
+**PHASE_STATE.md lifecycle** (deterministic — file must never become a stale, committed artifact):
+
+- **Created:** `utility` (scribe) creates the file with header `# PHASE_STATE` on first mechanical append (Phase 2).
+- **Reset:** utility-scribe recreates PHASE_STATE.md with fresh header on FIRST phase (replaces any stale file from previous chain) — so every chain starts from an empty journal.
+- **Session ID:** each phase section MUST include a session timestamp, so a stale file from a previous session can never be mistaken for the current chain.
+- **Cleanup:** deleted after the final phase completes (before delegating to `git-commit`), so the journal never lands in a commit.
+- **Git-ignored:** `PHASE_STATE.md` is listed in `.gitignore` as a second line of defence against accidental commits.
+
+**Fail-fast.** A phase FAILED → the chain STOPS, downstream phases are SKIPPED, report to the user (which phase, its envelope, options — including «продолжи с P<k>» resume). Silent continuation is FORBIDDEN. Rework lives INSIDE a phase only (max 3) — no global cross-phase rework. `BLOCKER STOP AFTER 3` inside a phase = phase FAILED.
+
+**SUPERCOMPLEX disambiguation.** SUPERCOMPLEX = iteration over the steps of ONE DEV plan inside ONE phase; multi-phase = iteration over phases of DIFFERENT types. ≤1 SUPERCOMPLEX phase per plan; nested multi-phase is FORBIDDEN (a phase may BE SUPERCOMPLEX; phases never contain sub-phases). Two-level ack: `→ PHASE 1/2 (P1), STEP 3/8 (S-3): DELEGATED to dev-professor`. Classification priority: T0/multi-phase FIRST, then Q1–Q5 inside each DEV phase.
+
+**Edge cases (deterministic resolutions):**
+
+| Situation | Resolution |
+|-----------|------------|
+| The plan collapsed to 1 phase | Degrade to a regular single-phase pipeline WITHOUT confirmation |
+| All phases of the same type | NOT multi-phase → SUPERCOMPLEX or one pipeline |
+| One of the phases is a plan/research deliverable | OUT OF SCOPE entirely (T0 scope-guard) |
+| Auto-DOCS hook inside multi-phase | The hook fires PER PHASE (after each BUGFIX/DEV phase), as per-pipeline today |
+| `requires_docs_update` from P1 while the plan has a DOCS phase P3 | The hook is NOT duplicated (dedup by type): docs work goes to the explicit DOCS phase; P1's envelope carries `docs_deferred_to: "P3"`, the DOCS phase's Task prompt receives it verbatim |
+| Phase FAILED, user: «продолжи с P2» | Resume: prefer a NEW session (blockerStop is cumulative — Enforcement gates); the orchestrator reads `PHASE_STATE.md` (classification read), restores the envelopes, starts from P2 without re-confirmation if the plan is unchanged; plugin: a legal phase transition resets blockerStop (MP-5) |
+| Skipping a phase mid-flight | Only cancelling the remainder of the chain («стоп»); NO waiting point between phases (the barrier is structural, not a dialog point) |
+| The chain ENDS with a DEVOPS phase | The trailing PHASE_STATE.md section is not written (DEVOPS has no utility) — MVP limitation; the final summary lists all phase results as text |
+
+**Cyclic dependencies.** Phases are numbered; `depends_on` may reference ONLY smaller ids (cycles are syntactically inexpressible; MVP: exactly `[previous id]`, P1 → `[]`). Pseudo-cycles («fix → feature → if broken, fix again») = in-phase rework or a repeated type (two BUGFIX phases) — not a cycle. Data-dependent cross-phase cycles are FORBIDDEN (bounded iteration lives inside a phase only).
+
+**Stage 2 backlog (NOT in MVP):** `continue_on_error` per phase; resume from an arbitrary phase as first-class; explicit DAG `depends_on`; phase limit 4; session-length telemetry (candidate: summarizer between phases); advisor behavior on phase boundaries (NIT_ONLY_MODE window).
 
 ### DEV SIMPLE
 
@@ -563,6 +690,8 @@ Set `requires_docs_update: true` if ANY of these were modified:
 - DOCS (recursive — would loop forever)
 - PLAN, RESEARCH (out of orchestrator's scope)
 
+**Multi-phase dedup:** within a MULTI_PHASE session the hook fires PER PHASE (after each BUGFIX/DEV phase's final `utility`), same as per-pipeline today. Exception: if the confirmed plan already contains a LATER DOCS phase covering the docs work, the hook is SUPPRESSED for the earlier phase — the implementation agent's `requires_docs_update: true` is carried into the phase result envelope as `docs_deferred_to: "<DOCS phase id>"`, and the DOCS phase's first Task prompt receives the envelope verbatim. Dedup key = phase type DOCS present downstream in `phases[]` (mechanical check, not analysis).
+
 ### Direct docs-writer Call (in-flight, BUGFIX/DEV)
 
 Implementation agents (worker, dev-professor, execute-bug) hold `task.docs-writer: allow` (opencode.json) and MAY call docs-writer directly DURING their step when user-facing documentation is needed (user instructions, portal guides). Rules: at most ONE call per task; the Task prompt must be self-contained (`docs_plan.md` is NOT written for direct calls); a direct call does NOT replace the `requires_docs_update` flag — the Auto-DOCS hook stays independent. Depth: primary(0) → implementation agent(1) → docs-writer(2) — within `subagent_depth: 3`.
@@ -653,7 +782,7 @@ Rules:
 | invalid JSON / invalid severity in primary JSON | message.updated | deferred flag → gate | any tool call |
 | forbidden IDENTITY claim (identity tokens only; agent-name tokens stay log-only) | message.updated | deferred flag → gate | any tool call |
 | identity drift under identity lock | message.updated | DIRECT throw from the event hook (caveat: may be swallowed by the runtime) | remaining handler for that event |
-| pipeline changed after Turn 1 (exceptions: provisional classification, BUGFIX continuation, DECOMPOSITION Turn B, nit-skip, Auto-DOCS hook, SUPERCOMPLEX per-plan-step re-emission) | message.updated | deferred flag → gate | any tool call |
+| pipeline changed after Turn 1 (exceptions: provisional classification, BUGFIX continuation, DECOMPOSITION Turn B, nit-skip, Auto-DOCS hook, SUPERCOMPLEX per-plan-step re-emission, MULTI_PHASE phase refinement (null→resolved, once per phase), MULTI_PHASE in-phase Auto-DOCS hook, MULTI_PHASE legal phase transition (+1, phases stable)) | message.updated | deferred flag → gate | any tool call |
 | second Task call in the same turn | tool.execute.before | DIRECT throw | the Task call |
 | parallel Task from the primary while a subagent runs (sessionID attribution) | tool.execute.before depth-bypass | DIRECT throw (before depth increment) | the Task call |
 | 4th rework dispatch per rework-loop | tool.execute.before Task section | DIRECT throw | the Task call |
@@ -661,8 +790,13 @@ Rules:
 | orchestrator self-work markers in message text | message.updated | selfWorkDetected → inspection block | read/grep/glob (Task calls are NOT blocked — delegation is the correction) |
 | ack format drift (6 legal variants) | message.updated | warn-only log | nothing (audit) |
 | unknown type/complexity/plan_exists combination | validatePipeline | fail-closed → pipeline flag → gate | any tool call |
+| Task call while `state: "AWAITING_CONFIRMATION"` (same turn, before user reply) | tool.execute.before | DIRECT throw (confirmation gate) | the Task call |
+| illegal phase transition (skip / phases tampering / wrong chain for the phase) | message.updated | deferred flag (pipelineImmutable) → gate | any tool call |
+| MULTI_PHASE schema violation (phases 2–3, unique ids, depends_on ⊆ earlier, ≤1 SUPERCOMPLEX, AWAITING/CANCELLED shapes) | message.updated (validateJSONOutput/validatePipeline) | deferred flag (invalidJSON / pipelineMismatch) → gate | any tool call |
 
 Deferred-violation pattern: a throw inside an event hook cannot retract an already-sent message, so message.updated sets a flag and the unified gate in tool.execute.before throws at the primary's NEXT tool call (consume-once; a clean valid message clears message-derived flags — latest-message-wins against streaming artifacts). All v6 state resets in the unconditional session.created reset block AFTER the parentID guard (child sessions never wipe parent state).
+
+**Terminal-turn exemption (v7 clarification):** the shape-based terminal exemption in validatePipeline (`pipeline: []` + `next_agent: null` → valid without further checks) would make an AWAITING_CONFIRMATION turn indistinguishable from a final turn. Therefore `state: "AWAITING_CONFIRMATION"` is validated by an EXPLICIT MULTI_PHASE branch of validatePipeline placed BEFORE the terminal exemption (research §7.5 row 4; plugin `workflow-enforcement.ts`, Phase 3 step 3.4).
 
 ## 3. JSON Validation Fields
 
@@ -671,13 +805,46 @@ Deferred-violation pattern: a throw inside an event hook cannot retract an alrea
 | Field | Type | Valid Values |
 |-------|------|--------------|
 | `agent` | string | `"orchestrator"` |
-| `type` | string \| null | `"BUGFIX"`, `"DEVOPS"`, `"DEV"`, `"DOCS"`, `null` |
+| `type` | string \| null | `"BUGFIX"`, `"DEVOPS"`, `"DEV"`, `"DOCS"`, `"MULTI_PHASE"`, `null` |
 | `complexity` | string \| null | `"SIMPLE"`, `"COMPLEX"`, `"DEEP"`, `"SUPERCOMPLEX"`, `null` |
 | `plan_exists` | boolean \| null | `true`, `false`, `null` |
 | `plan_source` | string \| null | description or `null` |
 | `goal` | string | one sentence description |
 | `next_agent` | string \| null | agent name from whitelist or `null` |
 | `pipeline` | string[] | array of agent names (each from the primary's whitelist — see §2 Pipeline Notation) or `[]` |
+
+**Conditional fields (MULTI_PHASE only):** `state`, `phases`, `current_phase` — REQUIRED when `type: "MULTI_PHASE"`, ABSENT otherwise (backward compatible; the plugin enforces conditionally in validateJSONOutput).
+
+### Multi-Phase Fields (orchestrator)
+
+Conditional on `type: "MULTI_PHASE"` — absent in all other turns (backward compatible).
+
+| Field | Type | Valid Values |
+|-------|------|--------------|
+| `state` | string \| null | `"AWAITING_CONFIRMATION"` (plan shown, Task forbidden), `"CANCELLED"` (user rejected), `null`/absent (executing / final summary) |
+| `phases` | array | 2–3 objects: `{id: "P<n>" unique, type: BUGFIX\|DEVOPS\|DEV\|DOCS, complexity: SIMPLE\|COMPLEX\|DEEP\|SUPERCOMPLEX\|null, plan_exists: bool\|null, goal: string, depends_on: [ids of EARLIER phases only; MVP: exactly [previous id], P1 → []]}` |
+| `current_phase` | string \| null | id from `phases[]`, or `null` iff `state ∈ {AWAITING_CONFIRMATION, CANCELLED}` |
+
+**Rules:**
+- Exactly ONE start phase: `depends_on: []` = `phases[0]`.
+- ≤1 SUPERCOMPLEX phase per plan; SUPERCOMPLEX ⇒ `plan_exists: true` (enforced on executing turns; on the AWAITING turn `null` is allowed until the in-phase DECOMPOSITION resolves it).
+- Phase refinement: a phase's `complexity`/`plan_exists` may be refined `null → value` ONCE, for the CURRENT phase only; all other fields and all other phases are FROZEN.
+- Shapes: `state ∈ {AWAITING_CONFIRMATION, CANCELLED}` ⇒ `pipeline: []` + `next_agent: null` + `current_phase: null`.
+
+**Phase Result envelope (canonical JSON spec — duplicated from §2 Multi-Phase Pipelines; NOT part of the orchestrator JSON: it travels inside Task prompts and PHASE_STATE.md):**
+
+```json
+{
+  "phase_id": "P1",
+  "phase_type": "BUGFIX",
+  "status": "SUCCESS | FAILED | SKIPPED",
+  "summary": "≤3 sentences",
+  "artifacts": ["src/auth/middleware.ts", "bug_plan.md"],
+  "facts": { "tests": "green", "files_changed": 3, "public_api_changed": false },
+  "blockers": [],
+  "docs_deferred_to": "P3 | null"
+}
+```
 
 ### plankestrator Required Fields
 
@@ -762,7 +929,7 @@ Writer subagents that write their work product to a file MUST report a file poin
 - Fields are OPTIONAL — emitted only when the user requested file output. Absent/null means "the work product is in the response body".
 - They are NOT part of `REQUIRED_JSON_FIELDS` for primary agents — the plugin validates primary-agent JSON only (subagent messages are skipped while `activeTaskDepth > 0`). File-pointer fields are enforced at the PROMPT level: writer emits, reviewer consumes.
 - The pointer value is a path string only — never paste plan/research content into the JSON.
-- Same-pattern fixed-name file pointers in orchestrator pipelines (passed via Task prompts, not JSON fields): `bug_plan.md` (plan-bug → execute-bug), `dev_plan.md` (dev-planner → dev-professor), `docs_plan.md` (docs-planner → docs-writer).
+- Same-pattern fixed-name file pointers in orchestrator pipelines (passed via Task prompts, not JSON fields): `bug_plan.md` (plan-bug → execute-bug), `dev_plan.md` (dev-planner → dev-professor), `docs_plan.md` (docs-planner → docs-writer), `PHASE_STATE.md` (orchestrator → utility-scribe → next phase / resume; append-only multi-phase journal — §2 Multi-Phase Pipelines).
 
 ## 4. MCP Servers
 
@@ -908,7 +1075,7 @@ Step 0 — IDENTITY PROBE (MANDATORY FIRST STEP):
 
 To prevent orchestrator↔plankestrator confusion mode, the system uses a **machine-asserted identity lock** at session start:
 
-1. **Session start** — `workflow-enforcement.ts` reads `session.agent` from the `session.created` event (priority order: explicit `agent` field → alternate field names → title → description). If it identifies `orchestrator` or `plankestrator`, it sets `identityLocked = true` and records `lockedAgentName`. The agent cannot be re-bound after this point.
+1. **Session start** — `workflow-enforcement.ts` reads the agent from session metadata. On opencode 1.18.34 the authoritative agent arrives in the **`session.updated`** event (`info.agent`); `session.created` fires BEFORE the agent is bound and may carry no `agent` field, so it is kept for legacy compatibility only. Priority order: `session.updated.info.agent` → `session.created.info.agent` → alternate field names (`parent_agent` / `primary_agent` / `agentName`) → title → description. If it identifies `orchestrator` or `plankestrator`, it sets `identityLocked = true` and records `lockedAgentName`. The lock is established once and idempotent — repeated events carrying the same agent do not re-bind it (guard `!identityLocked || lockedAgentName !== suDetected`), so the agent cannot be re-bound after this point.
 2. **RUNTIME IDENTITY block** — both primary agent prompts (`agents/orchestrator.md`, `agents/plankestrator.md`) start with an explicit `OPENCODE_AGENT_NAME = ...` block asserted by opencode (machine-injected, not self-claimed). The agent MUST check this block before any output; if it contradicts the agent file, the agent must refuse.
 3. **Identity drift = hard error** — once `identityLocked = true`, any JSON output where `agent` does not match `lockedAgentName` is logged as `error` (not `warn`) and the agent's `currentAgent` value is NOT updated. Downstream Task calls are still validated against the locked routing table.
 4. **Forbidden vocabulary check** — the plugin greps locked-agent message text for terminology that belongs to the other primary agent (e.g. orchestrator message containing "I am plankestrator" or "## PLAN"). Violations are logged as `error`.
@@ -1001,17 +1168,27 @@ Agents do NOT call each other — the user must manually switch between them.
 
 ## 9. Plugin Hooks
 
-The workflow-enforcement plugin implements 5 lifecycle hooks:
+The workflow-enforcement plugin implements the following lifecycle hooks (event-shape compatible with opencode 1.18.34+):
 
 | Hook | When | Purpose |
 |------|------|---------|
-| `tool.execute.before` | Before any tool call | Routing table enforcement; JSON-before-Task gate (no grace for locked agents, v4); inspection budget & post-pipeline inspection ban for plankestrator (v4); suppressed while a Task subagent runs (`activeTaskDepth > 0`, v4); unified deferred-violation gate (v6); max ONE Task per turn + parallel-Task block from primary (v6); rework max 3 per rework-loop (v6); orchestrator self-work inspection block (v6) |
+| `tool.execute.before` | Before any tool call | Routing table enforcement; JSON-before-Task gate (no grace for locked agents, v4); inspection budget & post-pipeline inspection ban for plankestrator (v4); suppressed while a Task subagent runs (`activeTaskDepth > 0`, v4); unified deferred-violation gate (v6); max ONE Task per turn + parallel-Task block from primary (v6); rework max 3 per rework-loop (v6); orchestrator self-work inspection block (v6); confirmation gate — Task blocked while AWAITING_CONFIRMATION in the same turn (v7) |
 | `tool.execute.after` | After tool completes | Logs tool completion |
-| `session.created` | New session starts | Detects which agent is running; CHILD (subagent) sessions preserve the parent's identity-lock state (parentID guard, v4) |
+| `message.part.updated` | Text part updated | Text transport (v7.1): buffers cumulative text parts (`part.type === "text"`); reasoning parts ignored so JSON extraction stays clean |
+| `message.part.delta` | Text delta streamed | Text transport (v7.1): accumulates incremental deltas, but only for parts already known to be `type === "text"` (reasoning-delta filter) |
+| `message.updated` | Message finalized | Finalization-gated (v7.1): validates JSON output format ONLY once the message is finalized (`finish="stop"` or `time.completed`); text is assembled from the `message.part.*` buffers (INVALID JSON logged as error, v4); detects identity drift (identity-lock v3 — a locked agent claiming a different identity is rejected, L492); detects forbidden vocabulary and self-work content markers (v4); skipped while a Task subagent runs; deferred-violation flags escalate log-only checks to a THROW at the next tool call (v6); pipeline step tracking + immutability after Turn 1 (v6); blocker counter with BLOCKER STOP after 3 (v6); primary severity validation (v6); ack format audit (v6, warn-only); identity drift under lock throws directly (v6); multi-phase per-phase pipeline validation (key = phase's type-complexity-plan_exists); confirmation-gate tracking (AWAITING set / user-reply clear); phase-transition mutation whitelist; blockerStop reset on legal phase transition (v7) |
+| `session.created` | New session starts | Legacy compatibility: detects which agent is running when `session.created` carries the agent; CHILD (subagent) sessions preserve the parent's identity-lock state (parentID guard, v4) |
+| `session.updated` | Session metadata updated | P0 (v7.1): detects + locks the agent from `info.agent` (authoritative on opencode 1.18.34, where `session.created` fires before the agent is bound); re-checks built-in Plan mode; CHILD sessions skipped (parentID guard) |
 | `session.idle` | Session ends | Logs workflow summary |
-| `message.updated` | Message added | Validates JSON output format (INVALID JSON logged as error, v4); detects identity drift (identity-lock v3 — a locked agent claiming a different identity is rejected, L492); detects forbidden vocabulary and self-work content markers (v4); skipped while a Task subagent runs; deferred-violation flags escalate log-only checks to a THROW at the next tool call (v6); pipeline step tracking + immutability after Turn 1 (v6); blocker counter with BLOCKER STOP after 3 (v6); primary severity validation (v6); ack format audit (v6, warn-only); identity drift under lock throws directly (v6) |
 
-Note: the session lifecycle events (`session.created`, `session.idle`, `message.updated`) are dispatched inside the plugin's single `event` hook — there is no separate `session.updated` branch (identity drift detection lives in the `message.updated` branch).
+**Event shape compatibility (opencode 1.18.34+):**
+Плагин поддерживает два формата событий:
+- **Новый (1.18.34+):** `properties.info` + `message.part.updated`/`message.part.delta` + `session.updated`
+- **Legacy:** `properties.message` + `properties.session` + `session.created`
+
+Нормализация: `resolveSessionData()` и `resolveMessage()` хелперы обеспечивают единый интерфейс.
+
+Note: the session lifecycle events (`session.created`, `session.updated`, `session.idle`, `message.part.updated`, `message.part.delta`, `message.updated`) are dispatched inside the plugin's single `event` hook. The `session.updated` branch detects + locks the agent from `info.agent` (opencode 1.18.34); `message.part.updated`/`message.part.delta` buffer text parts (reasoning-filtered); `message.updated` finalizes and validates (only on `finish="stop"` || `time.completed`). Identity-drift detection still lives in the `message.updated` branch.
 
 ## 10. Identity Verification Format
 

@@ -23,6 +23,20 @@ Your role:
    - Other: use appropriate linter/compiler
 2. Lint checks (ruff, eslint, etc.)
 3. Verify no obvious issues remain
+4. PHASE_STATE scribe (multi-phase pipelines only):
+   - If your Task prompt contains a `PHASE_STATE TASK:` block, perform the file operations it
+     describes on `PHASE_STATE.md` in the project root using bash (PowerShell): append the given
+     section VERBATIM (`Add-Content -Path PHASE_STATE.md -Value @'…'@`).
+   - If the file does not exist, or the block says FIRST phase: (re)create the journal — overwrite
+     the file with the header line `# PHASE_STATE` first, then append the section (a new chain
+     always starts from an empty journal).
+   - Fill the section's `Session:` line with the current timestamp
+     (`Get-Date -Format "yyyy-MM-dd HH:mm:ss"`).
+   - If the block says FINAL phase: after appending, DELETE the file (`Remove-Item PHASE_STATE.md`)
+     — a completed chain leaves no journal behind.
+   - APPEND-ONLY otherwise: never modify or delete previous sections. This is a mechanical file
+     operation, not content generation — copy the section exactly as given.
+   - Report `PHASE_STATE: appended` (or `PHASE_STATE: FAILED <reason>`) in your output.
 
 Process:
 - Receive list of modified files
@@ -46,3 +60,4 @@ Rules:
 - Do NOT fix code — report issues back to conductor
 - Report errors with file:line format when possible
 - If no files specified, check recently modified files in the project
+- `PHASE_STATE TASK:` blocks (multi-phase journal) are mechanical bash file operations within your role — never generate, rewrite, or analyze the section content; copy it verbatim
