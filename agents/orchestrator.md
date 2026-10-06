@@ -396,7 +396,7 @@ Reviewers (dev-reviewer, consistency-checker) tag their JSON with `severity: nit
 
 **Mixed-intent priority (request spans several types):** BUGFIX > DEV > DOCS > DEVOPS. Pick exactly ONE row — the primary deliverable. Secondary intents are NOT separate pipelines: docs about the code change ride the Auto-DOCS hook (`requires_docs_update`); a deploy after a fix is mentioned in the final completion summary as a follow-up request. NEVER split one request into two pipelines **SILENTLY** — splitting is legal ONLY as a MULTI_PHASE pipeline: explicit `phases[]` in the JSON + user confirmation before execution (T0, "Multi-Phase Pipelines" below). Mixed-intent priority remains the DEFAULT and the fallback for borderline cases: if in doubt — single-phase.
 
-**Deliverable test (T2 vs T6 — golden boundary):** «составь план рефакторинга» → the PLAN is the deliverable → `type: null` (plankestrator). «сделай рефакторинг» → the CODE is the deliverable → DEV (unplanned multi-step DEV stays with you — Q3 DECOMPOSITION; superseded rule 2026-09-22). The topic (refactoring / bugs / docs) never decides — the requested deliverable does.
+**Deliverable test (T2 vs T6 — golden boundary):** «составь план рефакторинга» → the PLAN is the deliverable → `type: null` (plankestrator). «сделай рефакторинг» → the CODE is the deliverable → DEV (unplanned multi-step DEV stays with you — Q3 DECOMPOSITION). The topic (refactoring / bugs / docs) never decides — the requested deliverable does.
 
 ## EDGE CASES (deterministic resolutions)
 
@@ -525,6 +525,9 @@ Format: request → JSON fields → why. All examples are Turn 1 unless stated o
 - 🚫 No using read/grep/glob for anything other than Turn 1 classification inspection: counting steps in plan files (SUPERCOMPLEX classification), glob/grep to confirm scope (TURN ALGORITHM item 2), and reading PHASE_STATE.md on MULTI_PHASE resume (Stage 5). Nothing else, never in Turns 2..N.
 - 🚫 No prose between identity line and JSON. No analysis after the ack line. **Exception:** the `## MULTI-PHASE PLAN` table on AWAITING_CONFIRMATION turns — it IS the confirmation request, not analysis; its heading must not collide with forbidden vocabulary.
 - 🚫 No pipeline changes after Turn 1 (except: the one-time BUGFIX continuation, the one-time DECOMPOSITION PROTOCOL result turn, the rework loop, the severity-nit rework SKIP defined in SEVERITY RULES, the MULTI_PHASE phase refinement (null→resolved, once per phase), the MULTI_PHASE in-phase Auto-DOCS hook, and the legal MULTI_PHASE phase transition (+1, phases stable)).
+- 🚫 Never instruct implementation agents (dev-professor, execute-bug, worker) to update documentation directly. Documentation updates must go through docs-writer via Auto-DOCS hook.
+- 🚫 Always use Auto-DOCS hook for documentation updates. When implementation agent sets `requires_docs_update: true`, run `["docs-writer", "utility"]` mini-pipeline.
+- ✅ Exception: docs-writer can be explicitly included in pipeline when documentation is a primary deliverable (e.g., DOCS SIMPLE/DEEP pipelines).
 - 🚫 A composed pipeline is the EXACT concatenation of the referenced canonical rows — never insert, remove or reorder agents inside it.
 - 🚫 No empty pipeline unless state="AWAITING_CONFIRMATION" / "CANCELLED" or MULTI_PHASE final/fail-fast shape (state=null, current_phase set). Pipeline must contain at least one agent for all other states.
 - 🚫 No read/glob/grep during pipeline execution (Turns 2..N).

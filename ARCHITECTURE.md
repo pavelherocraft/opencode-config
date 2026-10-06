@@ -113,7 +113,7 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | voice-clone | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
 | codebase-analyzer | bifrost-litellm/Kimi K2.8 |
 
-Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3.7-plus` and are documented in §Identity Lock Mechanism (v3), item 5 — not duplicated in the Subagent Models table.
+Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3.7-plus` and are documented in §Identity Lock Mechanism, item 5 — not duplicated in the Subagent Models table.
 
 ### Voice media models (via media MCP — not agent LLMs)
 
@@ -129,7 +129,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 
 Полный и актуальный набор моделей/параметров media MCP — в живом каталоге (`media_media-list_media_models`); он не хардкодится здесь и проверяется при изменениях. Параметры (duration/resolution/ratio/frames для видео, style/voice/voice_id для речи) закреплены в промптах агентов video-generator.md, image-creator.md, voice-synthesizer.md, voice-clone.md. Биллинг: MiniMax-H3 и persistent voice clone (`media_media-register_voice_clone`) → PAYG-аккаунт MiniMax; остальные модели — по каналам провайдера.
 
-## Model Roles (v5 — single source of truth, OMP model-roles analog)
+## Model Roles (single source of truth, OMP model-roles analog)
 
 Роли централизуют назначение моделей 41 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Model Roles), (3) документации. Квота-aware fallback-цепочки — платформенное требование (статус: НЕ реализовано, требует поддержки рантайма/proxy).
 
@@ -263,7 +263,7 @@ result.agent = mergeDeep(result.agent ?? {}, ConfigAgent.load(dir))
 
 **Note:** plankestrator has `edit: deny` — it MUST delegate to subagents, never write directly.
 
-### Primary Agent Tool Lockdown (v3)
+### Primary Agent Tool Lockdown
 
 Both `orchestrator` and `plankestrator` are locked down to prevent them from doing work themselves. The effective permissions are a **deep merge of opencode.json + `agents/*.md` frontmatter** (frontmatter wins on shared keys — see Permission Authority). Both sources must agree on the deny rules below; the plugin runtime checks are belt-and-suspenders.
 
@@ -285,10 +285,10 @@ Both `orchestrator` and `plankestrator` are locked down to prevent them from doi
 
 1. **Merged permission ruleset** (opencode.json deep-merged with `agents/*.md` frontmatter) — the runtime refuses to inject denied tools into the agent's toolset
 2. **Plugin runtime gate** (`workflow-enforcement.ts` → `PRIMARY_AGENT_ALLOWED_TOOLS`) — throws `⛔ PRIMARY AGENT FORBIDDEN ACTION TOOL` exception if anything bypasses the config
-3. **Identity-lock v3** — if the agent outputs wrong identity in JSON, the locked routing table is still enforced
-4. **Inspection gate v4 (plankestrator)** — plugin hard-blocks `read`/`grep`/`glob`: (a) after the first pipeline Task call (`⛔ INSPECTION AFTER PIPELINE START`), (b) beyond the inspection budget of 3 calls per session (`⛔ INSPECTION BUDGET EXHAUSTED`; the prompt tells the model max 2), (c) after self-work content markers (`## Findings`, `## Analysis`, `Executive Summary`, ...) were detected in plankestrator's own message. view-image and identity-probe Task calls are auxiliary — they do NOT count as pipeline start. Child (subagent) sessions do not reset the parent's lock (parentID guard); subagent tool calls are excluded from enforcement via `activeTaskDepth`.
+3. **Identity-lock** — if the agent outputs wrong identity in JSON, the locked routing table is still enforced
+4. **Inspection gate (plankestrator)** — plugin hard-blocks `read`/`grep`/`glob`: (a) after the first pipeline Task call (`⛔ INSPECTION AFTER PIPELINE START`), (b) beyond the inspection budget of 3 calls per session (`⛔ INSPECTION BUDGET EXHAUSTED`; the prompt tells the model max 2), (c) after self-work content markers (`## Findings`, `## Analysis`, `Executive Summary`, ...) were detected in plankestrator's own message. view-image and identity-probe Task calls are auxiliary — they do NOT count as pipeline start. Child (subagent) sessions do not reset the parent's lock (parentID guard); subagent tool calls are excluded from enforcement via `activeTaskDepth`.
 
-**Why this exists:** orchestrator and plankestrator kept "doing things themselves" because the old config had `edit: "ask"`, `todowrite: "allow"`, `question: "allow"` for orchestrator, and `edit: { "*.md": "allow" }` for plankestrator — the model had action tools available and used them. v3 lockdown removes those tools from the model's toolset entirely.
+**Why this exists:** orchestrator and plankestrator kept "doing things themselves" because the old config had `edit: "ask"`, `todowrite: "allow"`, `question: "allow"` for orchestrator, and `edit: { "*.md": "allow" }` for plankestrator — the model had action tools available and used them. The lockdown removes those tools from the model's toolset entirely.
 
 **Restrictions enforced in agent prompts:**
 - File type: ONLY `.md` (Markdown) files
@@ -306,7 +306,7 @@ Both `orchestrator` and `plankestrator` are locked down to prevent them from doi
 | Механизм | Источник | Назначение |
 |----------|----------|------------|
 | `subagent_depth` | opencode-core | Жёсткий лимит вложенности: при `depth >= subagent_depth` Task tool отказывается создавать субагента |
-| `activeTaskDepth` | `workflow-enforcement.ts` (плагин, v4) | Подавление enforcement: пока выполняется субагент (`activeTaskDepth > 0`), плагин пропускает tool calls — иначе Gate A блокировал бы `edit`/`write` у writer-агентов |
+| `activeTaskDepth` | `workflow-enforcement.ts` (плагин) | Подавление enforcement: пока выполняется субагент (`activeTaskDepth > 0`), плагин пропускает tool calls — иначе Gate A блокировал бы `edit`/`write` у writer-агентов |
 
 Плагин НЕ управляет лимитом вложенности — это ответственность ядра. Плагин лишь не вмешивается в работу субагентов, чтобы не нарушать их контракт.
 
@@ -348,7 +348,7 @@ plankestrator is a pure orchestrator — it MUST ALWAYS delegate to subagents:
 - Subagent (with `edit: allow` for .md) handles the actual file writing
 - plankestrator NEVER writes files directly
 
-**Inspection limits (v4):** plankestrator may call `read`/`grep`/`glob` ONLY on Turn 1 and ONLY to classify (prompt limit: max 2 calls; plugin hard limit: `INSPECTION_BUDGET = 3`). After the first pipeline Task call, any inspection throws. Type and complexity are classified from the REQUEST TEXT (keywords; number of questions/topics/objects), not from files. RESEARCH+PLAN is always COMPLEX. Context-heavy investigation is delegated to `devops-readonly` via Task. Plan/research CONTENT in plankestrator's own message (headings like `## Findings`, `## Analysis`) is detected by the plugin and blocks further inspection.
+**Inspection limits:** plankestrator may call `read`/`grep`/`glob` ONLY on Turn 1 and ONLY to classify (prompt limit: max 2 calls; plugin hard limit: `INSPECTION_BUDGET = 3`). After the first pipeline Task call, any inspection throws. Type and complexity are classified from the REQUEST TEXT (keywords; number of questions/topics/objects), not from files. RESEARCH+PLAN is always COMPLEX. Context-heavy investigation is delegated to `devops-readonly` via Task. Plan/research CONTENT in plankestrator's own message (headings like `## Findings`, `## Analysis`) is detected by the plugin and blocks further inspection.
 
 ## 2. Pipelines
 
@@ -390,13 +390,13 @@ bugfix-triage → plan-bug (writes bug_plan.md) → execute-bug (reads bug_plan.
 - `TRIAGE_RESULT: SIMPLE` → continue `["worker", "utility"]`
 - `TRIAGE_RESULT: DEEP` → continue `["plan-bug", "execute-bug", "advisor", "dev-reviewer", "consistency-checker", "utility"]`
 
-**Single source of truth for pipeline selection:** the PIPELINE TABLE in each primary agent's own `.md` file (`agents/orchestrator.md` for BUGFIX/DEVOPS/DEV/DOCS, `agents/plankestrator.md` for PLAN/RESEARCH/RESEARCH+PLAN). Each table must stay identical to the corresponding section in this file. (The inline `prompt` field formerly present in opencode.json was removed — markdown wins per the merge order documented above.)
+**Single source of truth for pipeline selection:** the PIPELINE TABLE in each primary agent's own `.md` file (`agents/orchestrator.md` for BUGFIX/DEVOPS/DEV/DOCS, `agents/plankestrator.md` for PLAN/RESEARCH/RESEARCH+PLAN). Each table must stay identical to the corresponding section in this file.
 
 Prompt-local reference sections (`PIPELINE GUIDE`, `CLASSIFICATION EXAMPLES`) in agents/*.md are illustrative and are NOT mirrored here; on conflict, the PIPELINE TABLE + CLASSIFICATION RULES + this file win.
 
 **Plan file:** `plan-bug` writes the bug fix plan to `bug_plan.md` in the project root. `execute-bug` reads this file before implementing. The orchestrator MUST include "Write the plan to bug_plan.md" in the plan-bug prompt and "Read bug_plan.md" in the execute-bug prompt.
 
-**Prewalk pattern (v5, OMP prewalk analog):** one-shot handoff expensive→cheap at the planning/implementation boundary. `plan-bug` runs on the MID-tier planner model (`GLM-5.3 (res)`, tier plan-flash) and writes a SELF-CONTAINED `bug_plan.md`; `execute-bug` runs on the CHEAP executor model (`MiniMax-M3.1-Flash-Preview`, tier executor-cheap) and mechanically applies the plan in a fresh context. Escape hatch: `execute-bug` sets `plan_gap: true` in its JSON when the plan turns out incomplete — downstream dev-reviewer/consistency-checker escalate (consistency-checker `escalate_to: "execute-bug"` remains available). Same philosophy in DEV COMPLEX: dev-planner (plan-strong) > dev-professor (executor-strong). Source: OMP prewalk pattern (`docs/prewalk.md`).
+**Prewalk pattern (OMP prewalk analog):** one-shot handoff expensive→cheap at the planning/implementation boundary. `plan-bug` runs on the MID-tier planner model (`GLM-5.3 (res)`, tier plan-flash) and writes a SELF-CONTAINED `bug_plan.md`; `execute-bug` runs on the CHEAP executor model (`MiniMax-M3.1-Flash-Preview`, tier executor-cheap) and mechanically applies the plan in a fresh context. Escape hatch: `execute-bug` sets `plan_gap: true` in its JSON when the plan turns out incomplete — downstream dev-reviewer/consistency-checker escalate (consistency-checker `escalate_to: "execute-bug"` remains available). Same philosophy in DEV COMPLEX: dev-planner (plan-strong) > dev-professor (executor-strong). Source: OMP prewalk pattern (`docs/prewalk.md`).
 
 **Rework loop:** `rework` is NOT in the base pipeline. If dev-reviewer or consistency-checker reports issues (severity: concern/blocker), `rework` is inserted into the pipeline at the current position, then consistency-checker re-validates. Loop repeats up to 3 iterations. If no issues found → skip rework entirely. If consistency-checker passes → utility. If max iterations reached → failure report.
 
@@ -419,8 +419,6 @@ Canonical classification rules for DEV tasks (SIMPLE / COMPLEX / SUPERCOMPLEX). 
 **Count logical implementation steps**, not files or skills/technologies: "rename a variable across 5 files" is SIMPLE; one bug fix touching auth, database and caching may still be a single step.
 
 **PLAN EXISTS OVERRIDE:** `plan_exists=true` + not SUPERCOMPLEX → DEV is ALWAYS SIMPLE (with-plan variant). An existing plan replaces in-pipeline planning — never reclassify a planned ≤3-step task as COMPLEX. Consequently DEV COMPLEX always implies `plan_exists: false`.
-
-**Superseded (2026-09-22):** the former rule that routed unplanned multi-step DEV tasks (no plan + COMPLEX) to plankestrator as out of scope is NO LONGER valid — they stay with the orchestrator: Q3 decomposition first, then SUPERCOMPLEX / COMPLEX / SIMPLE per the outcome. PLAN/RESEARCH requests themselves remain out of orchestrator's scope.
 
 ### Type Selection Decision Tree (orchestrator)
 
@@ -457,7 +455,7 @@ Selects the TYPE (BUGFIX / DEVOPS / DEV / DOCS / null) BEFORE the complexity rul
 
 **Mixed-intent priority (request spans several types):** BUGFIX > DEV > DOCS > DEVOPS. Pick exactly ONE row — the primary deliverable. Secondary intents are NOT separate pipelines: docs about the code change ride the Auto-DOCS hook (`requires_docs_update`); a deploy after a fix is mentioned in the final completion summary as a follow-up request. NEVER split one request into two pipelines **SILENTLY** — splitting is legal ONLY as a MULTI_PHASE pipeline: explicit `phases[]` in the JSON + user confirmation before execution (T0, "Multi-Phase Pipelines" below). Mixed-intent priority remains the DEFAULT and the fallback for borderline cases: if in doubt — single-phase.
 
-**Deliverable test (T2 vs T6 — golden boundary):** «составь план рефакторинга» → the PLAN is the deliverable → `type: null` (plankestrator). «сделай рефакторинг» → the CODE is the deliverable → DEV (unplanned multi-step DEV stays with you — Q3 DECOMPOSITION; superseded rule 2026-09-22). The topic (refactoring / bugs / docs) never decides — the requested deliverable does.
+**Deliverable test (T2 vs T6 — golden boundary):** «составь план рефакторинга» → the PLAN is the deliverable → `type: null` (plankestrator). «сделай рефакторинг» → the CODE is the deliverable → DEV (unplanned multi-step DEV stays with you — Q3 DECOMPOSITION). The topic (refactoring / bugs / docs) never decides — the requested deliverable does.
 
 **Edge cases (deterministic resolutions):**
 
@@ -612,7 +610,7 @@ dev-planner → dev-professor → advisor → dev-reviewer → consistency-check
 
 **Rework loop:** `rework` is NOT in the base pipeline. If dev-reviewer or consistency-checker reports issues (severity: concern/blocker), `rework` is inserted at the current position, then consistency-checker validates again. If no issues found → skip rework entirely. Loop repeats up to 3 iterations.
 
-**Advisor step (v5, OMP Advisor Watchdog analog — step-boundary):** `advisor` (tencent/Hy4, strictly read-only: read/grep/glob + read-only serena) observes the implementation result between pipeline steps and returns severity-tagged notes (`nit|concern|blocker`, contract — §3 Reviewer Severity Field). Mid-turn intervention is NOT possible (our agents are atomic within a step) — advisor fires only at step boundaries. Safeguards: emission guard (max 4 non-blocker notes per run, session dedup, empty-phrase filter — plugin v5 + advisor prompt), immuneTurns analog (`NIT_ONLY_MODE` for 3 pipeline steps after a consumed blocker — concern/blocker notes downgrade to nit), separate cost accounting (advisor ≈ 1 extra model call per step; logged in plugin + orchestrator acks). Advisor never re-orders the pipeline; blocker → ⚠️ ack + notes to dev-reviewer/rework; persistence after 3rd rework iteration → failure report.
+**Advisor step (OMP Advisor Watchdog analog — step-boundary):** `advisor` (tencent/Hy4, strictly read-only: read/grep/glob + read-only serena) observes the implementation result between pipeline steps and returns severity-tagged notes (`nit|concern|blocker`, contract — §3 Reviewer Severity Field). Mid-turn intervention is NOT possible (our agents are atomic within a step) — advisor fires only at step boundaries. Safeguards: emission guard (max 4 non-blocker notes per run, session dedup, empty-phrase filter — plugin + advisor prompt), immuneTurns analog (`NIT_ONLY_MODE` for 3 pipeline steps after a consumed blocker — concern/blocker notes downgrade to nit), separate cost accounting (advisor ≈ 1 extra model call per step; logged in plugin + orchestrator acks). Advisor never re-orders the pipeline; blocker → ⚠️ ack + notes to dev-reviewer/rework; persistence after 3rd rework iteration → failure report.
 
 ### DEV SUPERCOMPLEX
 
@@ -719,7 +717,7 @@ research-writer-complex (internal DAG):
   decompose → [mcp-search ∥ mcp-read ∥ mcp-github ∥ devops-readonly ∥ scout] → barrier (rank + brief) → synthesis (Kimi K3) → RESEARCH.md
 ```
 
-The wave and the barrier are prompt-level behavior of the writer agent. The plugin and plankestrator's PIPELINE TABLE are NOT affected: enforcement is suppressed inside subagent sessions (`activeTaskDepth > 0`), and task-permissions for all scouts are already granted in opencode.json + frontmatter (verified 2026-09-19).
+The wave and the barrier are prompt-level behavior of the writer agent. The plugin and plankestrator's PIPELINE TABLE are NOT affected: enforcement is suppressed inside subagent sessions (`activeTaskDepth > 0`), and task-permissions for all scouts are already granted in opencode.json + frontmatter.
 
 ### PLAN vs RESEARCH Boundary (plankestrator)
 
@@ -758,7 +756,7 @@ A **barrier** is a synchronization point: the next stage starts only after ALL r
 
 Implementation (research-writer-complex): wave results → rank by relevance/reliability → internal brief (key facts, contradictions, gaps) → synthesis from the brief on the strong model. "Pointer, not transcript": the report references sources and the output file, raw scout transcripts never leave the writer's context.
 
-**Decision record (2026-09-19):** a separate `summarizer` barrier agent (Option A) was DEFERRED — parallel Task calls already provide a free structural barrier, a summarizer hop would require passing raw wave transcripts in its prompt (violates pointer-not-transcript), and ranking is inseparable from synthesis, which must run on the strong model. Escalation path if pilots show context overflow: grant `"summarizer": "allow"` in research-writer-complex task permissions and pass waves via a file pointer.
+**Decision record:** a separate `summarizer` barrier agent (Option A) was DEFERRED — parallel Task calls already provide a free structural barrier, a summarizer hop would require passing raw wave transcripts in its prompt (violates pointer-not-transcript), and ranking is inseparable from synthesis, which must run on the strong model. Escalation path if pilots show context overflow: grant `"summarizer": "allow"` in research-writer-complex task permissions and pass waves via a file pointer.
 
 ### Cross-Routing Prevention
 
@@ -767,16 +765,16 @@ Cross-routing (a primary agent calling a specialist that belongs to the other pr
 | Layer | Where | Behavior |
 |-------|-------|----------|
 | 1. Prompt prevention | `CROSS-ROUTING BOUNDARY` sections in agents/orchestrator.md and agents/plankestrator.md | Explicit closed lists of the other primary's agents + "OUT OF SCOPE message = the exact standard phrase, no foreign agent names" + "pipeline frozen" |
-| 2. Plugin: forbidden vocabulary | workflow-enforcement.ts (FORBIDDEN_VOCAB / FORBIDDEN_IDENTITY_TOKENS) | Foreign terminology in a message is detected and logged; IDENTITY-claim tokens (e.g. "I am plankestrator" in an orchestrator message) escalate to a deferred THROW at the next tool call (v6); agent-name tokens stay log-only (legitimate cross-references) |
+| 2. Plugin: forbidden vocabulary | workflow-enforcement.ts (FORBIDDEN_VOCAB / FORBIDDEN_IDENTITY_TOKENS) | Foreign terminology in a message is detected and logged; IDENTITY-claim tokens (e.g. "I am plankestrator" in an orchestrator message) escalate to a deferred THROW at the next tool call; agent-name tokens stay log-only (legitimate cross-references) |
 | 3. Plugin: routing table | workflow-enforcement.ts:1042–1053 | A Task call to an agent outside `ROUTING_TABLES[currentAgent]` → throw `WORKFLOW VIOLATION - ROUTING TABLE ENFORCEMENT` |
 
 Rules:
 1. Closed lists of the other primary's agents are stated explicitly in both prompts — the model must not derive them from the routing table.
 2. The OUT OF SCOPE message is ONLY the standard phrase (agents/orchestrator.md type=null rule / agents/plankestrator.md type=null rule), never naming foreign specialists — this reduces forbidden-vocab log noise (layer 2) and eliminates the temptation of "partial" cross-routing.
 3. Subagent results suggesting work of the other primary's scope NEVER change the pipeline — the pipeline is frozen; the recommendation goes into the final summary only.
-4. "Planning-flavored DEV" stays with the orchestrator (Q3 DECOMPOSITION; superseded rule 2026-09-22) — the main source of false cross-routing is eliminated by the deliverable test (T2 vs T6 / P2).
+4. "Planning-flavored DEV" stays with the orchestrator (Q3 DECOMPOSITION) — the main source of false cross-routing is eliminated by the deliverable test (T2 vs T6 / P2).
 
-#### Enforcement gates (v6, workflow-enforcement.ts Part II)
+#### Enforcement gates (workflow-enforcement.ts Part II)
 
 | Violation | Detection point | Delivery | Blocks |
 |-----------|-----------------|----------|--------|
@@ -798,9 +796,9 @@ Rules:
 | illegal phase transition (skip / phases tampering / wrong chain for the phase) | message.updated | deferred flag (pipelineImmutable) → gate | any tool call |
 | MULTI_PHASE schema violation (phases 2–3, unique ids, depends_on ⊆ earlier, ≤1 SUPERCOMPLEX, AWAITING/CANCELLED shapes) | message.updated (validateJSONOutput/validatePipeline) | deferred flag (invalidJSON / pipelineMismatch) → gate | any tool call |
 
-Deferred-violation pattern: a throw inside an event hook cannot retract an already-sent message, so message.updated sets a flag and the unified gate in tool.execute.before throws at the primary's NEXT tool call (consume-once; a clean valid message clears message-derived flags — latest-message-wins against streaming artifacts). All v6 state resets in the unconditional session.created reset block AFTER the parentID guard (child sessions never wipe parent state).
+Deferred-violation pattern: a throw inside an event hook cannot retract an already-sent message, so message.updated sets a flag and the unified gate in tool.execute.before throws at the primary's NEXT tool call (consume-once; a clean valid message clears message-derived flags — latest-message-wins against streaming artifacts). All plugin state resets in the unconditional session.created reset block AFTER the parentID guard (child sessions never wipe parent state).
 
-**Terminal-turn exemption (v7 clarification):** the shape-based terminal exemption in validatePipeline (`pipeline: []` + `next_agent: null` → valid without further checks) would make an AWAITING_CONFIRMATION turn indistinguishable from a final turn. Therefore `state: "AWAITING_CONFIRMATION"` is validated by an EXPLICIT MULTI_PHASE branch of validatePipeline placed BEFORE the terminal exemption (research §7.5 row 4; plugin `workflow-enforcement.ts`, Phase 3 step 3.4).
+**Terminal-turn exemption (clarification):** the shape-based terminal exemption in validatePipeline (`pipeline: []` + `next_agent: null` → valid without further checks) would make an AWAITING_CONFIRMATION turn indistinguishable from a final turn. Therefore `state: "AWAITING_CONFIRMATION"` is validated by an EXPLICIT MULTI_PHASE branch of validatePipeline placed BEFORE the terminal exemption (research §7.5 row 4; plugin `workflow-enforcement.ts`, Phase 3 step 3.4).
 
 ## 3. JSON Validation Fields
 
@@ -904,7 +902,7 @@ else:
     escalate_to = "dev-reviewer"  # default fallback
 ```
 
-### Reviewer Severity Field (v5 — OMP emission-guard analog)
+### Reviewer Severity Field (OMP emission-guard analog)
 
 Reviewer subagents (`dev-reviewer`, `consistency-checker`, `advisor` — см. §2 Advisor Step) tag their final JSON with a mandatory `severity` field. Source: OMP Advisor Watchdog severity semantics (nit = aside, concern = steer, blocker = triggered turn).
 
@@ -916,7 +914,7 @@ Reviewer subagents (`dev-reviewer`, `consistency-checker`, `advisor` — см. �
 
 **Rules:**
 - Fail-closed: отсутствующее/невалидное `severity` трактуется orchestrator'ом как `concern`.
-- Emission guard (plugin v5, warn-only): дедупликация текстов замечаний между итерациями rework-loop (session-scoped, нормализация lowercase+NFKC+схлопывание не-алфанум); фильтр пустых фраз (`lgtm`, `no issues`, `nothing to add`, …); бюджет **max 4 non-blocker findings на update** (blocker освобождён от бюджета).
+- Emission guard (plugin, warn-only): дедупликация текстов замечаний между итерациями rework-loop (session-scoped, нормализация lowercase+NFKC+схлопывание не-алфанум); фильтр пустых фраз (`lgtm`, `no issues`, `nothing to add`, …); бюджет **max 4 non-blocker findings на update** (blocker освобождён от бюджета).
 - Плагин не блокирует вывод субагентов (enforcement в субсессиях подавлен при `activeTaskDepth > 0`) — severity-валидация логируется как warn/error; потребление — промпт-уровень orchestrator'а.
 - Поле НЕ входит в `REQUIRED_JSON_FIELDS` primary-агентов (валидация primary не затрагивается).
 
@@ -1064,7 +1062,7 @@ All agents EXCEPT the explicit deny-exceptions above can use these unity-mcp too
 | orchestrator | `orchestrator-identity-probe` ✅ | `plankestrator-identity-probe` ❌ |
 | plankestrator | `plankestrator-identity-probe` ✅ | `orchestrator-identity-probe` ❌ |
 
-### Probe Procedure (legacy — superseded by Identity Lock v3)
+### Probe Procedure (legacy — superseded by Identity Lock)
 
 ```
 Step 0 — IDENTITY PROBE (MANDATORY FIRST STEP):
@@ -1075,7 +1073,7 @@ Step 0 — IDENTITY PROBE (MANDATORY FIRST STEP):
 5. If DENIED → IDENTITY ERROR → STOP
 ```
 
-### Identity Lock Mechanism (v3) — REPLACES Probe Procedure
+### Identity Lock Mechanism — REPLACES Probe Procedure
 
 To prevent orchestrator↔plankestrator confusion mode, the system uses a **machine-asserted identity lock** at session start:
 
@@ -1085,7 +1083,7 @@ To prevent orchestrator↔plankestrator confusion mode, the system uses a **mach
 4. **Forbidden vocabulary check** — the plugin greps locked-agent message text for terminology that belongs to the other primary agent (e.g. orchestrator message containing "I am plankestrator" or "## PLAN"). Violations are logged as `error`.
 5. **Model** — both primary agents run on `bifrost-litellm/QWEN3.7-plus` (Qwen 3.7 Plus via the bifrost-litellm provider). Other agents use their own providers as listed in the Subagent Models table above.
 
-**Why the probe procedure is now legacy:** the probe relied on the agent following instructions in its own prompt — a self-claim. The v3 lock reads identity from opencode's session metadata (which opencode controls, not the model) and from the system-prompt-injected RUNTIME IDENTITY block. Self-claims are no longer authoritative.
+**Why the probe procedure is now legacy:** the probe relied on the agent following instructions in its own prompt — a self-claim. The lock reads identity from opencode's session metadata (which opencode controls, not the model) and from the system-prompt-injected RUNTIME IDENTITY block. Self-claims are no longer authoritative.
 
 ### Session Naming Convention
 
@@ -1166,7 +1164,7 @@ Agents do NOT call each other — the user must manually switch between them.
 | Todo Lists | `~/.local/share/opencode/storage/todo/` | JSON |
 | Logs | `~/.local/share/opencode/log/` | `.log` files |
 
-### Per-Audience Context Files (v5, OMP WATCHDOG.md analog)
+### Per-Audience Context Files (OMP WATCHDOG.md analog)
 
 Конвенция: инструкции для конкретного класса агентов хранятся ОТДЕЛЬНО от общего AGENTS.md и подключаются только в промпты этого класса. Действующие файлы: `REVIEW_CONTEXT.md` (reviewer-агенты; два уровня — project root и user-level `~/.config/opencode/`). Будущие кандидаты: `PLAN_CONTEXT.md` (planner-агенты) — вне текущего объёма. Правило: «every loaded instruction consumes context» — файл ≤150 строк.
 
@@ -1176,13 +1174,13 @@ The workflow-enforcement plugin implements the following lifecycle hooks (event-
 
 | Hook | When | Purpose |
 |------|------|---------|
-| `tool.execute.before` | Before any tool call | Routing table enforcement; JSON-before-Task gate (no grace for locked agents, v4); inspection budget & post-pipeline inspection ban for plankestrator (v4); suppressed while a Task subagent runs (`activeTaskDepth > 0`, v4); unified deferred-violation gate (v6); max ONE Task per turn + parallel-Task block from primary (v6); rework max 3 per rework-loop (v6); orchestrator self-work inspection block (v6); confirmation gate — Task blocked while AWAITING_CONFIRMATION in the same turn (v7) |
+| `tool.execute.before` | Before any tool call | Routing table enforcement; JSON-before-Task gate (no grace for locked agents); inspection budget & post-pipeline inspection ban for plankestrator; suppressed while a Task subagent runs (`activeTaskDepth > 0`); unified deferred-violation gate; max ONE Task per turn + parallel-Task block from primary; rework max 3 per rework-loop; orchestrator self-work inspection block; confirmation gate — Task blocked while AWAITING_CONFIRMATION in the same turn |
 | `tool.execute.after` | After tool completes | Logs tool completion |
-| `message.part.updated` | Text part updated | Text transport (v7.1): buffers cumulative text parts (`part.type === "text"`); reasoning parts ignored so JSON extraction stays clean |
-| `message.part.delta` | Text delta streamed | Text transport (v7.1): accumulates incremental deltas, but only for parts already known to be `type === "text"` (reasoning-delta filter) |
-| `message.updated` | Message finalized | Finalization-gated (v7.1): validates JSON output format ONLY once the message is finalized (`finish="stop"` or `time.completed`); text is assembled from the `message.part.*` buffers (INVALID JSON logged as error, v4); detects identity drift (identity-lock v3 — a locked agent claiming a different identity is rejected, L492); detects forbidden vocabulary and self-work content markers (v4); skipped while a Task subagent runs; deferred-violation flags escalate log-only checks to a THROW at the next tool call (v6); pipeline step tracking + immutability after Turn 1 (v6); blocker counter with BLOCKER STOP after 3 (v6); primary severity validation (v6); ack format audit (v6, warn-only); identity drift under lock throws directly (v6); multi-phase per-phase pipeline validation (key = phase's type-complexity-plan_exists); confirmation-gate tracking (AWAITING set / user-reply clear); phase-transition mutation whitelist; blockerStop reset on legal phase transition (v7). Pipeline state locks only pipelines that passed validation; a rejected pipeline leaves the state unlocked, so the next corrected JSON locks as the true Turn-1 baseline. |
-| `session.created` | New session starts | Legacy compatibility: detects which agent is running when `session.created` carries the agent; CHILD (subagent) sessions preserve the parent's identity-lock state (parentID guard, v4) |
-| `session.updated` | Session metadata updated | P0 (v7.1): detects + locks the agent from `info.agent` (authoritative on opencode 1.18.34, where `session.created` fires before the agent is bound); re-checks built-in Plan mode; CHILD sessions skipped (parentID guard); on an actual mode/agent switch it resets the deferred-violation flags and `pipelineState`, so a Turn-1 baseline locked in the old context does not survive the switch |
+| `message.part.updated` | Text part updated | Text transport: buffers cumulative text parts (`part.type === "text"`); reasoning parts ignored so JSON extraction stays clean |
+| `message.part.delta` | Text delta streamed | Text transport: accumulates incremental deltas, but only for parts already known to be `type === "text"` (reasoning-delta filter) |
+| `message.updated` | Message finalized | Finalization-gated: validates JSON output format ONLY once the message is finalized (`finish="stop"` or `time.completed`); text is assembled from the `message.part.*` buffers (INVALID JSON logged as error); detects identity drift (a locked agent claiming a different identity is rejected, L492); detects forbidden vocabulary and self-work content markers; skipped while a Task subagent runs; deferred-violation flags escalate log-only checks to a THROW at the next tool call; pipeline step tracking + immutability after Turn 1; blocker counter with BLOCKER STOP after 3; primary severity validation; ack format audit (warn-only); identity drift under lock throws directly; multi-phase per-phase pipeline validation (key = phase's type-complexity-plan_exists); confirmation-gate tracking (AWAITING set / user-reply clear); phase-transition mutation whitelist; blockerStop reset on legal phase transition. Pipeline state locks only pipelines that passed validation; a rejected pipeline leaves the state unlocked, so the next corrected JSON locks as the true Turn-1 baseline. |
+| `session.created` | New session starts | Legacy compatibility: detects which agent is running when `session.created` carries the agent; CHILD (subagent) sessions preserve the parent's identity-lock state (parentID guard) |
+| `session.updated` | Session metadata updated | P0: detects + locks the agent from `info.agent` (authoritative on opencode 1.18.34, where `session.created` fires before the agent is bound); re-checks built-in Plan mode; CHILD sessions skipped (parentID guard); on an actual mode/agent switch it resets the deferred-violation flags and `pipelineState`, so a Turn-1 baseline locked in the old context does not survive the switch |
 | `session.idle` | Session ends | Logs workflow summary |
 
 **Event shape compatibility (opencode 1.18.34+):**
