@@ -2582,6 +2582,22 @@ function validatePipeline(agent: string, type: string | null, complexity: string
       : { valid: false, error: "type=null (OUT OF SCOPE) requires empty pipeline and next_agent=null" }
   }
 
+  // Custom pipeline composition — exact concatenation of canonical rows
+  // (explicitly requested by the user; lighter than MULTI_PHASE: no
+  // confirmation round-trip, no phase envelopes).
+  const srcRows = Array.isArray(jsonContent?.pipeline_source_rows) ? jsonContent.pipeline_source_rows : null
+  if (srcRows && srcRows.length >= 2) {
+    const chains = srcRows.map((k: string) => (PIPELINES[agent] ? PIPELINES[agent][k] : undefined))
+    if (chains.some((c: string[] | undefined) => !c)) {
+      return { valid: false, error: `pipeline_source_rows references unknown row(s) for ${agent}: ${srcRows.join(", ")}` }
+    }
+    const composed = chains.flat()
+    if (JSON.stringify(pipeline) !== JSON.stringify(composed)) {
+      return { valid: false, error: `pipeline does not match the concatenation of pipeline_source_rows [${srcRows.join(" + ")}]: expected [${composed.join(", ")}], got [${pipeline.join(", ")}]` }
+    }
+    return { valid: true }
+  }
+
   // v7 (Multi-Phase MVP): explicit MULTI_PHASE branch — AWAITING/CANCELLED/terminal
   // shapes are handled HERE, BEFORE the terminal-turn exemption below, so an AWAITING
   // turn is distinguishable from a final turn (research §7.5 row 4 — the shape-based

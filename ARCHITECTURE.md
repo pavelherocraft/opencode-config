@@ -581,6 +581,10 @@ Turn 1: JSON {type: "MULTI_PHASE", state: "AWAITING_CONFIRMATION",
 
 **Stage 2 backlog (NOT in MVP):** `continue_on_error` per phase; resume from an arbitrary phase as first-class; explicit DAG `depends_on`; phase limit 4; session-length telemetry (candidate: summarizer between phases); advisor behavior on phase boundaries (NIT_ONLY_MODE window).
 
+### Custom Pipeline Composition
+
+When the user explicitly requests a sequential combination (or phases are tightly coupled), the orchestrator may emit `pipeline_source_rows` (≥2 canonical row keys) alongside `pipeline` = the exact concatenation of those rows' chains; `type`/`complexity`/`plan_exists` carry the FIRST row's values. No confirmation round-trip: the explicit request is the mandate. The plugin validates the composition fail-closed (unknown row keys and any deviation from the concatenation are rejected). Boundary: MULTI_PHASE remains the structured path (phases[] + confirmation + envelopes) for 2+ distinct deliverables; the default is a single canonical row.
+
 ### DEV SIMPLE
 
 DEV SIMPLE has two variants depending on whether a plan exists:

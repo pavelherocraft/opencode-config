@@ -861,6 +861,59 @@ if (__testPipelineState) {
   check('T28c self-heal seam available', false, 'plugin export __testPipelineState missing')
 }
 
+// ============================================================================
+// T29 — CUSTOM PIPELINE COMPOSITION (v8): pipeline_source_rows = the EXACT
+// concatenation of canonical PIPELINE TABLE rows — a lighter alternative to
+// MULTI_PHASE (no confirmation round-trip; the explicit user request is the
+// mandate). type/complexity/plan_exists = the FIRST row's values.
+// ============================================================================
+await newSession()
+{
+  const composed = [...DEVOPS_ROW, 'worker', 'utility']   // DEVOPS-null-null + DEV-SIMPLE-false
+  await sendMessage('assistant', orchMsg({ agent: 'orchestrator', type: 'DEVOPS', complexity: null,
+    plan_exists: null, plan_source: null, goal: 'fix CI and update the README', next_agent: 'devops-agent',
+    pipeline: composed, pipeline_source_rows: ['DEVOPS-null-null', 'DEV-SIMPLE-false'] }))
+  const r = await tryTask('devops-agent')
+  const locked = __testPipelineState?.get('orchestrator')
+  check('T29 composed pipeline allowed + locked (no VALIDATION FAILED / IMMUTABLE)',
+    r.ok && !hasLog('PIPELINE VALIDATION FAILED') && !hasLog('PIPELINE IMMUTABLE') &&
+      !!locked && JSON.stringify(locked.pipeline) === JSON.stringify(composed) &&
+      locked.type === 'DEVOPS' && locked.complexity === null && locked.planExists === null,
+    r.ok ? `lock: ${JSON.stringify(locked)}` : r.message.split('\n')[0])
+}
+
+// ============================================================================
+// T30a — composition mismatch: pipeline_source_rows intact, pipeline agents
+// permuted → BLOCKED with the concatenation error (state NOT locked).
+// ============================================================================
+await newSession()
+{
+  await sendMessage('assistant', orchMsg({ agent: 'orchestrator', type: 'DEVOPS', complexity: null,
+    plan_exists: null, plan_source: null, goal: 'fix CI and update the README', next_agent: 'devops-agent',
+    pipeline: ['devops-agent', 'devops-reviewer', 'utility', 'worker'],
+    pipeline_source_rows: ['DEVOPS-null-null', 'DEV-SIMPLE-false'] }))
+  const r = await tryTask('devops-agent')
+  check('T30a permuted pipeline rejected (concatenation mismatch; Task BLOCKED)',
+    !r.ok && r.message.includes('PIPELINE VALIDATION FAILED') &&
+      r.message.includes('does not match the concatenation of pipeline_source_rows'),
+    r.ok ? 'NOT blocked' : r.message.split('\n')[0])
+}
+
+// ============================================================================
+// T30b — composition with an UNKNOWN row key → BLOCKED ("unknown row(s)").
+// ============================================================================
+await newSession()
+{
+  await sendMessage('assistant', orchMsg({ agent: 'orchestrator', type: 'DEVOPS', complexity: null,
+    plan_exists: null, plan_source: null, goal: 'fix CI and update the README', next_agent: 'devops-agent',
+    pipeline: ['devops-agent', 'devops-reviewer', 'worker', 'utility'],
+    pipeline_source_rows: ['DEVOPS-null-null', 'NO-SUCH-ROW'] }))
+  const r = await tryTask('devops-agent')
+  check('T30b unknown row key rejected (unknown row(s); Task BLOCKED)',
+    !r.ok && r.message.includes('PIPELINE VALIDATION FAILED') && r.message.includes('unknown row(s)'),
+    r.ok ? 'NOT blocked' : r.message.split('\n')[0])
+}
+
 console.log('')
 console.log(`RESULT: pass=${pass} fail=${fail}`)
 process.exit(fail ? 1 : 0)

@@ -254,6 +254,16 @@ The turn after the barrier: JSON — `phases` UNCHANGED, `current_phase: "P<next
 - ALL phases SUCCESS → final summary across all phases (table: phase / status / artifacts), `next_agent: null`, `pipeline: []`, `current_phase` = the last phase's id.
 - Resume («продолжи с фазы P2»): Turn 1 — ONE classification `read` of PHASE_STATE.md (permitted exception — same status as reading a plan file); the plan is NOT recreated; JSON: same `phases`, `current_phase: "P2"`, pipeline = P2's chain, start without re-confirmation if the plan is unchanged. Prefer a NEW session after BLOCKER STOP (the same session stays blocked by the cumulative blockerStop; a new session has fresh plugin state).
 
+## CUSTOM PIPELINE COMPOSITION (from canonical rows)
+
+When the user EXPLICITLY requests a sequential combination ("исправь X и сразу задеплой", "add the feature and update the README in one run") or phases are tightly coupled, you may compose a pipeline from canonical rows — no confirmation round-trip (the explicit request IS the mandate):
+
+1. Pick 2–3 PIPELINE TABLE rows covering the request in execution order.
+2. Emit `"pipeline_source_rows": ["<row-key-1>", "<row-key-2>"]` (keys as in the table's key column) AND `"pipeline"` = their EXACT concatenation (no insert/remove/reorder inside the composed chain).
+3. `type` / `complexity` / `plan_exists` / `plan_source` = the FIRST row's values.
+
+Boundary vs MULTI_PHASE: composition = one flat chain, single classification, for tightly-coupled combos the user explicitly named; MULTI_PHASE = structured phases[] with confirmation, envelopes and fail-fast, for 2+ distinct deliverables. Default remains a single canonical row — composition only on explicit user request.
+
 ## TURN ALGORITHM
 
 **Turn 1 — CLASSIFY:**
@@ -285,6 +295,7 @@ A subagent result arriving is your next turn — advance, don't analyze it. Mech
   "goal": "one sentence",
   "next_agent": "agent from routing table or null",
   "pipeline": ["agent1", "agent2"] or [],
+  "pipeline_source_rows": ["row-key-1", "row-key-2"]   // optional, ≥2 keys — custom composition (see below)
   "state": "AWAITING_CONFIRMATION|CANCELLED|null",
   "phases": [ {"id": "P1", "type": "…", "complexity": "…|null", "plan_exists": "…|null", "goal": "…", "depends_on": []} ],
   "current_phase": "P1|null"
@@ -514,6 +525,7 @@ Format: request → JSON fields → why. All examples are Turn 1 unless stated o
 - 🚫 No using read/grep/glob for anything other than Turn 1 classification inspection: counting steps in plan files (SUPERCOMPLEX classification), glob/grep to confirm scope (TURN ALGORITHM item 2), and reading PHASE_STATE.md on MULTI_PHASE resume (Stage 5). Nothing else, never in Turns 2..N.
 - 🚫 No prose between identity line and JSON. No analysis after the ack line. **Exception:** the `## MULTI-PHASE PLAN` table on AWAITING_CONFIRMATION turns — it IS the confirmation request, not analysis; its heading must not collide with forbidden vocabulary.
 - 🚫 No pipeline changes after Turn 1 (except: the one-time BUGFIX continuation, the one-time DECOMPOSITION PROTOCOL result turn, the rework loop, the severity-nit rework SKIP defined in SEVERITY RULES, the MULTI_PHASE phase refinement (null→resolved, once per phase), the MULTI_PHASE in-phase Auto-DOCS hook, and the legal MULTI_PHASE phase transition (+1, phases stable)).
+- 🚫 A composed pipeline is the EXACT concatenation of the referenced canonical rows — never insert, remove or reorder agents inside it.
 - 🚫 No empty pipeline unless state="AWAITING_CONFIRMATION" / "CANCELLED" or MULTI_PHASE final/fail-fast shape (state=null, current_phase set). Pipeline must contain at least one agent for all other states.
 - 🚫 No read/glob/grep during pipeline execution (Turns 2..N).
 - 🚫 No skipping dev-reviewer / consistency-checker — they are mandatory pipeline elements.
@@ -533,6 +545,7 @@ The workflow-enforcement plugin validates:
 - **read/grep/glob lock**: No read/grep/glob after first Task call (except classification inspection in Turn 1 and the ONE PHASE_STATE.md read on MULTI_PHASE resume, Stage 5)
 - **severity nit skip**: When severity="nit" AND issues_found==issues_fixed → skip rework (already in SEVERITY RULES)
 - **Multi-phase validation**: for type=MULTI_PHASE the pipeline is validated PER PHASE (key = phase's type/complexity/plan_exists against PIPELINE TABLE + variants); phases structure validated (2–3, unique ids, depends_on ⊆ earlier, ≤1 SUPERCOMPLEX)
+- **Custom composition**: when `pipeline_source_rows` is present (≥2 keys), the plugin validates `pipeline` as the exact concatenation of those rows.
 - **Confirmation gate**: Task calls are BLOCKED while state=AWAITING_CONFIRMATION until the user replies
 - **Phase transition whitelist**: pipeline replacement is legal only as refinement / in-phase Auto-DOCS hook / phase advance (+1) / final/fail-fast (pipeline → []) / resume (pipeline [] → chain of current_phase)
 
