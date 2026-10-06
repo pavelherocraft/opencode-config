@@ -178,8 +178,17 @@ let topLevelSessionID: string | null = null
 // fields and semantics untouched).
 const pipelineState = new Map<string, {
   pipeline: string[]; currentStep: number; provisional: boolean; type: string | null;
+  // v8: classification snapshot captured at lock time — lets the Phase 17.2
+  // self-heal re-validate the LOCKED baseline against its OWN classification.
+  complexity: string | null; planExists: boolean | null;
   phases?: any[]; currentPhaseIdx?: number
 }>()
+
+// v8 (regression T28c): test seam — direct handle on the pipeline lock map.
+// Production paths never read it; the harness uses it to inject a POISONED
+// lock (an invalid baseline that no valid event sequence can produce) and to
+// assert the Phase 17.2 self-heal recapture instead of a permanent IMMUTABLE.
+export const __testPipelineState = pipelineState
 
 // v6 (Phase 13.1): max ONE Task call per turn
 const taskCallsPerTurn = new Map<string, number>()   // agent → Task calls in current turn
@@ -505,7 +514,8 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         // Plan-mode re-check (detectPlanMode is guarded: a custom primary agent
         // is NEVER built-in Plan mode — see the permission-rule guard below).
         const suMode = detectPlanMode(suData)
-        if (suMode !== currentMode) {
+        const suModeChanged = suMode !== currentMode
+        if (suModeChanged) {
           const prevMode = currentMode
           currentMode = suMode
           await client.app.log({
@@ -517,7 +527,8 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
           })
         }
         const suDetected = detectAgentFromSessionData(suData)
-        if (suDetected && (!identityLocked || lockedAgentName !== suDetected)) {
+        const suAgentChanged = !!suDetected && (!identityLocked || lockedAgentName !== suDetected)
+        if (suDetected && suAgentChanged) {
           currentAgent = suDetected
           identityLocked = true
           lockedAgentName = suDetected
@@ -528,6 +539,25 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
               level: "info",
               message: `Session updated — agent LOCKED: ${suDetected} (identity will be enforced strictly)`,
               extra: { sessionId: (event as any).properties?.sessionID, locked: true }
+            }
+          })
+        }
+        // v8: deadlock fix — a mode/agent switch (e.g. plan→build) invalidates
+        // any Turn-1 baseline locked in the OLD context. Drop the deferred
+        // flags and the pipeline lock so a stale lock cannot outlive its
+        // context. identityLocked / currentAgent are deliberately NOT touched
+        // (their logic lives above); workflowSteps stays session.created-only.
+        if (suModeChanged || suAgentChanged) {
+          identityMissing = pipelineMismatch = nextAgentMismatch = invalidJSON =
+            forbiddenIdentity = pipelineImmutable = blockerStop = false
+          violationDetail = ""
+          pipelineState.clear()
+          await client.app.log({
+            body: {
+              service: "workflow-enforcement",
+              level: "info",
+              message: `Session updated — deferred flags + pipelineState CLEARED (mode/agent switched)`,
+              extra: { modeChanged: suModeChanged, agentChanged: suAgentChanged }
             }
           })
         }
@@ -891,6 +921,12 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
 
         // Validate JSON if we know which agent is running
         if (jsonContent && currentAgent) {
+          // v8: deadlock fix — per-event gate for the pipeline capture below.
+          // An INVALID pipeline must never be locked as the Turn-1 baseline:
+          // the corrective message would then hit Phase 17.2 (pipelineImmutable)
+          // and no recovery could clear it (the flag re-arms on every mismatch)
+          // — a permanent deadlock blocking even read/grep.
+          let pipelineOk = true
           // NEW: Validate pipeline and next_agent for primary agents
           if (jsonContent && (currentAgent === "orchestrator" || currentAgent === "plankestrator")) {
             // v6 (Phase 15): severity in the PRIMARY's JSON — validate against the
@@ -929,6 +965,7 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
                   }
                 })
                 pipelineMismatch = true
+                pipelineOk = false   // v8: an invalid pipeline must NOT lock the Turn-1 baseline
                 v6FlagSetThisEvent = true
                 violationDetail = `PIPELINE VALIDATION FAILED — ${pipelineValidation.error}`
               }
@@ -952,6 +989,7 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
                 jsonContent.state !== "COMPLETE" && !mpEmptyShapeOk &&
                 (!pipeline || pipeline.length === 0)) {
               pipelineMismatch = true
+              pipelineOk = false   // v8: same reason as the validation branch above
               v6FlagSetThisEvent = true
               violationDetail = `PIPELINE EMPTY — state="${jsonContent.state}" requires non-empty pipeline`
             }
@@ -1122,7 +1160,9 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
               const nextAgentIsAux = AUXILIARY_NEXT_AGENTS.includes(String(jsonContent.next_agent))
               // F-4: OUT OF SCOPE / no-pipeline turns and auxiliary turns (identity probes,
               // view-image) do NOT lock state — classification is not finished yet.
-              if (newPipeline && newPipeline.length > 0 && !nextAgentIsAux) {
+              // v8: + pipelineOk — an invalid pipeline must never be locked either
+              // (deadlock fix; see the pipelineOk declaration above).
+              if (pipelineOk && newPipeline && newPipeline.length > 0 && !nextAgentIsAux) {
                 const nextIdx = jsonContent.next_agent
                   ? newPipeline.indexOf(String(jsonContent.next_agent)) : -1
                 // F-4: classification turns with complexity=null (DECOMPOSITION Turn A,
@@ -1156,6 +1196,9 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
                     currentStep: nextIdx >= 0 ? nextIdx : 0,
                     provisional,
                     type: newType,
+                    // v8: classification snapshot for the Phase 17.2 self-heal
+                    complexity: jsonContent.complexity ?? null,
+                    planExists: jsonContent.plan_exists ?? null,
                     phases: mpPhases,
                     currentPhaseIdx: mpIdx
                   })
@@ -1272,6 +1315,10 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
                     if (nextIdx >= 0) prev.currentStep = nextIdx
                     prev.provisional = provisional
                     prev.type = newType
+                    // v8: keep the classification snapshot in sync with the
+                    // replaced pipeline (the Phase 17.2 self-heal relies on it)
+                    prev.complexity = jsonContent.complexity ?? null
+                    prev.planExists = jsonContent.plan_exists ?? null
                     // v7: refresh the multi-phase snapshot (refined phases + new index)
                     if (newType === "MULTI_PHASE") {
                       prev.phases = Array.isArray(jsonContent.phases) ? jsonContent.phases : prev.phases
@@ -1279,11 +1326,49 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
                       if (idx >= 0) prev.currentPhaseIdx = idx
                     }
                   } else {
-                    pipelineImmutable = true
-                    v6FlagSetThisEvent = true
-                    violationDetail = (prev.type === "MULTI_PHASE" || newType === "MULTI_PHASE")
-                      ? `PIPELINE IMMUTABLE (MULTI_PHASE): illegal mutation — allowed: phase refinement (null→resolved, once), in-phase BUGFIX continuation / DECOMPOSITION / Auto-DOCS hook, phase transition (+1, phases stable). Got: [${prev.pipeline.join(", ")}] → [${newPipeline.join(", ")}], current_phase idx ${prev.currentPhaseIdx} → ${jsonContent?.current_phase}`
-                      : `PIPELINE IMMUTABLE: pipeline changed after Turn 1 — [${prev.pipeline.join(", ")}] → [${newPipeline.join(", ")}] (exceptions: provisional classification, BUGFIX continuation, DECOMPOSITION, nit-skip, Auto-DOCS hook)`
+                    // v8 self-heal: if the LOCKED baseline is itself invalid, the
+                    // lock is poisoned — replace it with the incoming pipeline
+                    // instead of throwing (heals deadlocked sessions). The
+                    // baseline is re-validated against ITS OWN locked
+                    // classification snapshot (never the current turn's), so a
+                    // legitimate mid-flight re-classification still fails closed.
+                    const baselineStillValid = validatePipeline(
+                      currentAgent,
+                      prev.type,
+                      prev.complexity ?? null,
+                      prev.planExists ?? null,
+                      prev.pipeline,
+                      prev.type === "MULTI_PHASE"
+                        ? { ...jsonContent, state: null, phases: prev.phases,
+                            current_phase: (prev.phases ?? [])[prev.currentPhaseIdx ?? -1]?.id ?? null,
+                            plan_source: null }
+                        : { ...jsonContent, plan_source: null }
+                    ).valid
+                    if (!baselineStillValid) {
+                      await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
+                        message: "SELF-HEAL RECAPTURE — locked baseline pipeline is INVALID (poisoned lock); replacing it with the incoming pipeline",
+                        extra: { agent: currentAgent, poisonedBaseline: prev.pipeline, incomingPipeline: newPipeline } } })
+                      reworkCount.delete(currentAgent)
+                      blockerEscalations.delete(currentAgent)
+                      maxStepReached.set(currentAgent, nextIdx >= 0 ? nextIdx : 0)
+                      prev.pipeline = newPipeline
+                      prev.currentStep = nextIdx >= 0 ? nextIdx : 0
+                      prev.provisional = provisional
+                      prev.type = newType
+                      prev.complexity = jsonContent.complexity ?? null
+                      prev.planExists = jsonContent.plan_exists ?? null
+                      if (newType === "MULTI_PHASE") {
+                        prev.phases = Array.isArray(jsonContent.phases) ? jsonContent.phases : prev.phases
+                        const idx = (prev.phases ?? []).findIndex((p: any) => p?.id === jsonContent?.current_phase)
+                        if (idx >= 0) prev.currentPhaseIdx = idx
+                      }
+                    } else {
+                      pipelineImmutable = true
+                      v6FlagSetThisEvent = true
+                      violationDetail = (prev.type === "MULTI_PHASE" || newType === "MULTI_PHASE")
+                        ? `PIPELINE IMMUTABLE (MULTI_PHASE): illegal mutation — allowed: phase refinement (null→resolved, once), in-phase BUGFIX continuation / DECOMPOSITION / Auto-DOCS hook, phase transition (+1, phases stable). Got: [${prev.pipeline.join(", ")}] → [${newPipeline.join(", ")}], current_phase idx ${prev.currentPhaseIdx} → ${jsonContent?.current_phase}`
+                        : `PIPELINE IMMUTABLE: pipeline changed after Turn 1 — [${prev.pipeline.join(", ")}] → [${newPipeline.join(", ")}] (exceptions: provisional classification, BUGFIX continuation, DECOMPOSITION, nit-skip, Auto-DOCS hook)`
+                    }
                   }
                 } else if (nextIdx >= 0) {
                   // pipeline unchanged — advance the step to the actual next_agent
@@ -1321,6 +1406,10 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
                     const idx = (prev.phases ?? []).findIndex((p: any) => p?.id === jsonContent?.current_phase)
                     if (idx >= 0) prev.currentPhaseIdx = idx
                   }
+                  // v8: classification snapshot refresh (pipeline unchanged —
+                  // a refinement turn may re-declare complexity/plan_exists)
+                  prev.complexity = jsonContent.complexity ?? null
+                  prev.planExists = jsonContent.plan_exists ?? null
                 }
               }
             }

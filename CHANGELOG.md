@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Plugin v8 — deadlock fix: невалидный пайплайн больше не лочится как иммутабельный baseline.**
+  Root cause: `pipelineState` захватывал пайплайн из первого JSON без учёта результата `validatePipeline` — отвергнутый пайплайн становился «Turn-1 эталоном», после чего любой корректирующий JSON блокировался `PIPELINE IMMUTABLE`. Плагин требовал исправление и одновременно запрещал его; флаги перевзводились при каждой финализации сообщения — сессия зависала намертво (блокировались даже read/grep/glob).
+  - `pipelineOk`-гейт: state-лок только для пайплайнов, прошедших валидацию
+  - Self-heal в immutability-ветке: залоченный baseline ре-валидируется против собственной lock-time классификации (в state добавлен снапшот complexity/planExists); отравленный лок → `SELF-HEAL RECAPTURE` вместо throw
+  - `session.updated`: при реальной смене mode/agent сбрасываются deferred-флаги и `pipelineState` (stale identity-lock больше не переживает plan→build)
+  - Harness: T28a/b/c (deadlock-регрессия) + test-seam `__testPipelineState`; итог 91 тест
+
 ### Added
 - **Multi-Phase Pipelines (MVP):** поддержка выполнения 2-3 фаз последовательно с подтверждением пользователя
   - Новый тип `MULTI_PHASE` в orchestrator с состояниями AWAITING_CONFIRMATION/EXECUTING/COMPLETE

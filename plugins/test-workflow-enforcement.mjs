@@ -47,8 +47,9 @@ if (!pluginPath) {
 console.log(`PLUGIN: ${pluginPath}`)
 
 let WorkflowEnforcement
+let __testPipelineState
 try {
-  ({ WorkflowEnforcement } = await import(pathToFileURL(pluginPath).href))
+  ({ WorkflowEnforcement, __testPipelineState } = await import(pathToFileURL(pluginPath).href))
 } catch (e) {
   console.error(`FAIL: cannot import plugin: ${e?.message || e}`)
   process.exit(2)
@@ -411,8 +412,12 @@ await newSession()
   await sendMessage('assistant', orchMsg(mp({ phases: clonePhases(PHR), current_phase: 'P1',
     pipeline: ['worker', 'utility'], next_agent: 'worker' })))
   const p = await probeGate()
+  // v8: an invalid incoming pipeline is now caught by the pipeline-TABLE
+  // validation BEFORE the state block (deadlock fix) — the swap is still
+  // blocked, just with the more fundamental violation code.
   check('T14b illegal swap blocked (F-4 provisional does NOT apply)',
-    p !== 'clean' && p.includes('WORKFLOW VIOLATION') && p.includes('PIPELINE IMMUTABLE (MULTI_PHASE)'),
+    p !== 'clean' && p.includes('WORKFLOW VIOLATION') &&
+      (p.includes('PIPELINE IMMUTABLE (MULTI_PHASE)') || p.includes('PIPELINE VALIDATION FAILED')),
     p === 'clean' ? 'gate clean (swap allowed — BUG)' : p.split('\n')[0])
 }
 
@@ -805,6 +810,55 @@ await newSession()
   check('T27a reasoning ignored (turn stays clean)', await probeGate() === 'clean', logs.join(' | '))
   const r = await tryTask('bugfix-triage')
   check('T27b Task ok despite decoy reasoning part', r.ok, r.message.split('\n')[0])
+}
+
+// ============================================================================
+// T28 — deadlock regression (v8): an INVALID Turn-1 pipeline must NOT be
+// locked as the baseline, otherwise the corrective message hits Phase 17.2
+// (pipelineImmutable) and no recovery can clear it — a permanent deadlock.
+// ============================================================================
+await newSession()
+{
+  // (a) Turn 1 — orchestrator emits an INVALID pipeline
+  // (DEV-SIMPLE-false expects [worker, utility]).
+  await sendMessage('assistant', orchMsg({ agent: 'orchestrator', type: 'DEV', complexity: 'SIMPLE',
+    plan_exists: false, plan_source: null, goal: 'refactor', next_agent: 'worker',
+    pipeline: ['worker', 'utility', 'git-commit'] }))
+  const p = await probeGate()
+  check('T28a invalid pipeline blocked (PIPELINE VALIDATION FAILED; state NOT locked)',
+    p !== 'clean' && p.includes('PIPELINE VALIDATION FAILED'),
+    p === 'clean' ? 'gate clean (invalid pipeline accepted — BUG)' : p.split('\n')[0])
+  // (b) Turn 2 — corrected pipeline must be ACCEPTED. If the invalid pipeline
+  // had been locked as the Turn-1 baseline, this turn would hit
+  // PIPELINE IMMUTABLE and deadlock the session.
+  await sendMessage('assistant', orchMsg({ agent: 'orchestrator', type: 'DEV', complexity: 'SIMPLE',
+    plan_exists: false, plan_source: null, goal: 'refactor', next_agent: 'worker',
+    pipeline: ['worker', 'utility'] }))
+  const r = await tryTask('worker')
+  check('T28b corrected pipeline Task allowed (no IMMUTABLE deadlock)',
+    r.ok && !hasLog('PIPELINE IMMUTABLE'),
+    r.ok ? 'unexpected: ' + logs.join(' | ') : r.message.split('\n')[0])
+}
+// (c) self-heal — inject a POISONED lock directly into pipelineState (no valid
+// event sequence can produce one: simulates a session locked by a pre-fix
+// build). The next valid pipeline must RECAPTURE, not throw IMMUTABLE.
+// currentStep=-1 → the healing turn re-announces pipeline[0] (effectiveStep 0).
+if (__testPipelineState) {
+  await newSession()
+  __testPipelineState.set('orchestrator', {
+    pipeline: ['worker', 'utility', 'git-commit'], currentStep: -1, provisional: false,
+    type: 'DEV', complexity: 'SIMPLE', planExists: false,
+  })
+  logs.length = 0
+  await sendMessage('assistant', orchMsg({ agent: 'orchestrator', type: 'DEV', complexity: 'SIMPLE',
+    plan_exists: false, plan_source: null, goal: 'refactor', next_agent: 'worker',
+    pipeline: ['worker', 'utility'] }))
+  const r = await tryTask('worker')
+  check('T28c self-heal recapture on poisoned baseline (no IMMUTABLE)',
+    r.ok && hasLog('SELF-HEAL RECAPTURE') && !hasLog('PIPELINE IMMUTABLE'),
+    r.ok ? 'unexpected: ' + logs.join(' | ') : r.message.split('\n')[0])
+} else {
+  check('T28c self-heal seam available', false, 'plugin export __testPipelineState missing')
 }
 
 console.log('')
