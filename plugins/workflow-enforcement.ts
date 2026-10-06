@@ -135,6 +135,11 @@ const INSPECTION_BUDGET = 3
 let selfWorkDetected: boolean = false
 // >0 пока выполняется Task-субагент — enforcement приостановлен (атрибуция)
 let activeTaskDepth = 0
+// Стек запущенных Task-субагентов (верхний = текущий acting agent). Зеркалит
+// push/pop активногоTaskDepth: пока depth>0 currentAgent — это РОДИТЕЛЬСКИЙ
+// primary (дочерние сессии его не перезаписывают), поэтому .md-бан атрибутирует
+// вызов инструмента по вершине стека, а не по currentAgent.
+let subagentStack: string[] = []
 // Track if primary agent has made first Task call (for read/grep/glob lock)
 const primaryAgentFirstTaskCall = new Map<string, boolean>()
 
@@ -226,6 +231,21 @@ const MULTI_PHASE_MAX = 3
 const MULTI_PHASE_TYPES = ["BUGFIX", "DEVOPS", "DEV", "DOCS"]
 const MULTI_PHASE_STATES = ["AWAITING_CONFIRMATION", "CANCELLED"]
 const DOCS_HOOK_CHAIN = ["docs-writer", "utility"]
+
+// ============================================================
+// HARD BAN on .md / .markdown edits — only these agents may modify
+// documentation. Enforced in tool.execute.before BEFORE the depth-guard
+// (subagent calls included). All other agents must route doc updates
+// through requires_docs_update: true → Auto-DOCS hook.
+// ============================================================
+const DOCS_WHITELIST = [
+  "docs-writer",
+  "docs-planner",
+  "plan-writer-simple",
+  "plan-writer-complex",
+  "research-writer-simple",
+  "research-writer-complex"
+]
 
 // Confirmation gate: true between an AWAITING_CONFIRMATION JSON and the user's
 // reply. Clearing: (a) a user-role message (role pattern of the self-work guard
@@ -370,6 +390,7 @@ export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
         hasOutputtedJSON = new Map()
         selfWorkDetected = false
         activeTaskDepth = 0
+        subagentStack = []
         seenFindings = new Map()  // v5: сброс дедуп-журнала замечаний
         primaryAgentFirstTaskCall.clear()
 
@@ -1535,6 +1556,38 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
     "tool.execute.before": async (input, output) => {
       const timestamp = Date.now()
 
+      // HARD BAN: .md / .markdown edits — DOCS_WHITELIST only. Проверка ДО
+      // depth-guard'а ниже: tool-вызовы субагента
+      // (activeTaskDepth > 0) атрибутируются по вершине subagentStack —
+      // по одному currentAgent вышло бы родительское имя (orchestrator) и
+      // docs-writer блокировался бы сам. Блок прямым throw — конвенция
+      // остальных gate'ов этого хука (a throw in tool.execute.before blocks
+      // the call itself).
+      if (input.tool === "edit" || input.tool === "write" || input.tool === "patch") {
+        const filePath = String((output as any)?.args?.filePath || (input as any)?.args?.filePath
+          || (input as any).path || (input as any).file || "")
+        if (filePath.endsWith(".md") || filePath.endsWith(".markdown")) {
+          const actingAgent = subagentStack.length > 0
+            ? subagentStack[subagentStack.length - 1]
+            : currentAgent
+          if (!DOCS_WHITELIST.includes(actingAgent ?? "")) {
+            await client.app.log({
+              body: {
+                service: "workflow-enforcement",
+                level: "error",
+                message: `DOCUMENTATION VIOLATION — ${actingAgent ?? "unknown"} attempted ${input.tool} on ${filePath}`,
+                extra: { agent: actingAgent ?? null, tool: input.tool, filePath }
+              }
+            })
+            throw new Error(`
+⛔ DOCUMENTATION VIOLATION: ${actingAgent ?? "unknown"} cannot edit .md files.
+Only ${DOCS_WHITELIST.join(", ")} can modify documentation.
+Use requires_docs_update: true to trigger Auto-DOCS hook.
+            `)
+          }
+        }
+      }
+
       // v4: пока выполняется Task-субагент (activeTaskDepth > 0), ЛЮБОЙ tool-вызов
       // принадлежит субагенту, а не locked primary-агенту (родитель приостановлен
       // в ожидании результата). Enforcement атрибутирован только родительской
@@ -1564,6 +1617,8 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
 Primary agent dispatches EXACTLY ONE Task per turn and waits for the result.
             `)
           }
+          subagentStack.push(String((output as any)?.args?.subagent_type
+            || (input as any)?.args?.subagent_type || "unknown"))
           activeTaskDepth += 1
           await client.app.log({
             body: {
@@ -2038,6 +2093,7 @@ This is enforced by the workflow-enforcement plugin.
             extra: { currentAgent, mode: currentMode }
           }
         })
+        subagentStack.push(targetAgent)
         activeTaskDepth += 1 // v4: built-in агент (explore/general) тоже субагент
         return
       }
@@ -2122,6 +2178,7 @@ Plankestrator handles: PLAN, RESEARCH, RESEARCH+PLAN
       // v4: родительский Task-вызов прошёл routing — сейчас запустится субагент.
       // Пока activeTaskDepth > 0, все tool-вызовы и сообщения принадлежат СУБАГЕНТУ
       // (родитель приостановлен) → enforcement для них подавляется (см. depth-guard).
+      subagentStack.push(String(targetAgent || "unknown"))
       activeTaskDepth += 1
 
       // Log valid routing
@@ -2143,6 +2200,7 @@ Plankestrator handles: PLAN, RESEARCH, RESEARCH+PLAN
       // случаях, см. success-флаг ниже) → вернуть enforcement в родительскую сессию.
       if (input.tool === "task") {
         activeTaskDepth = Math.max(0, activeTaskDepth - 1)
+        subagentStack.pop()
       }
       await client.app.log({
         body: {

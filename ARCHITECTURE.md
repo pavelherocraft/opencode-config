@@ -1174,7 +1174,7 @@ The workflow-enforcement plugin implements the following lifecycle hooks (event-
 
 | Hook | When | Purpose |
 |------|------|---------|
-| `tool.execute.before` | Before any tool call | Routing table enforcement; JSON-before-Task gate (no grace for locked agents); inspection budget & post-pipeline inspection ban for plankestrator; suppressed while a Task subagent runs (`activeTaskDepth > 0`); unified deferred-violation gate; max ONE Task per turn + parallel-Task block from primary; rework max 3 per rework-loop; orchestrator self-work inspection block; confirmation gate — Task blocked while AWAITING_CONFIRMATION in the same turn |
+| `tool.execute.before` | Before any tool call | Routing table enforcement; JSON-before-Task gate (no grace for locked agents); inspection budget & post-pipeline inspection ban for plankestrator; suppressed while a Task subagent runs (`activeTaskDepth > 0`, except the `.md` edit ban); unified deferred-violation gate; max ONE Task per turn + parallel-Task block from primary; rework max 3 per rework-loop; orchestrator self-work inspection block; confirmation gate — Task blocked while AWAITING_CONFIRMATION in the same turn; hard ban on `.md`/`.markdown` edits for non-whitelisted agents (see Documentation Edit Restriction below) |
 | `tool.execute.after` | After tool completes | Logs tool completion |
 | `message.part.updated` | Text part updated | Text transport: buffers cumulative text parts (`part.type === "text"`); reasoning parts ignored so JSON extraction stays clean |
 | `message.part.delta` | Text delta streamed | Text transport: accumulates incremental deltas, but only for parts already known to be `type === "text"` (reasoning-delta filter) |
@@ -1182,6 +1182,16 @@ The workflow-enforcement plugin implements the following lifecycle hooks (event-
 | `session.created` | New session starts | Legacy compatibility: detects which agent is running when `session.created` carries the agent; CHILD (subagent) sessions preserve the parent's identity-lock state (parentID guard) |
 | `session.updated` | Session metadata updated | P0: detects + locks the agent from `info.agent` (authoritative on opencode 1.18.34, where `session.created` fires before the agent is bound); re-checks built-in Plan mode; CHILD sessions skipped (parentID guard); on an actual mode/agent switch it resets the deferred-violation flags and `pipelineState`, so a Turn-1 baseline locked in the old context does not survive the switch |
 | `session.idle` | Session ends | Logs workflow summary |
+
+### Documentation Edit Restriction
+
+Only `docs-writer`, `docs-planner`, `plan-writer-simple`, `plan-writer-complex`, `research-writer-simple`, and `research-writer-complex` agents can edit `.md` files. All other agents (including implementation agents like dev-professor, worker, execute-bug) are blocked at the plugin level from modifying documentation.
+
+**Enforcement:** plugin `tool.execute.before` checks `edit`/`write`/`patch` tool calls for `.md`/`.markdown` extensions and blocks non-whitelisted agents with explicit error message pointing to Auto-DOCS hook.
+
+**Rationale:** prevents implementation agents from bypassing Auto-DOCS hook discipline. Documentation updates must go through `requires_docs_update: true` → docs-writer → utility pipeline.
+
+**Attribution note:** the check runs BEFORE the `activeTaskDepth > 0` bypass and resolves the acting agent from a subagent stack (mirrors Task push/pop) — while a Task subagent runs, `currentAgent` still holds the parent primary, so stack-top attribution is what allows `docs-writer` itself through while blocking every other subagent (worker, execute-bug, utility, …) and the primary agents' own direct edits.
 
 **Event shape compatibility (opencode 1.18.34+):**
 Плагин поддерживает два формата событий:
