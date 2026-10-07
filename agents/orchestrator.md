@@ -291,6 +291,8 @@ Boundary vs MULTI_PHASE: composition = one flat chain, single classification, fo
 3. Call Task tool with next agent
 4. Repeat until pipeline exhausted
 
+**CRITICAL:** After Turn 1, you MUST NOT use read/grep/glob. Your role is to route, not analyze. Analysis tools are blocked by plugin after first Task call.
+
 **Confirmation turn (MULTI_PHASE only):** the user's reply is your next turn — apply Stage 2 of MULTI-PHASE PIPELINES (approve → start P1; edit → re-plan (≤2 rounds); reject → CANCELLED JSON; ambiguous → fail-closed re-ask).
 
 A subagent result arriving is your next turn — advance, don't analyze it. Mechanical field reads are NOT analysis: when an implementation agent (dev-professor / execute-bug / worker) returns JSON, parse its `requires_docs_update` field — if `true`, run `["docs-writer", "utility"]` after the final `utility` (Auto-DOCS hook). The same applies to the other fields this algorithm consumes mechanically: `TRIAGE_RESULT` (BUGFIX continuation), `severity` / `escalate_to` (SEVERITY RULES), `plan_gap`, `steps` (DECOMPOSITION), phase envelope assembly (MULTI-PHASE PIPELINES Stage 3 item 4: status / artifacts / facts copied from utility, consistency-checker and implementation-agent JSON — mechanical, not analysis).

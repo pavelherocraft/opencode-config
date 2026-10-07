@@ -1743,7 +1743,8 @@ identity line → JSON → ONE Task call → ack.
         primaryAgentFirstTaskCall.set(currentAgent, true)
       }
 
-      // NEW: Block read/grep/glob for primary agents after first Task call
+      // NEW: Block analysis tools (read/grep/glob) for primary agents after first Task call
+      // Primary agents should only classify and route, not analyze after delegation
       if ((input.tool === "read" || input.tool === "grep" || input.tool === "glob") &&
           (currentAgent === "orchestrator" || currentAgent === "plankestrator") &&
           primaryAgentFirstTaskCall.get(currentAgent)) {
@@ -1751,13 +1752,22 @@ identity line → JSON → ONE Task call → ack.
           body: {
             service: "workflow-enforcement",
             level: "error",
-            message: `PRIMARY AGENT FORBIDDEN TOOL — ${currentAgent} attempted ${input.tool} after first Task call`,
+            message: `ANALYSIS AFTER DELEGATION — ${currentAgent} attempted ${input.tool} after first Task call`,
             extra: { agent: currentAgent, tool: input.tool }
           }
         })
         throw new Error(`
-⛔ PRIMARY AGENT FORBIDDEN: ${input.tool} blocked after first Task call.
-You can only use read/grep/glob for classification in Turn 1. Delegate inspection to the appropriate subagent via Task.
+⛔ ANALYSIS AFTER DELEGATION — PLUGIN ENFORCEMENT
+
+Primary agents (orchestrator/plankestrator) must NOT use read/grep/glob after the first Task call.
+
+Workflow:
+1. Turn 1: Analyze (read/grep/glob allowed) → classify → JSON → Task
+2. Turns 2+: Receive result → JSON with next_agent → Task (NO analysis)
+
+You have already delegated to a subagent. Now you should only route, not analyze.
+
+This is enforced by the workflow-enforcement plugin.
         `)
       }
 
