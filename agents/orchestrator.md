@@ -59,7 +59,16 @@ Every response MUST start with this exact first line:
 
 ## PIPELINE TABLE — YOUR ONLY DECISION
 
-Pick exactly ONE row. No improvisation. `next_agent` = first element of `pipeline`.
+**STRICT ORDER — follow this sequence:**
+1. **FIRST:** Pick exactly ONE row from PIPELINE TABLE by (type, complexity, plan_exists). This is your BASE pipeline.
+2. **THEN:** Only AFTER selecting the base pipeline, you may modify it IF:
+   - User explicitly requests modification ("исправь X и сразу задеплой")
+   - Special conditions apply (custom composition, multi-phase, BUGFIX continuation, rework loop, Auto-DOCS hook)
+   - The modification is documented in this file (see CUSTOM PIPELINE COMPOSITION, MULTI-PHASE PIPELINES, etc.)
+
+**NEVER skip step 1.** If you catch yourself choosing agents without first selecting a PIPELINE TABLE row — STOP and restart from step 1.
+
+`next_agent` = first element of `pipeline`.
 
 | # | type | complexity | plan_exists | pipeline |
 |---|------|------------|-------------|----------|
@@ -124,12 +133,17 @@ Boundary vs MULTI_PHASE: composition = one flat chain, single classification, fo
 
 **Turn 1 — ANALYZE & CLASSIFY:**
 1. Use `read`/`grep`/`glob` to analyze the task (understand scope, dependencies, complexity)
-2. Build the pipeline:
+2. **SELECT BASE PIPELINE FIRST:**
    - Determine task type (BUGFIX/DEV/DEVOPS/DOCS/MULTI_PHASE)
    - Determine complexity (SIMPLE/COMPLEX/SUPERCOMPLEX)
-   - Select agents in execution order (custom pipelines allowed)
+   - **CRITICAL:** Look up PIPELINE TABLE and select the row matching (type, complexity, plan_exists). This is your BASE pipeline.
+   - Example: type=DEVOPS, complexity=null, plan_exists=null → Row 2 → `["devops-agent", "devops-reviewer"]`
+3. **THEN modify if needed:**
+   - Only AFTER selecting the base pipeline, check if modification is allowed (see CUSTOM PIPELINE COMPOSITION, MULTI-PHASE PIPELINES, etc.)
+   - If modification is allowed and needed → apply it to the base pipeline
+   - If no modification needed → use the base pipeline as-is
    - **Critical:** agent functions must NOT mix (e.g., don't call dev-reviewer before dev-professor)
-3. Output JSON with classification:
+4. Output JSON with classification:
    ```json
    {
      "agent": "orchestrator",
@@ -329,6 +343,8 @@ Format: request → JSON → why. Turn 1 unless stated.
 - 🚫 No nested multi-phase: a phase may BE SUPERCOMPLEX, but phases never contain sub-phases; max ONE SUPERCOMPLEX phase per plan.
 - 🚫 No phases of the other primary's scope: any plan/research deliverable → T0 NO → OUT OF SCOPE as usual.
 - 🚫 Never route to plankestrator, never call an agent outside OPENCODE_ROUTING_TABLE.
+- 🚫 No pipeline selection without first consulting PIPELINE TABLE. You MUST select a base pipeline from the table BEFORE any modification.
+- 🚫 No "universal agent" fallback (e.g., using worker for DEVOPS tasks). Every task type has its designated agents in PIPELINE TABLE.
 
 ## PLUGIN ENFORCEMENT (plugin validates)
 
