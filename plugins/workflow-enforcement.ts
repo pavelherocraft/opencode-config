@@ -2439,8 +2439,9 @@ function extractIdentityFromMessage(message: any): string | null {
   const content = message.content || message.text || ""
   if (typeof content !== "string") return null
 
-  // Look for "IDENTITY VERIFIED: I am orchestrator" or "IDENTITY VERIFIED: I am plankestrator"
-  const identityMatch = content.match(/IDENTITY VERIFIED:\s*I am\s+(orchestrator|plankestrator)/i)
+  // Look for "IDENTITY VERIFIED: I am orchestrator" or "IDENTITY VERIFIED: Я orchestrator"
+  // Support both English ("I am") and Russian ("Я")
+  const identityMatch = content.match(/IDENTITY VERIFIED:\s*(?:I am|Я)\s+(orchestrator|plankestrator)/i)
   if (identityMatch) {
     return identityMatch[1].toLowerCase()
   }
