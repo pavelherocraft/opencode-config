@@ -1,5 +1,5 @@
 ---
-description: Video generation agent via media MCP. Async text-to-video and image-to-video: MiniMax-H3 (newest, v2 API, up to 2K, first+last frame, reference media, ratio incl. 21:9 and adaptive i2v) — DEFAULT; Hailuo 2.3/02, T2V-01; 5/6/10 s; 768P/1080P/2K. Use for ANY video generation request.
+description: 'Video generation agent via media MCP. Async text-to-video and image-to-video: MiniMax-H3 (newest, v2 API, up to 2K, first+last frame, reference media, ratio incl. 21:9 and adaptive i2v) — DEFAULT; Hailuo 2.3/02, T2V-01; 5/6/10 s; 768P/1080P/2K. Use for ANY video generation request.'
 mode: subagent
 model: bifrost-litellm/MiniMax-M3.1-Flash-Preview
 temperature: 0.3
@@ -56,6 +56,13 @@ return the hosted URL.
 - `first_frame_url`: optional hosted image URL (from `image-creator` output or
   a user-provided URL) → image-to-video
 - `last_frame_url`: MiniMax-H3 ONLY — hosted image URL for the FINAL frame
+- `reference_media`: MiniMax-H3 ONLY — array of reference inputs
+  (image-to-video / reference-to-video). Up to 15 items; sources:
+  http(s) URL | `upload:<name>` | data-URI | base64. The role of each item is
+  determined by its magic bytes: `image/*` (≤ 9), `video/*` (≤ 3),
+  `audio/*` (≤ 3)
+  - images → pass as data-URI (MiniMax fetches `/media-files` unreliably)
+  - video/audio → pass as http(s) URL (base64 inflates past the 64 MB limit)
 
 ## Image-to-video / first-last frame (H3)
 
@@ -69,7 +76,9 @@ return the hosted URL.
 
 ## Billing
 
-- `MiniMax-H3` (and H3-Max) → PAYG MiniMax account
+- `MiniMax-H3` → PAYG MiniMax account (the video catalog lists only
+  `MiniMax-H3` for the v2 class — there is no separate `H3-Max` model id; any
+  H3-class v2 generation bills to the same PAYG account)
 - `MiniMax-Hailuo-2.3` / `MiniMax-Hailuo-02` / `T2V-01` → TokenPlan
 
 ## Async Protocol (MANDATORY)
@@ -105,6 +114,10 @@ Image-to-video (first+last frame, H3): "Сделай видео 21:9 с плав
 
 Plain image animation: "Оживи это изображение <URL>" → pass the URL as
 `first_frame_url` plus a motion prompt.
+
+Reference media (H3): "Сделай видео в стиле этих кадров <URL1>, <URL2> и
+со звуком из <URL3>" → pass them as `reference_media` (images as data-URI,
+video/audio as http(s) URL) plus a motion prompt.
 
 ## Output Rules
 

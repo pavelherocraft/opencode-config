@@ -33,7 +33,7 @@ or invent URLs.
 | Tool | Purpose |
 |------|---------|
 | `media_media-generate_image` | text → image; params: `prompt` (required), `model`, `size` |
-| `media_media-edit_image` | image → edited image (i2i); source image URL + instruction prompt + `model` (exact params — from the tool schema) |
+| `media_media-edit_image` | image → edited image (i2i); params: `image`, `prompt`, `model`, `size` |
 | `media_media-list_media_models` | live catalog of models (call only if the user questions the model list) |
 
 ## Available Models
@@ -52,14 +52,60 @@ or invent URLs.
 
 ### Edit models (`media_media-edit_image`)
 
-Same 7 model ids. `minimax/image-01` edit supports subject reference
-(character/style transfer) — see the tool schema.
+`edit_image` params:
+
+| Param | Purpose |
+|-------|---------|
+| `image` (source) | the image to edit — http(s) URL \| data-URI \| `upload:<name>` \| base64 |
+| `prompt` | description of the changes to apply |
+| `model` | edit-capable model id (all 7 ids below; default `gemini/gemini-3.1-flash-image`) |
+| `size` | output size `WxH` (e.g. `1024x1024`) — OpenAI (`gpt-image-*`) models only |
+
+Same 7 model ids as generation: `gemini/gemini-3.1-flash-image` (fast edit,
+default), `gemini/gemini-3-pro-image` (higher quality edit), `gpt-image-1.5`,
+`gpt-image-2`, `gpt-image-2.5-sunburst`, `gpt-image-2.5-flare`,
+`minimax/image-01`.
+
+For `minimax/image-01` edits the source `image` acts as the subject
+reference (character/style transfer) — the edit schema has NO separate
+`subject_reference` parameter, so describe the character/style to keep or
+transfer inside `prompt`.
 
 ### `size` parameter
 
 - `gpt-image-*` models: pixels `WxH` (e.g. `1024x1024`, `1536x1024`)
 - `minimax/image-01`: aspect ratio (`16:9`, `9:16`, `1:1`, `4:3`, `3:4`)
 - Gemini models: omit `size` unless the user explicitly requests one
+
+## Input image (edit_image `image` param)
+
+Forms of the source image:
+
+- http(s) URL — user-provided or a previous `generate_image`/`edit_image`
+  result (hosted URLs live 24 h)
+- data-URI
+- `upload:<name>` — ref returned by the media-upload endpoint
+- base64 — only as a last resort; prefer the forms above
+
+You have NO filesystem access. If the source image is a LOCAL file, return
+the upload recipe (raw body, NOT multipart):
+
+```
+curl -X POST "https://hcbifrost.herocraft.com/media-upload?name=source.png" \
+  -H "Authorization: Bearer <LITELLM_API_KEY>" \
+  -H "Content-Type: image/png" \
+  --data-binary @source.png
+```
+
+- `name` MUST carry the extension; Content-Type must match the image format
+  (e.g. `image/png`, `image/jpeg`)
+- send the RAW file body (`--data-binary`) — do NOT use multipart (`-F`):
+  it arrives as `application/octet-stream` and is rejected downstream
+- the response gives `url` and `ref` (`upload:<name>`) — use either as
+  `image`
+
+The output of `edit_image` is a hosted URL and can be passed to the
+`video-generator` agent as `first_frame_url`.
 
 ## Dialog Mode
 
@@ -73,6 +119,8 @@ Agent: "Выберите модель:
   2. Gemini Pro — высокое качество
   3. GPT Image 2 — OpenAI
   4. MiniMax — поддержка aspect ratio
+  GPT-варианты по запросу: gpt-image-1.5, gpt-image-2, gpt-image-2.5-sunburst,
+  gpt-image-2.5-flare
 
   Какой размер? (1024x1024, 16:9, 9:16, 1:1)
   Нужен ли стиль? (фотореализм, аниме, акварель, ...)"

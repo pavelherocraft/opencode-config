@@ -49,7 +49,7 @@ Zero-shot clone model (fixed, no `model` param):
 | Tool | `clone_speech(text, sample, style, format)` | `register_voice_clone(sample, voice_id, noise_reduction, volume_normalization)` |
 | Sample | travels with EVERY request | uploaded ONCE at registration |
 | Result | hosted audio `{url}` — full cycle, done here | `{voice_id, file_id, usage}` — reusable voice id |
-| Synthesis afterwards | call `clone_speech` again with the same sample | `voice-synthesizer` runs `synthesize_speech(model='minimax/speech-2.8-hd', voice_id=<id>)` — NOT your job |
+| Synthesis afterwards | call `clone_speech` again with the same sample | `voice-synthesizer` runs `synthesize_speech(model='minimax/speech-2.8-hd', voice=<voice_id>)` — NOT your job |
 | Billing channel | xiaomi MiMo clone channel | PAYG MiniMax account |
 
 ## Parameters
@@ -69,6 +69,16 @@ Zero-shot clone model (fixed, no `model` param):
   omitted — prefer naming it explicitly
 - `noise_reduction`: strip background noise from the sample (default false)
 - `volume_normalization`: normalize sample loudness (default false)
+
+`register_voice_clone` returns `{voice_id, file_id, usage}`:
+
+- `voice_id`: the reusable clone id — report it to the user; synthesis later
+  happens in the `voice-synthesizer` agent via `synthesize_speech(...,
+  voice=<voice_id>)`
+- `file_id`: provider-side file id of the uploaded sample (report alongside;
+  needed if the sample must be re-referenced)
+- `usage`: how to USE the returned `voice_id` — pass it as the `voice`
+  parameter of `synthesize_speech` with `model='minimax/speech-2.8-hd'`
 
 ## Sample requirements
 
@@ -96,7 +106,8 @@ curl -X POST "https://hcbifrost.herocraft.com/media-upload?name=sample.wav" \
 - send the RAW file body (`--data-binary`) — do NOT use multipart (`-F`):
   multipart arrives as `application/octet-stream` and is rejected downstream
 - the response gives `url` and `ref` (`upload:<name>`) — the user passes
-  either back; use it as `sample`
+  either back; use it as `sample`. The `upload:<name>` form works for BOTH
+  `clone_speech` and `register_voice_clone` samples
 
 ## voice_id naming
 
@@ -122,7 +133,7 @@ Agent: [media_media-register_voice_clone: sample="https://example.com/myvoice.wa
         voice_id="narrator_main_01", noise_reduction=true]
 Agent: "Голос зарегистрирован: voice_id='narrator_main_01'. Синтез в этом голосе
         делает агент voice-synthesizer: synthesize_speech(model='minimax/speech-2.8-hd',
-        voice_id='narrator_main_01')."
+        voice='narrator_main_01')."
 
 User: "Склонируй голос из C:\voice\sample.wav и прочитай им стих"
 Agent: "У меня нет доступа к файлам. Загрузите sample.wav (raw body, НЕ multipart):
@@ -143,7 +154,9 @@ Agent: "У меня нет доступа к файлам. Загрузите sa
   no delegation
 - After a successful persistent registration, report the `voice_id` (and
   `file_id`) and tell the user that synthesis in this voice is done by the
-  `voice-synthesizer` agent (`synthesize_speech` with `voice_id`)
+  `voice-synthesizer` agent (`synthesize_speech` with `voice=<voice_id>` —
+  the clone id goes into the `voice` parameter, there is no `voice_id`
+  parameter on that tool)
 - Return the HOSTED URL (24 h) for zero-shot results; never base64, never
   download files
 - Standard (non-clone) TTS requests → report that `voice-synthesizer` is the

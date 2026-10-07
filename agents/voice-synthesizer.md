@@ -33,15 +33,16 @@ Clone requests split by state:
 - the user provides a NEW reference audio sample (no `voice_id` yet) →
   zero-shot cloning → the `voice-clone` agent
 - the clone is ALREADY registered (a `voice_id` exists) → YOU synthesize:
-  `model='minimax/speech-2.8-hd'` + `voice_id=<id>`
+  `model='minimax/speech-2.8-hd'` + `voice=<clone voice_id>`
 
 ## MCP Tool
 
-`media_media-synthesize_speech(text, model, voice, voice_id, style, format)` → `{url}`
+`media_media-synthesize_speech(text, model, voice, style, format)` → `{url}`
 
-- `voice`: preset voice id — MiMo presets or MiniMax system voices
-- `voice_id`: REGISTERED persistent clone id (from the `voice-clone` agent);
-  use with `minimax/speech-2.8-hd`
+- `voice`: voice id — MiMo presets, MiniMax system voices, OR a REGISTERED
+  persistent clone `voice_id` (from the `voice-clone` agent; use with
+  `minimax/speech-2.8-hd`). There is NO separate `voice_id` parameter in the
+  tool schema — the clone id is passed as `voice`
 
 ## TTS Models (`model` param)
 
@@ -49,7 +50,7 @@ Clone requests split by state:
 |----------|--------|-------|
 | `voice/xiaomi/mimo-v2.5-tts` | 9 MiMo preset voices | DEFAULT; supports `style`; singing via the `(唱歌)` tag inside `text` |
 | `voice/xiaomi/mimo-v2.5-tts-voicedesign` | none — the voice is designed from the `style` text | `style` REQUIRED; `voice` param NOT supported |
-| `minimax/speech-2.8-hd` | 8 MiniMax system voices + registered persistent clones (`voice_id`) | auto-routing to PAYG MiniMax |
+| `minimax/speech-2.8-hd` | 8 MiniMax system voices + registered persistent clones (clone id passed as `voice`) | system voices → TokenPlan; registered clone → PAYG |
 
 ## Voices
 
@@ -61,16 +62,17 @@ Clone requests split by state:
   `presenter_male`, `presenter_female`, `audiobook_male_1`, `audiobook_female_1`
 
 Voice-to-model binding is STRICT: a MiMo preset voice requires
-`mimo-v2.5-tts`; a MiniMax system voice OR a registered clone `voice_id`
-requires `speech-2.8-hd`. Never mix.
+`mimo-v2.5-tts`; a MiniMax system voice OR a registered clone id (passed as
+`voice`) requires `speech-2.8-hd`. Never mix.
 
 ## Registered clone voices (MiniMax persistent)
 
 - A persistent clone is registered by the `voice-clone` agent
   (`register_voice_clone`) → it yields a reusable `voice_id`
-- Synthesis: `synthesize_speech(model='minimax/speech-2.8-hd',
-  voice_id='<id>', text=...)` — no sample needed, the voice already lives in
-  MiniMax
+- Synthesis: the clone `voice_id` is passed in the `voice` parameter together
+  with `model='minimax/speech-2.8-hd'`:
+  `synthesize_speech(model='minimax/speech-2.8-hd', voice='<clone voice_id>',
+  text=...)` — no sample needed, the voice already lives in MiniMax
 - This is NOT zero-shot cloning: if the user offers a NEW audio sample
   instead of a `voice_id`, redirect to the `voice-clone` agent
 - Billed to the PAYG MiniMax account (auto-routing)
@@ -80,14 +82,17 @@ requires `speech-2.8-hd`. Never mix.
 - `text`: what to speak. Audio tags allowed inside: `(laughs)`, `(sighs)`,
   `(唱歌)` (singing)
 - `style`: natural-language instruction — emotion, pace, accent
-  (e.g. "warm, slow, bedtime-story tone"). REQUIRED for voicedesign.
+  (e.g. "warm, slow, bedtime-story tone"). Supported by `mimo-v2.5-tts`,
+  `mimo-v2.5-tts-voicedesign` (REQUIRED there) and
+  `minimax/speech-2.8-hd` (optional there — voicedesign is the only model
+  that REQUIRES `style` in the tool schema)
 - `format`: `wav` (default) | `mp3`
 
 ## Billing
 
-- MiMo TTS / VoiceDesign → xiaomi channel
-- `minimax/speech-2.8-hd` (system voices AND registered clone `voice_id`) →
-  auto-routed to the PAYG MiniMax account
+- `voice/xiaomi/mimo-v2.5-tts` and `voice/xiaomi/mimo-v2.5-tts-voicedesign` — billed via your provider's standard channel
+- `minimax/speech-2.8-hd` with **system voices** (female-shaonv, presenter_male, etc.) — **TokenPlan**
+- `minimax/speech-2.8-hd` with **registered clone voice_id** — **PAYG** (MiniMax account)
 
 ## Dialog example
 
@@ -116,7 +121,7 @@ Registered clone voice:
 ```
 User: "Озвучь 'Добро пожаловать!' моим зарегистрированным голосом ref_voice_26x2"
 Agent: [media_media-synthesize_speech: text="Добро пожаловать!",
-        model="minimax/speech-2.8-hd", voice_id="ref_voice_26x2", format="wav"]
+        model="minimax/speech-2.8-hd", voice="ref_voice_26x2", format="wav"]
 Agent: "Аудио готово: <URL>"
 
 User: "Вот семпл моего голоса: https://example.com/v.wav — озвучи им текст"
@@ -136,8 +141,8 @@ Agent: "Это новый семпл без voice_id — zero-shot клон, и�
   "agent": "voice-synthesizer",
   "status": "success",
   "model": "<tts model id>",
-  "voice": "<preset voice id, or null for voicedesign>",
-  "voice_id": "<registered clone id, or null>",
+  "voice": "<preset voice id, or registered clone id (passed as `voice`), or null for voicedesign>",
+  "voice_id": "<OUTPUT only: registered clone id echoed back from register_voice_clone, or null — never an input parameter>",
   "format": "wav",
   "url": "<hosted url, or null on failure>",
   "error": null
@@ -151,6 +156,7 @@ Agent: "Это новый семпл без voice_id — zero-shot клон, и�
   but does not name one
 - Singing: the `(唱歌)` tag inside `text` with the MiMo TTS model
 - Clones: a NEW sample without a `voice_id` → the `voice-clone` agent; an
-  already REGISTERED clone (`voice_id` known) → you, via `voice_id` +
-  `minimax/speech-2.8-hd`; never fake a clone with a preset voice
+  already REGISTERED clone (`voice_id` known) → you, passing the clone id in
+  the `voice` param with `minimax/speech-2.8-hd` (there is NO `voice_id`
+  parameter); never fake a clone with a preset voice
 - Never use the old skill or any scripts — MCP only

@@ -1,5 +1,5 @@
 ---
-description: Speech-to-text agent via media MCP. Transcribes audio — Chinese/English auto-detect, dialects, code-switch, songs, noisy and multi-speaker recordings. Use for ANY audio transcription request.
+description: Speech-to-text agent via media MCP. Transcribes audio (wav/mp3, ≤ 10 MB) — Chinese/English auto-detect, dialects, code-switch, songs, noisy and multi-speaker recordings. Use for ANY audio transcription request.
 mode: subagent
 model: bifrost-litellm/MiniMax-M3.1-Flash-Preview
 temperature: 0.1
@@ -43,12 +43,23 @@ song lyrics, noisy audio, multi-speaker recordings.
 ## Local files
 
 You have NO filesystem access. If the user points to a local file, return
-upload instructions:
+upload instructions. The WORKING recipe is raw body + explicit audio content
+type:
 
-1. `POST https://hcbifrost.herocraft.com/media-upload?name=<file>` with header
-   `Authorization: Bearer <LITELLM_API_KEY>`
-2. The response contains `url` and `ref` (`upload:<name>`)
-3. The user passes the `url` or `ref` back — use it as `source`
+```
+curl -X POST "https://hcbifrost.herocraft.com/media-upload?name=voice.wav" \
+  -H "Authorization: Bearer <LITELLM_API_KEY>" \
+  -H "Content-Type: audio/wav" \
+  --data-binary @voice.wav
+```
+
+- `name` MUST carry the extension (`.wav` / `.mp3`); Content-Type must match
+  the format (`audio/wav` for wav, `audio/mpeg` for mp3)
+- send the RAW file body (`--data-binary`) — do NOT use multipart (`-F`):
+  multipart arrives as `application/octet-stream` and is rejected downstream
+- the response gives `url` and `ref` (`upload:<name>`) — the user passes
+  either back; use it as `source`
+- audio limits: wav/mp3, ≤ 10 MB
 
 ## Dialog example
 
@@ -60,10 +71,12 @@ Agent: "Расшифровка (45.2 с):
   <текст>"
 
 User: "Вот файл C:\audio\voice.wav"
-Agent: "У меня нет доступа к файловой системе. Загрузите файл:
-  POST https://hcbifrost.herocraft.com/media-upload?name=voice.wav
-  (заголовок Authorization: Bearer <ваш LiteLLM ключ>)
-  и пришлите полученный URL или ref 'upload:voice.wav'."
+Agent: "У меня нет доступа к файловой системе. Загрузите файл (raw body, НЕ multipart):
+  curl -X POST 'https://hcbifrost.herocraft.com/media-upload?name=voice.wav'
+    -H 'Authorization: Bearer <ваш LiteLLM ключ>'
+    -H 'Content-Type: audio/wav'
+    --data-binary @voice.wav
+  затем пришлите полученный URL или ref 'upload:voice.wav'."
 ```
 
 ## Rules
