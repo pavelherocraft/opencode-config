@@ -281,6 +281,8 @@ Both `orchestrator` and `plankestrator` are locked down to prevent them from doi
 | `question` | ❌ deny | ❌ deny | Primary agents don't ask the user |
 | `todowrite` | ❌ deny | ❌ deny | Primary agents don't manage todos |
 
+**Note:** Primary agents may use `read`/`grep`/`glob` for task analysis before JSON classification. Execution tools (`edit`/`write`/`bash`/`patch`) and `task` are blocked until JSON is emitted.
+
 **Defense in depth — this lock is enforced by 4 layers:**
 
 1. **Merged permission ruleset** (opencode.json deep-merged with `agents/*.md` frontmatter) — the runtime refuses to inject denied tools into the agent's toolset
@@ -1174,7 +1176,7 @@ The workflow-enforcement plugin implements the following lifecycle hooks (event-
 
 | Hook | When | Purpose |
 |------|------|---------|
-| `tool.execute.before` | Before any tool call | Routing table enforcement; JSON-before-Task gate (no grace for locked agents); inspection budget & post-pipeline inspection ban for plankestrator; suppressed while a Task subagent runs (`activeTaskDepth > 0`, except the `.md` edit ban); unified deferred-violation gate; max ONE Task per turn + parallel-Task block from primary; rework max 3 per rework-loop; orchestrator self-work inspection block; confirmation gate — Task blocked while AWAITING_CONFIRMATION in the same turn; hard ban on `.md`/`.markdown` edits for non-whitelisted agents (see Documentation Edit Restriction below) |
+| `tool.execute.before` | Before any tool call | Routing table enforcement; classification gate (read/grep/glob allowed before JSON; edit/write/bash/patch/task blocked until JSON emitted; no grace for locked agents); inspection budget & post-pipeline inspection ban for plankestrator; suppressed while a Task subagent runs (`activeTaskDepth > 0`, except the `.md` edit ban); unified deferred-violation gate; max ONE Task per turn + parallel-Task block from primary; rework max 3 per rework-loop; orchestrator self-work inspection block; confirmation gate — Task blocked while AWAITING_CONFIRMATION in the same turn; hard ban on `.md`/`.markdown` edits for non-whitelisted agents (see Documentation Edit Restriction below) |
 | `tool.execute.after` | After tool completes | Logs tool completion |
 | `message.part.updated` | Text part updated | Text transport: buffers cumulative text parts (`part.type === "text"`); reasoning parts ignored so JSON extraction stays clean |
 | `message.part.delta` | Text delta streamed | Text transport: accumulates incremental deltas, but only for parts already known to be `type === "text"` (reasoning-delta filter) |
@@ -1182,6 +1184,25 @@ The workflow-enforcement plugin implements the following lifecycle hooks (event-
 | `session.created` | New session starts | Legacy compatibility: detects which agent is running when `session.created` carries the agent; CHILD (subagent) sessions preserve the parent's identity-lock state (parentID guard) |
 | `session.updated` | Session metadata updated | P0: detects + locks the agent from `info.agent` (authoritative on opencode 1.18.34, where `session.created` fires before the agent is bound); re-checks built-in Plan mode; CHILD sessions skipped (parentID guard); on an actual mode/agent switch it resets the deferred-violation flags and `pipelineState`, so a Turn-1 baseline locked in the old context does not survive the switch |
 | `session.idle` | Session ends | Logs workflow summary |
+
+### Primary Agent Workflow
+
+Primary agents (orchestrator, plankestrator) follow a two-phase workflow:
+
+**Phase 1: Analysis & Classification**
+- Use `read`/`grep`/`glob` to analyze the task (understand scope, dependencies, complexity)
+- Build the pipeline: determine task type, complexity, and agent sequence
+- Custom pipelines allowed (e.g., BUGFIX + DEV + DEVOPS in sequence)
+- **Critical:** agent functions must NOT mix within a phase
+
+**Phase 2: JSON Output & Execution**
+- Output JSON with classification (`type`, `complexity`, `pipeline`, `goal`)
+- Call Task tool with the first agent from pipeline
+- Subsequent turns: output JSON with `next_agent`, call Task tool
+
+**Enforcement:** plugin blocks `edit`/`write`/`bash`/`patch`/`task` until JSON is emitted. Analysis tools (`read`/`grep`/`glob`) remain available throughout.
+
+**Plankestrator specialization:** CLASSIFY ONLY — does not write plans itself, only classifies tasks and delegates to writer/reviewer agents.
 
 ### Documentation Edit Restriction
 

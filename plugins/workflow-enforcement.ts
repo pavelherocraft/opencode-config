@@ -1942,12 +1942,6 @@ Identity line → JSON block → Task call with next_agent from your routing tab
         })
       }
 
-      // Check: is this the first task tool call? (race condition mitigation)
-      // IMPORTANT: Check BEFORE pushing to workflowSteps — moved here so it's
-      // available for both the reverse routing warning and the enforcement check.
-      const isFirstTaskCall = input.tool === "task"
-        && workflowSteps.filter(s => s.tool === "task").length === 0
-
       // REMOVED: state mutation from reverse routing lookup.
       //
       // The previous implementation set currentAgent based on which subagent
@@ -1961,7 +1955,6 @@ Identity line → JSON block → Task call with next_agent from your routing tab
       //
       // Race conditions (where session.created has not detected yet but
       // the orchestrator/plankestrator is about to call task) are handled by:
-      //   - isFirstTaskCall grace period above (first task call bypasses JSON)
       //   - session.created state reset (no stale lock from previous session)
       //   - The `if (!currentAgent) return` early-out at the routing check,
       //     which means unknown agents proceed without enforcement
@@ -2014,9 +2007,6 @@ Identity line → JSON block → Task call with next_agent from your routing tab
       // a substitute for delegation.
       // ==========================================================
 
-      // Only enforce routing on "task" tool calls (agent delegation)
-      if (input.tool !== "task") return
-
       const targetAgent = (output as any)?.args?.subagent_type || (input as any)?.args?.subagent_type
 
       if (!currentAgent) {
@@ -2029,6 +2019,52 @@ Identity line → JSON block → Task call with next_agent from your routing tab
         })
         return
       }
+
+      // Block execution tools (edit/write/bash/patch) before JSON classification.
+      // Analysis tools (read/grep/glob) are ALLOWED before JSON — they are the
+      // instruments of the ANALYZE step; execution must follow classification.
+      if (input.tool === "edit" || input.tool === "write" || input.tool === "bash" || input.tool === "patch") {
+        const agentJSONStatus = hasOutputtedJSON.get(currentAgent) ?? false
+        if (!agentJSONStatus) {
+          throw new Error(`
+⛔ CLASSIFICATION REQUIRED — PLUGIN ENFORCEMENT
+
+Primary agents (orchestrator/plankestrator) must classify the task BEFORE executing.
+
+Workflow:
+1. Analyze the task using read/grep/glob (allowed)
+2. Build the pipeline (determine which agents to call)
+3. Output JSON with classification (type, complexity, pipeline)
+4. THEN use execution tools (via Task delegation)
+
+Direct execution without classification violates the routing contract.
+          `)
+        }
+      }
+
+      // Task tool requires JSON (classification must come first)
+      if (input.tool === "task") {
+        const AUXILIARY_TASK_TARGETS = [...IDENTITY_PROBE_AGENTS, "view-image"]
+        const agentJSONStatus = hasOutputtedJSON.get(currentAgent) ?? false
+        if (!agentJSONStatus && targetAgent && !AUXILIARY_TASK_TARGETS.includes(targetAgent)) {
+          throw new Error(`
+⛔ JSON OUTPUT REQUIRED — PLUGIN ENFORCEMENT
+
+You MUST output valid JSON BEFORE calling the Task tool.
+
+Workflow:
+1. Analyze the task using read/grep/glob (allowed)
+2. Build the pipeline (determine which agents to call)
+3. Output JSON with classification (type, complexity, pipeline)
+4. THEN call Task tool with the first agent
+
+This is enforced by the workflow-enforcement plugin.
+        `)
+        }
+      }
+
+      // Only enforce routing on "task" tool calls (agent delegation)
+      if (input.tool !== "task") return
 
       // v6 (Phase 14.2): rework loop max 3 (orchestrator.md SEVERITY RULES: "if a blocker
       // persists after the 3rd rework iteration → STOP and report failure to the user").
@@ -2050,34 +2086,6 @@ final summary with the unresolved findings (BLOCKER ack format per SEVERITY RULE
           `)
         }
         reworkCount.set(currentAgent, count + 1)
-      }
-      
-      // Check: agent must output JSON before calling non-identity-probe agents.
-      // v4: для LOCKED primary-агентов grace-исключение isFirstTaskCall БОЛЬШЕ НЕ
-      // применяется — оно существует только как race-mitigation для UNLOCKED сессий
-      // (session.created ещё не определил агента). Если identityLocked=true, гонки
-      // нет: lock установлен до первого хода модели.
-      // Auxiliary-цели остаются исключены: identity-probe и view-image легально
-      // вызываются ОТДЕЛЬНЫМ ходом ДО классификационного JSON
-      // (plankestrator.md Turn 1 step 3; исследование стр. 128 — ⚠️ нюанс).
-      const AUXILIARY_TASK_TARGETS = [...IDENTITY_PROBE_AGENTS, "view-image"]
-      const jsonGracePeriod = isFirstTaskCall && !identityLocked
-      const agentJSONStatus = hasOutputtedJSON.get(currentAgent) ?? false
-      if (!agentJSONStatus && targetAgent && !AUXILIARY_TASK_TARGETS.includes(targetAgent) && !jsonGracePeriod) {
-        throw new Error(`
-⛔ JSON OUTPUT REQUIRED — PLUGIN ENFORCEMENT
-
-You MUST output valid JSON BEFORE calling the Task tool.
-
-Required output order:
-1. FIRST: "IDENTITY VERIFIED: I am ${currentAgent}..."
-2. SECOND: JSON code block with ALL required fields
-3. THIRD: THEN call Task tool
-
-Exception: Identity probe agents may be called before JSON output.
-
-This is enforced by the workflow-enforcement plugin.
-        `)
       }
 
       // BUILT-IN OPENCODE AGENTS — never block these, even when enforcement is active.
