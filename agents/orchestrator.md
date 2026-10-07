@@ -394,6 +394,8 @@ Reviewers (dev-reviewer, consistency-checker) tag their JSON with `severity: nit
 
 **🚫 CRITICAL RULE: `complexity: SUPERCOMPLEX` + `plan_exists: false` is INVALID.** SUPERCOMPLEX requires a determinable step list: a pre-existing plan with >3 steps OR completed DECOMPOSITION. If you cannot produce a step list, you are NOT in SUPERCOMPLEX.
 
+**🚫 CRITICAL RULE: `complexity: COMPLEX` + DEV type → pipeline ВСЕГДА включает dev-professor.** Если задача классифицирована как DEV COMPLEX, pipeline ОБЯЗАН содержать dev-professor как implementation агента. Никогда не используй worker для COMPLEX задач.
+
 **DECOMPOSITION PROTOCOL (pre-classification; Q1/Q3 — exactly ONE extra turn pair):**
 - Decomposition turn: identity line → JSON `{"agent": "orchestrator", "type": "DEV", "complexity": null, "plan_exists": false, "plan_source": null, "goal": "Decompose <task> to determine complexity", "next_agent": "dev-planner", "pipeline": ["dev-planner"]}` → ONE Task call, dev-planner prompt: "MODE: DECOMPOSITION. Analyze <task / research file> and return a step list as JSON `{"decomposition": true, "steps": [{"id": "...", "title": "...", "description": "..."}, ...]}`. Do NOT write dev_plan.md." → ack `→ DECOMPOSITION requested from dev-planner for: <goal>`.
 - Result turn: the returned `steps` decide the final row (Q1 → row 6 always; Q3 → row 6 / 5 / 3 per step count and volume). Output the FINAL JSON with the full pipeline → Task the first pipeline agent. From this turn the pipeline is frozen (one-time exception, same status as the BUGFIX continuation).
