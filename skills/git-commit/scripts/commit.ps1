@@ -7,6 +7,7 @@
 #                                     gates, commit, optionally push
 #   -PushOnly                         push already-committed work; never stages, never commits.
 #                                     Preflight: upstream set, not behind, not diverged.
+#   -Revert <hash> [-Push]              revert specified commit; optionally push
 #
 # Gates (BLOCK = refuse to commit):
 #   - git identity (user.name/user.email) missing
@@ -27,6 +28,7 @@ param(
     [switch]$Push,
     [switch]$PushOnly,
     [switch]$Analyze,
+    [string]$Revert,  # NEW: commit hash to revert
     [string]$RepoDir = (Get-Location).Path
 )
 
@@ -218,6 +220,53 @@ try {
         exit 0
     }
 
+    # ------------- REVERT MODE -------------
+    if ($Revert) {
+        if ($Message -or $Files.Count -gt 0 -or $StagedOnly -or $Push -or $Analyze) {
+            Write-Output 'ERROR: -Revert cannot be combined with other modes'
+            exit 2
+        }
+        Write-Output '=== REVERT MODE ==='
+        Write-Output ("REPO: " + (git rev-parse --show-toplevel))
+
+        # Validate commit hash
+        $commitExists = git rev-parse --verify "$Revert^0" 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Output "ERROR: commit '$Revert' does not exist"
+            exit 2
+        }
+
+        # Get commit info
+        $commitSubject = git log -1 --pretty=format:"%s" $Revert
+        $commitHash = git rev-parse --short $Revert
+        Write-Output "REVERTING: $commitHash $commitSubject"
+
+        # Check identity
+        if (-not $identityOk) {
+            Write-Output "ERROR: git identity missing (user.name='$userName' user.email='$userEmail')"
+            exit 2
+        }
+
+        # Perform revert
+        git revert $Revert --no-edit
+        if ($LASTEXITCODE -ne 0) {
+            Write-Output 'ERROR: git revert failed (conflicts?)'
+            exit 2
+        }
+
+        $newHash = git rev-parse --short HEAD
+        Write-Output "REVERTED: $newHash (revert of $commitHash)"
+
+        if ($Push) {
+            $branch = git branch --show-current
+            Invoke-Push
+            if ($Script:PushExit -ne 0) { Write-Output 'ERROR: revert remains local'; exit 2 }
+        }
+
+        Write-Output '=== END REVERT ==='
+        exit 0
+    }
+
     # ------------- COMMIT MODE -------------
     if (-not $Message -or -not $Message.Trim()) { Write-Output 'ERROR: -Message is required'; exit 2 }
     $subject = ($Message -split "`n")[0].TrimEnd()
@@ -231,8 +280,20 @@ try {
     # staging decision
     if ($Files.Count -gt 0) {
         foreach ($f in $Files) {
-            git add -- $f
-            if ($LASTEXITCODE -ne 0) { Write-Output "ERROR: git add failed for: $f"; exit 2 }
+            # Handle both relative and absolute paths
+            $resolvedPath = $f
+            if (-not (Test-Path -LiteralPath $f)) {
+                # Try relative to repo root
+                $repoRelative = Join-Path $RepoDir $f
+                if (Test-Path -LiteralPath $repoRelative) {
+                    $resolvedPath = $repoRelative
+                } else {
+                    Write-Output "ERROR: file not found: $f"
+                    exit 2
+                }
+            }
+            git add -- $resolvedPath
+            if ($LASTEXITCODE -ne 0) { Write-Output "ERROR: git add failed for: $resolvedPath"; exit 2 }
         }
     }
     elseif ($StagedOnly) { <# use index as-is #> }

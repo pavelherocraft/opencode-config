@@ -1,6 +1,6 @@
 ---
 name: git-commit
-description: 'Internal git commit toolkit for the git-commit agent. Runs commit.ps1 to analyze repo state (-Analyze: status, staged/unstaged stats, recent conventional-commit style, hygiene warnings), to create gated commits (-Message with explicit -Files or -StagedOnly, optional -Push), and to push already-committed work without committing (-PushOnly). Blocks secrets, sensitive filenames, and conflict markers; warns on large files and non-conventional subjects. Hidden from all other agents by skill permissions.'
+description: 'Internal git commit toolkit for the git-commit agent. Runs commit.ps1 to analyze repo state (-Analyze), create gated commits (-Message with -Files or -StagedOnly, optional -Push), push already-committed work (-PushOnly), or revert commits (-Revert <hash>). Blocks secrets, sensitive filenames, and conflict markers; warns on large files and non-conventional subjects. Hidden from all other agents by skill permissions.'
 ---
 
 # Git Commit (gated, conventional)
@@ -31,6 +31,15 @@ locally but a separate step is needed to land it):
 ```powershell
 & ".../commit.ps1" -PushOnly
 ```
+
+Revert a commit:
+
+```powershell
+& ".../commit.ps1" -Revert abc1234           # revert commit, don't push
+& ".../commit.ps1" -Revert abc1234 -Push     # revert and push
+```
+
+`-Revert` creates a new commit that undoes the specified commit. It cannot be combined with `-Message`, `-Files`, `-StagedOnly`, or `-Analyze`.
 
 `-PushOnly` preflights before touching the network and refuses unsafe states:
 
