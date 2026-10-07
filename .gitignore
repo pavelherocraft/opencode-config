@@ -19,6 +19,7 @@ __pycache__/
 ключики.txt
 output/
 backup/
+backups/
 
 # Multi-phase journal (transient, deleted after chain completes)
 PHASE_STATE.md

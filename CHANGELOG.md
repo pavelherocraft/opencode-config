@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **orchestrator.md**: compressed from 595 to 341 lines (−42.7%). Added TURN 1 EXAMPLE (few-shot) after identity block. Removed PIPELINE GUIDE details (→ ARCHITECTURE.md reference), deleted duplicate CUSTOM PIPELINE CONSTRUCTION section, compressed MULTI-PHASE/SUPERCOMPLEX/EXAMPLES/EDGE CASES into dense paragraphs while preserving all 32 plugin-critical literals verbatim.
+
 ### Added
 - **Кастомные пайплайны как конкатенация эталонных строк PIPELINE TABLE.** Когда пользователь явно запросил последовательную связку («исправь X и сразу задеплой») или фазы жёстко связаны, orchestrator emit'ит `pipeline_source_rows` (≥2 ключа строк таблицы) + `pipeline` = их точная конкатенация; type/complexity/plan_exists — значения первой строки. Подтверждение не требуется (явный запрос = мандат). Граница: MULTI_PHASE — для 2+ раздельных deliverables с подтверждением плана; компоновка — для тесно связанных явно названных связок; дефолт — одна каноническая строка.
   - Plugin: ветвь композиции в `validatePipeline` — fail-closed на неизвестных ключах и на несоответствии конкатенации
