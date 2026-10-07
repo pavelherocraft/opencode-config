@@ -1174,7 +1174,7 @@ The workflow-enforcement plugin implements the following lifecycle hooks (event-
 
 | Hook | When | Purpose |
 |------|------|---------|
-| `tool.execute.before` | Before any tool call | Routing table enforcement; JSON-before-Task gate (no grace period — JSON mandatory on first turn); inspection budget & post-pipeline inspection ban for plankestrator; suppressed while a Task subagent runs (`activeTaskDepth > 0`, except the `.md` edit ban); unified deferred-violation gate; max ONE Task per turn + parallel-Task block from primary; rework max 3 per rework-loop; orchestrator self-work inspection block; confirmation gate — Task blocked while AWAITING_CONFIRMATION in the same turn; hard ban on `.md`/`.markdown` edits for non-whitelisted agents (see Documentation Edit Restriction below) |
+| `tool.execute.before` | Before any tool call | Routing table enforcement; JSON-before-Task gate (no grace for locked agents); inspection budget & post-pipeline inspection ban for plankestrator; suppressed while a Task subagent runs (`activeTaskDepth > 0`, except the `.md` edit ban); unified deferred-violation gate; max ONE Task per turn + parallel-Task block from primary; rework max 3 per rework-loop; orchestrator self-work inspection block; confirmation gate — Task blocked while AWAITING_CONFIRMATION in the same turn; hard ban on `.md`/`.markdown` edits for non-whitelisted agents (see Documentation Edit Restriction below) |
 | `tool.execute.after` | After tool completes | Logs tool completion |
 | `message.part.updated` | Text part updated | Text transport: buffers cumulative text parts (`part.type === "text"`); reasoning parts ignored so JSON extraction stays clean |
 | `message.part.delta` | Text delta streamed | Text transport: accumulates incremental deltas, but only for parts already known to be `type === "text"` (reasoning-delta filter) |
@@ -1202,14 +1202,6 @@ Only `docs-writer`, `docs-planner`, `plan-writer-simple`, `plan-writer-complex`,
 
 Note: the session lifecycle events (`session.created`, `session.updated`, `session.idle`, `message.part.updated`, `message.part.delta`, `message.updated`) are dispatched inside the plugin's single `event` hook. The `session.updated` branch detects + locks the agent from `info.agent` (opencode 1.18.34); `message.part.updated`/`message.part.delta` buffer text parts (reasoning-filtered); `message.updated` finalizes and validates (only on `finish="stop"` || `time.completed`). Identity-drift detection still lives in the `message.updated` branch.
 
-### JSON Output Requirement
-
-Primary agents (orchestrator, plankestrator) MUST output valid JSON before calling the Task tool. No grace period — JSON is mandatory on the first turn.
-
-**Enforcement:** plugin `tool.execute.before` checks `hasOutputtedJSON` flag and blocks Task calls for non-auxiliary targets if JSON was not emitted. Auxiliary targets (identity-probe, view-image) are excluded from this check.
-
-**Rationale:** orchestrator/plankestrator must always classify the task (type, complexity, pipeline) before delegating. Working without JSON violates the routing contract.
-
 ## 10. Identity Verification Format
 
 Both primary agents must output identity verification to prevent drift:
@@ -1220,7 +1212,7 @@ Both primary agents must output identity verification to prevent drift:
 ✓ IDENTITY VERIFIED: I am [agent_name]. I am NOT [other_agent_name].
 ```
 
-### JSON "agent" Field
+### JSON Output Requirement
 
 All agents must include an `"agent"` field in their JSON output:
 

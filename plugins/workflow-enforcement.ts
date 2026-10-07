@@ -1942,6 +1942,12 @@ Identity line → JSON block → Task call with next_agent from your routing tab
         })
       }
 
+      // Check: is this the first task tool call? (race condition mitigation)
+      // IMPORTANT: Check BEFORE pushing to workflowSteps — moved here so it's
+      // available for both the reverse routing warning and the enforcement check.
+      const isFirstTaskCall = input.tool === "task"
+        && workflowSteps.filter(s => s.tool === "task").length === 0
+
       // REMOVED: state mutation from reverse routing lookup.
       //
       // The previous implementation set currentAgent based on which subagent
@@ -1955,6 +1961,7 @@ Identity line → JSON block → Task call with next_agent from your routing tab
       //
       // Race conditions (where session.created has not detected yet but
       // the orchestrator/plankestrator is about to call task) are handled by:
+      //   - isFirstTaskCall grace period above (first task call bypasses JSON)
       //   - session.created state reset (no stale lock from previous session)
       //   - The `if (!currentAgent) return` early-out at the routing check,
       //     which means unknown agents proceed without enforcement
@@ -2045,13 +2052,18 @@ final summary with the unresolved findings (BLOCKER ack format per SEVERITY RULE
         reworkCount.set(currentAgent, count + 1)
       }
       
-      // Check: primary agents (orchestrator/plankestrator) MUST output JSON before
-      // calling Task tool. No grace period — JSON is mandatory on first turn.
-      // Auxiliary targets (identity-probe, view-image) are excluded — they may be
-      // called before JSON output for identity verification.
+      // Check: agent must output JSON before calling non-identity-probe agents.
+      // v4: для LOCKED primary-агентов grace-исключение isFirstTaskCall БОЛЬШЕ НЕ
+      // применяется — оно существует только как race-mitigation для UNLOCKED сессий
+      // (session.created ещё не определил агента). Если identityLocked=true, гонки
+      // нет: lock установлен до первого хода модели.
+      // Auxiliary-цели остаются исключены: identity-probe и view-image легально
+      // вызываются ОТДЕЛЬНЫМ ходом ДО классификационного JSON
+      // (plankestrator.md Turn 1 step 3; исследование стр. 128 — ⚠️ нюанс).
       const AUXILIARY_TASK_TARGETS = [...IDENTITY_PROBE_AGENTS, "view-image"]
+      const jsonGracePeriod = isFirstTaskCall && !identityLocked
       const agentJSONStatus = hasOutputtedJSON.get(currentAgent) ?? false
-      if (!agentJSONStatus && targetAgent && !AUXILIARY_TASK_TARGETS.includes(targetAgent)) {
+      if (!agentJSONStatus && targetAgent && !AUXILIARY_TASK_TARGETS.includes(targetAgent) && !jsonGracePeriod) {
         throw new Error(`
 ⛔ JSON OUTPUT REQUIRED — PLUGIN ENFORCEMENT
 
