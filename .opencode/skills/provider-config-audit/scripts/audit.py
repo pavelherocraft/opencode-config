@@ -128,7 +128,13 @@ def main():
 
     # Check 2: per-model validation
     valid_inputs = {'text', 'image', 'audio', 'video'}
-    valid_efforts = {'low', 'medium', 'high', 'max'}
+    # reasoningEffort vocabulary: the standard ladder plus two extras introduced by
+    # later pastes -- "xhigh" (MiniMax-M3 / M3.1-Flash-Preview, between high and max)
+    # and "none" (reasoning off, only ever used by the `off` variant).
+    valid_efforts = {'low', 'medium', 'high', 'xhigh', 'max'}
+    # 'none' is valid at variant level only; the top-level options.reasoningEffort
+    # should never be 'none' (omit it instead).
+    valid_variant_efforts = {'none'} | valid_efforts
 
     for key, model in models.items():
         # Check limit
@@ -209,6 +215,12 @@ def main():
                     findings.append({
                         'severity': 'concern',
                         'finding': f'variant {variant_key} missing reasoningEffort',
+                        'location': key,
+                    })
+                elif variant['reasoningEffort'] not in valid_variant_efforts:
+                    findings.append({
+                        'severity': 'concern',
+                        'finding': f"variant {variant_key} has invalid reasoningEffort: {variant['reasoningEffort']}",
                         'location': key,
                     })
 

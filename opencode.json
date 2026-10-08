@@ -545,6 +545,18 @@
             }
           }
         },
+        "tencent/Hy4 (reserved - use when main is exhausted)": {
+          "name": "tencent/Hy4 (reserved - use when main is exhausted)",
+          "limit": {
+            "context": 1048576,
+            "output": 32768
+          },
+          "options": {
+            "thinking": {
+              "type": "enabled"
+            }
+          }
+        },
         "tencent/Kimi K3 (reserved - use when main is exhausted)": {
           "name": "tencent/Kimi K3 (reserved - use when main is exhausted)",
           "limit": {
@@ -566,30 +578,11 @@
             }
           }
         },
-        "tencent/deepseek-v4-flash-0731": {
-          "name": "tencent/deepseek-v4-flash-0731",
-          "limit": {
-            "context": 1048576,
-            "output": 393216
-          }
-        },
         "tencent/deepseek-v4-pro-0813": {
           "name": "tencent/deepseek-v4-pro-0813",
           "limit": {
             "context": 1048576,
             "output": 393216
-          }
-        },
-        "tencent/glm-5-2 (reserved - use when main is exhausted)": {
-          "name": "tencent/glm-5-2 (reserved - use when main is exhausted)",
-          "limit": {
-            "context": 1048576,
-            "output": 131072
-          },
-          "options": {
-            "thinking": {
-              "type": "enabled"
-            }
           }
         },
         "tencent/glm-5-3 (reserved - use when main is exhausted)": {
@@ -634,6 +627,72 @@
             }
           }
         },
+        "tencent/mimo-v2.6-flash (reserved - use when main is exhausted)": {
+          "name": "tencent/mimo-v2.6-flash (reserved - use when main is exhausted)",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "off": {
+              "reasoningEffort": "none"
+            },
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video",
+              "audio"
+            ]
+          },
+          "attachment": true
+        },
+        "tencent/mimo-v2.6-pro (reserved - use when main is exhausted)": {
+          "name": "tencent/mimo-v2.6-pro (reserved - use when main is exhausted)",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "off": {
+              "reasoningEffort": "none"
+            },
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video",
+              "audio"
+            ]
+          },
+          "attachment": true
+        },
         "xiaomi/mimo-v2.6-flash": {
           "name": "xiaomi/mimo-v2.6-flash",
           "limit": {
@@ -644,14 +703,17 @@
             "reasoningEffort": "high"
           },
           "variants": {
+            "off": {
+              "reasoningEffort": "none"
+            },
             "low": {
               "reasoningEffort": "low"
             },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
             "high": {
               "reasoningEffort": "high"
-            },
-            "max": {
-              "reasoningEffort": "max"
             }
           },
           "modalities": {
@@ -674,14 +736,17 @@
             "reasoningEffort": "high"
           },
           "variants": {
+            "off": {
+              "reasoningEffort": "none"
+            },
             "low": {
               "reasoningEffort": "low"
             },
+            "medium": {
+              "reasoningEffort": "medium"
+            },
             "high": {
               "reasoningEffort": "high"
-            },
-            "max": {
-              "reasoningEffort": "max"
             }
           },
           "modalities": {
@@ -1186,9 +1251,9 @@
     "./plugins/workflow-enforcement.ts"
   ],
   "mcp": {
-    "media": {
+    "Johnny the Knight MCP": {
       "type": "remote",
-      "url": "https://hcbifrost.herocraft.com/litellm/media/mcp",
+      "url": "https://hcbifrost.herocraft.com/litellm/Johnny the Knight MCP/mcp",
       "enabled": true,
       "headers": {
         "Authorization": "Bearer {env:LITELLM_API_KEY}"

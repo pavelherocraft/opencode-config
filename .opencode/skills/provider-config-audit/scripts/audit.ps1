@@ -146,7 +146,13 @@ foreach ($dup in (Get-DuplicateKeys $raw)) {
 
 # --- Check 2: per-model validation ---------------------------------------
 $validInputs = @("text", "image", "audio", "video")
-$validEfforts = @("low", "medium", "high", "max")
+# reasoningEffort vocabulary: the standard ladder plus two extras introduced by
+# later pastes -- "xhigh" (MiniMax-M3 / M3.1-Flash-Preview, between high and max)
+# and "none" (reasoning off, only ever used by the `off` variant).
+$validEfforts = @("low", "medium", "high", "xhigh", "max")
+# "none" is valid at variant level only; the top-level options.reasoningEffort
+# should never be "none" (omit it instead).
+$validVariantEfforts = @("none") + $validEfforts
 
 foreach ($key in $models.PSObject.Properties.Name) {
     $model = $models.$key
@@ -241,6 +247,13 @@ foreach ($key in $models.PSObject.Properties.Name) {
                 $findings.Add(@{
                     severity = "concern"
                     finding = "variant $variantKey missing reasoningEffort"
+                    location = $key
+                })
+            }
+            elseif ($variant.reasoningEffort -notin $validVariantEfforts) {
+                $findings.Add(@{
+                    severity = "concern"
+                    finding = "variant $variantKey has invalid reasoningEffort: $($variant.reasoningEffort)"
                     location = $key
                 })
             }
