@@ -793,6 +793,13 @@
           },
           "attachment": true
         },
+        "gigachat/GigaChat-3-Ultra": {
+          "name": "gigachat/GigaChat-3-Ultra",
+          "limit": {
+            "context": 128000,
+            "output": 8192
+          }
+        },
         "gpt-image-1.5": {
           "name": "gpt-image-1.5",
           "limit": {
@@ -893,6 +900,31 @@
               "type": "enabled"
             }
           }
+        },
+        "mistral/mistral-large-4": {
+          "name": "mistral/mistral-large-4",
+          "limit": {
+            "context": 1048576,
+            "output": 262144
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "off": {
+              "reasoningEffort": "none"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image"
+            ]
+          },
+          "attachment": true
         },
         "nvidia/deepseek-v4.1-flash (free)": {
           "name": "nvidia/deepseek-v4.1-flash (free)",
