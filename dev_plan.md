@@ -1,666 +1,296 @@
-# Phase 4: Testing — Multi-Phase Pipelines (MVP, plugin v7)
-
-> **Источник:** `PLAN_MULTI_PHASE_PIPELINES.md` §Phase 4 (шаги 4.1–4.5), Verification Checklist V-22…V-24.
-> **Статус входа:** Phases 1–3 завершены. `plugins/workflow-enforcement.ts` (live `C:\Users\Admin\.config\opencode\plugins\` и repo `P:\Programming\Рефакторинг\plugins\`) — 2582 строки, **байт-в-байт идентичны** (проверено recon); все v7-маркеры на месте: VALID_VALUES.state (:65–68), pipelineState.phases/currentPhaseIdx (:176–182), константы MULTI_PHASE_* (:211–219), awaitingConfirmation/awaitingMsgId (:221–228), gate clearing (:578–599), mpEmptyShapeOk (:801–820), validateNextAgent whitelist кейсы 5–7 (:857–885), gate arming (:928–949), provisional fix (:994–1000), Turn-1 lock + resume detect (:1003–1032), MP-1..MP-6 whitelist (:1035–1085), blockerStop reset (:1098–1109), phases refresh в unchanged-ветке (:1159–1173), ack-формы 7–9 + regex (:1182–1209), confirmation gate throw (:1393–1411), phase-хелперы (:2150–2211), MULTI_PHASE-ветка validatePipeline (:2271–2334), conditional fields validateJSONOutput (:2452–2478).
-> **Язык плана:** русский (код/логи/asserts — английские, конвенция файлов).
-
----
+# Implementation Plan — Сжатие orchestrator.md (595 → ~340 строк) + few-shot пример
 
 ## Goal
 
-1. Расширить harness `plugins/test-workflow-enforcement.mjs` (165 строк, T1–T8) симуляцией `message.updated` и хелперами `sendMessage` / `orchMsg` / `tryTask`.
-2. Добавить 20 новых тестов **T9–T26** (канонические id — таблица PLAN §4.2, строки 901–920), покрывающих: confirmation gate (+ fallback по messageID), per-phase валидацию, provisional trap, mutation whitelist MP-1..MP-6, structural fail-closed, terminal-shape, blockerStop reset, refinement-once, ack-формы 7–9, resume, single-phase регрессию.
-3. Прогнать harness против **live** и **repo** копий плагина (V-22): `RESULT: pass=<N> fail=0`.
-4. Выполнить живые пилоты **S1–S7** (PLAN §4.4) + V-pilot-1 (видимость user-role сообщений, PLAN §4.3) + телеметрию (PLAN §4.5) → V-23, V-24.
+Сократить промпт `orchestrator.md` с **595** до **~330–350 строк** (−42..−45%), добавив few-shot пример TURN 1 сразу после identity line (после строки 37), **без потери критичной информации**: всё удаляемое либо остаётся в file'е в сжатом виде, либо уже канонически описано в `ARCHITECTURE.md` (repo-only, `P:\Programming\Рефакторинг\ARCHITECTURE.md`).
 
-**НЕ входит в Phase 4:** правки промптов/плагина/opencode.json (при выявлении бага — см. Dependencies), CHANGELOG/config-sync/коммит (Phase 5).
+### Честная арифметика цели «~300»
 
----
+| Компонент | Строк |
+|---|---|
+| Несжимаемый минимум (все «обязательные» секции пользователя, байт-в-байт): frontmatter+IDENTITY (37) + PIPELINE TABLE c нотами (25) + TURN ALGORITHM (32) + JSON FORMAT (28) + SEVERITY+ADVISOR (17) + CLASSIFICATION RULES (34) + TYPE SELECTION (34) + CROSS-ROUTING (6) + PROHIBITIONS (21) + PLUGIN ENFORCEMENT (14) | **248** |
+| Few-shot пример (вставка) | **+21** |
+| Пол (floor) до сжатия остальных секций | **269** |
+| Сжимаемые секции после сжатия (SUPERCOMPLEX ~11 + MULTI-PHASE ~14 + CUSTOM ~6 + EDGE CASES ~13 + EXAMPLES ~16 + указатель вместо PIPELINE GUIDE ~1 + межсекционные пустые ~14) | **~75** |
+| **Итого реально** | **~340 ± 15** |
 
-## Architecture
-
-### Подход
-
-- Harness остаётся **плоским скриптом** (без test-runner): новые хелперы вставляются после `tryTool` (:73–80), новые тесты — после T8 (:161), до итогового `RESULT` (:163–165). Существующие T1–T8 и хелперы **не изменяются** (регрессия).
-- Один инстанс плагина на весь файл (`:65`). Изоляция сценариев — через `lockSession('orchestrator')` (session.created сбрасывает ВСЁ состояние плагина: :342–367 — pipelineState, флаги, blockerStop, awaitingConfirmation, activeTaskDepth=0) + `logs.length = 0`.
-- Симуляция `message.updated` — через `plugin.event({ event: { type, properties: { message } } })`. Плагин читает: `properties.message` (:562), `message.id || message.info?.id` (:572), `message.role || message.info?.role` (:587), `message.content` — **строка** с ```json-блоком (extractJSONFromMessage :2122–2147; extractIdentityFromMessage :2105–2116).
-- Task-вызовы симулируются парой `tool.execute.before` + `tool.execute.after` (баланс `activeTaskDepth`: +1 при успешном task :1802/:1886, −1 в after :1906). **Разбалансировка depth молча отключает весь enforcement** (:1304, :487) — главный питч harness (см. Edge Cases #1).
-- Негативные проверки — через **probe**: `tryTool('read')` → gate 9.0в (:1364–1391) бросает `WORKFLOW VIOLATION — <CODE>` и **consume-once** сбрасывает флаги. Порядок кодов в gate: identityMissing > pipelineMismatch > nextAgentMismatch > invalidJSON > forbiddenIdentity > pipelineImmutable > blockerStop (:1366–1372); текст `violationDetail` в теле throw — **последний** записанный (важно для T14: code=PIPELINE VALIDATION FAILED, detail=PIPELINE IMMUTABLE (MULTI_PHASE)).
-
-### Соответствие нумерации (задание ↔ канон PLAN §4.2)
-
-Канон — таблица PLAN_MULTI_PHASE_PIPELINES.md :901–920. Обзор задания использует другую нумерацию; покрытие полное:
-
-| Обзор задания | Канон PLAN | Где покрыто |
-|---|---|---|
-| T9 AWAITING валиден + same-turn Task блок | T9 | Step 4.2 / T9 |
-| T10 user-role clearing | T10 | T10 |
-| T10b fallback по messageID | T10b | T10b |
-| T11 executing-ход после AWAITING | T12 | T12 |
-| T12 «4 фазы → fail-closed» | T18(a) | T18a |
-| T13 single-phase регрессия | T26 | T26(a–e) |
-| T14 MP-1 refinement once per phase | T22 | T22 |
-| T15/T15b terminal exemption, финальный ход | T15b | T15b |
-| T16 MP-2 BUGFIX continuation | T13 | T13 |
-| T17 «MP-3 nit-skip» | T22 (MP-1/MP-3) + nit-skip single-phase | T22 + T26(d) |
-| T18 MP-4 Auto-DOCS hook | T20 | T20 |
-| T19 MP-5 phase transition | T15 | T15 |
-| T20 MP-6 SUPERCOMPLEX per-step | T23 | T23 |
-| T21 blockerStop reset | T21 | T21 |
-| T22 provisional trap | T14 | T14 |
-| T23 immutable pipeline | T16 + T17 | T16, T17 |
-| T24 ack format | T24 | T24 |
-| T25 «severity gate» | T25 канон = resume; severity gate — существующий механизм :765–773 | T25 + доп. sub-check T26(f) |
-| T26 «cross-routing prevention» | T26 канон = single-phase регрессия; cross-routing — существующий :1814–1831 | T26 + доп. sub-check T26(g) |
-
-Пилоты: S1 задания = канон S1; S2 задания = канон S5; S3 задания → опц. **S8**; S4 задания = канон S3 (edit) + S4 (reject) + S1 (approve); S5 задания → опц. **S9**; S6 задания → опц. **S10**; S7 задания = канон S7 + опц. **S7b** (invalid transition live).
-
----
+Ровно 300 недостижимо без резки «обязательного» списка (нарушение требования №1 пользователя) или нарушения 1:1-mirror обязательств с ARCHITECTURE.md. **~340 = та же степень «модель не теряется»** (−44% объёма). Опциональный Tier-2 (см. ниже) даёт ещё −20..−25 → ~315–320.
 
 ## Files to Modify
 
-1. **`P:\Programming\Рефакторинг\plugins\test-workflow-enforcement.mjs`** (repo-only, НЕ входит в 5 sync-пар) — единственная кодовая правка Phase 4:
-   - после `:80` (tryTool) — блок v7-хелперов (~60 строк);
-   - после `:83` — блок фикстур (ROW*, PH*, mp()) (~40 строк);
-   - после `:161` (T8) — секции T9–T26 (~450–550 строк);
-   - опционально: docblock `:2–22` — добавить строку «v7: + message.updated simulation, T9–T26 (Multi-Phase MVP)».
-   - Итоговый размер файла: ~700–800 строк. Ожидаемый результат: `RESULT: pass≈65–70 fail=0` (17 существующих check + ~50 новых).
-2. **`RESEARCH_MULTI_PHASE_PIPELINES.md`** §9.4 — append телеметрии пилотов S1/S5 (Step 4.5; 2–5 строк, опционально до Phase 5).
-3. Артефакты пилотов (не файлы repo): `PHASE_STATE.md` в пилотном проекте, записи в логах opencode, заметка результата V-pilot-1 для CHANGELOG Phase 5.
+1. **`C:\Users\Admin\.config\opencode\agents\orchestrator.md`** (LIVE, 595 строк) — основная правка. Политика (ARCHITECTURE.md:1156, REVIEW_CONTEXT.md:10): правки в LIVE, затем снапшот в repo.
+2. **`P:\Programming\Рефакторинг\agents\orchestrator.md`** (REPO-зеркало, 595 строк) — НЕ править вручную; обновляется командой `config-sync --save --pair agents` (Шаг 10).
+3. *(Опционально, через Auto-DOCS hook)*: `CHANGELOG.md` (запись о сжатии), `ARCHITECTURE.md:397` (упоминание `PIPELINE GUIDE` станет полу-устаревшим), `PLAN_MULTI_PHASE_PIPELINES.md:230` (line-анкеры в orchestrator.md устареют; doc-only).
 
-**НЕ修改:** `plugins/workflow-enforcement.ts` (live и repo), `agents/*.md`, `ARCHITECTURE.md`, `opencode.json`. Баг плагина, найденный тестами → отдельная правка live+repo с немедленным репрогоном (см. Dependencies #5).
+## Критичные ограничения — MUST SURVIVE (проверено по plugins/workflow-enforcement.ts, 2988 строк)
+
+Плагин НЕ читает orchestrator.md, но матчит **вывод агента** по точным литералам. Каждый должен остаться в файле (в неизменённых секциях ИЛИ в новых сжатых текстах — они ниже уже содержат всё):
+
+| # | Литерал | Где в плагине | Где в новом файле |
+|---|---|---|---|
+| 1 | `✓ IDENTITY VERIFIED: I am orchestrator (Conductor). I am NOT plankestrator. …` (байт-в-байт) | regex :2443 | строка 36 (не трогаем) + few-shot |
+| 2 | `OPENCODE_ROUTING_TABLE = […]` (строка 26, байт-в-байт — parity с `ROUTING_TABLES.orchestrator` :6–40) | :2120, :2896 | RUNTIME IDENTITY (не трогаем) |
+| 3 | `TRIAGE_RESULT: SIMPLE` / `TRIAGE_RESULT: DEEP` + ОБА continuation-массива байт-в-байт: `["worker", "utility"]` и `["plan-bug", "execute-bug", "advisor", "dev-reviewer", "consistency-checker", "utility"]` | хардкод :2640–2641 | строки 54–57 (не трогаем) + Example 1 |
+| 4 | 9 ack-форматов (regex :1464, warn-only, но точный): `→ DELEGATED to <agent> for: <goal>` · `→ STEP <i>/<total> (<step id>): DELEGATED to <agent>` · `→ DELEGATED to advisor (step <N>, notes so far: <count>)` · `→ rework SKIPPED (dev-reviewer severity=nit)` · `→ SUPERCOMPLEX steps (<N>): […] (source: user \| plan headings \| decomposition)` · `→ DECOMPOSITION requested from dev-planner for: <goal>` · `→ PHASE <i>/<n> (<id>): DELEGATED to <agent> for: <goal>` · `→ PHASE <i>/<n> (<id>), STEP <j>/<m> (<sid>): DELEGATED to <agent>` · `→ PHASE PLAN AWAITING CONFIRMATION (<n> phases)` | :1464 | TURN ALGORITHM/few-shot; SUPERCOMPLEX Stages 1–2; ADVISOR (369); SEVERITY (358); MULTI-PHASE Stages 1–4; DECOMPOSITION PROTOCOL (400); Example 6 |
+| 5 | JSON-поля: `agent, type, complexity, plan_exists, plan_source, goal, next_agent, pipeline, pipeline_source_rows, state, phases, current_phase, depends_on, requires_docs_update, severity, escalate_to`; спец-значение `plan_source: "DECOMPOSITION"`; `state ∈ AWAITING_CONFIRMATION\|CANCELLED` | :56–68, :2455–2471, :2547–2579, :2859–2937 | JSON FORMAT (не трогаем) + сжатые секции |
+| 6 | `MODE: DECOMPOSITION` + `{"decomposition": true, "steps": [...], ...}` + `Do NOT write dev_plan.md.` | :1275, :1295, :2645 | CLASSIFICATION RULES:399–402 (не трогаем) — Stage 1 SUPERCOMPLEX ссылается сюда |
+| 7 | Суффикс `Write the plan to dev_plan.md.` | — (контракт dev-planner) | SUPERCOMPLEX Stage 2 |
+| 8 | `⚠️ OUT OF SCOPE: This is a planning/research task. Please switch to plankestrator.` (точная фраза) | forbidden-vocab косвенно | CLASSIFICATION RULES:381 (не трогаем) + Example 5 |
+| 9 | `## MULTI-PHASE PLAN — AWAITING CONFIRMATION` (заголовок; БЕЗОПАСЕН: не содержит подстроку `## PLAN`) | FORBIDDEN_VOCAB :279–290 | MULTI-PHASE Stage 1 |
+| 10 | `PHASE_STATE TASK:` + `# PHASE_STATE` + `Remove-Item` + `Get-Date` (маркер для utility.md:26–39) | :1043, :1228 | MULTI-PHASE Stage 3 (scribe) |
+| 11 | `Phase P<i> (<type>) completed: <summary>. Artifacts: <list>. Facts: <facts>. Read PHASE_STATE.md if you need more context.` | — | MULTI-PHASE Stage 4 |
+| 12 | `SUPERCOMPLEX complete: <N>/<N> steps implemented` | — | SUPERCOMPLEX Stage 3 |
+| 13 | `pipeline_source_rows` + правило EXACT concatenation | :591 (валидация композиции) | CUSTOM PIPELINE COMPOSITION |
+| 14 | `NIT_ONLY_MODE`, `MP-5`, `docs_deferred_to`, `BLOCKER STOP AFTER 3` | — | ADVISOR (не трогаем); MULTI-PHASE Stages 3–5 |
+
+**Строковые 1:1-mirror обязательства с ARCHITECTURE.md — НЕ ТРОГАТЬ:**
+- строка 63 (multi-phase meta-rule) = ARCH:502–504 «mirrored 1:1 in agents/orchestrator.md»;
+- CLASSIFICATION RULES Q1–Q5 = ARCH:405–423;
+- TYPE SELECTION T0–T6 + triggers/anti-triggers = ARCH:425–460;
+- PIPELINE TABLE строки 43–52 = ARCH §2.
+
+**Запретный словарь в НОВОМ тексте** (плагин сканирует вывод агента, но few-shot копируется в вывод дословно): не добавлять `## PLAN` (как начало заголовка), `# Implementation Plan`, `I am plankestrator`. Существующие упоминания `plan-writer-*` и др. в CROSS-ROUTING BOUNDARY — промпт-текст, не вывод; остаются (закрытый список по ARCH:774).
+
+## Coverage map — доказательство «ничего не потеряно»
+
+| Удаляемое | Куда переезжает |
+|---|---|
+| PIPELINE GUIDE строки 67–116 (описания rows 1–8) | ARCH §2: BUGFIX :378–403, DEV SIMPLE :588–601, DEV COMPLEX :603–615, DEV SUPERCOMPLEX :617–654, DEVOPS :656–660, DOCS :662–672, Auto-DOCS :674–701. Триггеры «when to use» → CLASSIFICATION RULES + TYPE SELECTION (остаются). Граница «run tests vs tests failing» → EDGE CASES row 1 (остаётся). «Multi-file ≠ multi-step» → CLASSIFICATION RULES:392. ARCH:397 прямо объявляет PIPELINE GUIDE «illustrative, NOT mirrored». |
+| PIPELINE GUIDE 117–118 (type=null) | CLASSIFICATION RULES:381 + CROSS-ROUTING #2 (остаются). |
+| SUPERCOMPLEX 120–154 (детали стадий) | Сжатый текст сохраняет ВСЕ литералы (приоритеты Stage 1, mcp-read prompt, echo-ack, per-step цепочку, суффикс dev_plan.md, ack STEP, Stage 3 + Auto-DOCS). Расширенная проза → ARCH:617–654. |
+| MULTI-PHASE 156–255 | Сжатый текст сохраняет: JSON-shape AWAITING (инлайн), таблицу плана (структура), ВСЕ ack-литералы, allowed/forbidden edits, override, refinement-правило, envelope-поля (канон-спека → ARCH §3 :838–851), scribe-блок ДОСЛОВНО (критично: utility копирует verbatim), DEVOPS-tail ограничение, dedup `docs_deferred_to`, Stage 4 фразу, fail-fast/resume. Проза и ASCII-диаграммы → ARCH:481–582. Шаблон секции PHASE_STATE (8 строк) → одна строка-перечисление полей (utility.md:26–39 контракт не зависит от формата шаблона в промпте orchestrator'а — utility копирует то, что прислал orchestrator; drift формата допустим, resume читает файл структурно). |
+| CUSTOM PIPELINE CONSTRUCTION 300–322 (секция-близнец, ПРОПУЩЕНА в анализе пользователя) | Два JSON-примера иллюстративны (плагин валидирует точную конкатенацию по `pipeline_source_rows` механически). Правила 318–322 дублируют: «functions must NOT mix» = TURN ALGORITHM:275; «internally valid segments» + «tightly-coupled» + «MULTI_PHASE for distinct» = CUSTOM PIPELINE COMPOSITION:259–265. Всё остаётся в объединённой сжатой секции. |
+| EDGE CASES: 10 из 17 строк | См. таблицу покрытия в Шаге 2 (каждая строка → остаётся в таблице / в сжатых секциях / в ARCH:462–479 + :567–578). |
+| EXAMPLES: 10 из 16 примеров | Ex2 (DEVOPS) → контраст в Example 1 + EDGE CASES row 1; Ex4 → Example 2 (with-plan вариант); Ex6 → Example 3 (SUPERCOMPLEX-вариант) + секция SUPERCOMPLEX; Ex7 → DECOMPOSITION PROTOCOL:399–402 (остаётся дословно); Ex9 → Example 4 (DEEP-вариант); Ex11/14/15/16 → контрасты в Example 6 + T0 anti-triggers (TYPE SELECTION остаётся); Ex12 → Example 5 (❌ WRONG строка). |
 
 ---
 
 ## Implementation Details
 
-### Step 4.0 — Baseline (до правок)
+**МЕТОД: все правки — СВЕРХУ ВНИЗ (bottom-up)**: сначала самые нижние диапазоны, чтобы line numbers исходного файла (595) оставались валидными для последующих шагов. Все диапазоны ниже — в координатах ДО правок.
 
-1. `node --version` → **≥ 22.6** (harness импортирует .ts через Node type-stripping, :44; без tsx/jiti).
-2. Прогон существующего harness (резолвит LIVE-плагин, candidate #2 :30–35):
-   ```powershell
-   cd P:\Programming\Рефакторинг
-   node plugins\test-workflow-enforcement.mjs
-   ```
-   **Verify:** `PLUGIN: C:\Users\Admin\.config\opencode\plugins\workflow-enforcement.ts`, `RESULT: pass=17 fail=0`, exit 0.
-3. Контроль идентичности live/repo (уже подтверждён recon; перепроверка):
-   ```powershell
-   (Get-FileHash "$env:USERPROFILE\.config\opencode\plugins\workflow-enforcement.ts").Hash -eq (Get-FileHash "P:\Programming\Рефакторинг\plugins\workflow-enforcement.ts").Hash
-   ```
-   **Verify:** `True`. Если False — сначала `config-sync --save` (порядок развёртывания PLAN :68), затем повторить baseline.
+**Инструмент правки (важно!).** Плагин имеет HARD BAN на `edit`/`write`/`patch` для `.md` (DOCS_WHITELIST :241–248 = docs-writer, docs-planner, plan-writer-*, research-writer-*; dev-professor НЕ входит; проверка ДО depth-guard, :1566–1589). Маршруты по убыванию предпочтительности:
+1. Встроенный `edit` по абсолютному пути live-файла. Если `⛔ DOCUMENTATION VIOLATION` →
+2. **bash/PowerShell** (у dev-professor `bash: "*": allow`; ban проверяет ТОЛЬКО tools edit/write/patch — bash-запись легальна; прецедент: utility пишет PHASE_STATE.md через bash, utility.md:28–29). Практическая схема: собрать НОВЫЙ файл целиком в `P:\Programming\Рефакторинг\backups\orchestrator_new.txt` (расширение НЕ .md → ban не срабатывает даже на write), затем `Copy-Item -Force` поверх live-файла.
+3. Аварийный: править repo-зеркало (внутри workspace) + `config-sync --restore --pair agents` (ARCH:1157 — только явный аварийный режим; санкционируется этой задачей).
 
-### Step 4.1 — Расширение harness: хелперы + фикстуры
+### Шаг 0 — Предусловия и backup
 
-**Вставка после `:80`** (после `tryTool`). Точный код (адаптирован из PLAN шага 4.1 с обязательными исправлениями — баланс depth, unique-id, probe-семантика):
+1. `python P:\Programming\Рефакторинг\.opencode\skills\config-sync\scripts\sync.py --plan --pair agents` → убедиться в ОТСУТСТВИИ drift live↔repo (иначе сначала разрешить drift). (ps1-вариант: `& .opencode\skills\config-sync\scripts\sync.ps1 -Plan -Pair agents`)
+2. Backup: `New-Item -ItemType Directory -Force P:\Programming\Рефакторинг\backups; Copy-Item 'C:\Users\Admin\.config\opencode\agents\orchestrator.md' 'P:\Programming\Рефакторинг\backups\orchestrator-595.md.bak'`
+   ⚠️ **PITFALL: НИКОГДА не создавать backup `.md`-файлом внутри `C:\Users\Admin\.config\opencode\agents\`** — opencode загружает КАЖДЫЙ `*.md` в agents/ как агента. Расширение `.bak` и/или хранение в repo.
+3. Убедиться, что нет активной orchestrator-сессии (live-промпт подхватывается на старте сессии; правка между сессиями).
 
-```js
-// ============================================================================
-// v7 (Multi-Phase MVP) helpers — message.updated simulation + task depth
-// ============================================================================
-let msgSeq = 0
+### Шаг 1 — CLASSIFICATION EXAMPLES: заменить строки 470–558
 
-/** message.updated. id уникален (msgSeq), кроме {id} — re-fire того же
- *  сообщения (streaming-симуляция: gate НЕ снимается при том же messageID). */
-async function sendMessage(role, content, { id } = {}) {
-  const mid = id || `m${++msgSeq}`
-  await plugin.event({
-    event: { type: 'message.updated', properties: { message: { id: mid, role, content } } },
-  })
-  return mid
+Точный replacement-текст (16 строк):
+
+````markdown
+## CLASSIFICATION EXAMPLES (illustrate the rules; on conflict CLASSIFICATION RULES + TYPE SELECTION win)
+
+Format: request → JSON → why. Turn 1 unless stated.
+
+**1 — BUGFIX (row 1).** «При сохранении профиля падает NullReferenceException, вот стектрейс: …» → `type:"BUGFIX"`, `complexity:null`, `plan_exists:null`, `next_agent:"bugfix-triage"`, `pipeline:["bugfix-triage"]`. Stack trace + crash (T3); SIMPLE vs DEEP is NEVER guessed by you — after `TRIAGE_RESULT: SIMPLE` the pipeline extends ONCE to `["bugfix-triage","worker","utility"]`; after `DEEP` → `["bugfix-triage","plan-bug","execute-bug","advisor","dev-reviewer","consistency-checker","utility"]`. Contrast: «Запусти сборку и прогони тесты» → DEVOPS (row 2, T4 — running operations, no code writing).
+
+**2 — DEV SIMPLE (row 3).** «Переименуй getUserData в fetchUserProfile во всех файлах» → `complexity:"SIMPLE"`, `plan_exists:false`, `next_agent:"worker"`, `pipeline:["worker","utility"]`. ONE logical step (Q5) despite many files — count steps, not files. With-plan variant (row 4): «Реализуй план из PLAN.md» (plankestrator COMPLETE, 2 шага) → PLAN EXISTS OVERRIDE (Q2a) → ВСЕГДА `["worker","consistency-checker","utility"]`, never COMPLEX; `plan_source:"PLAN.md (plankestrator COMPLETE)"`.
+
+**3 — DEV COMPLEX (row 5).** «Добавь JWT-аутентификацию: middleware, выдача токенов, refresh-логика» → `complexity:"COMPLEX"`, `plan_exists:false`, `next_agent:"dev-planner"`, `pipeline:["dev-planner","dev-professor","advisor","dev-reviewer","consistency-checker","utility"]`. 3 logical steps + architectural decisions (Q4); dev-planner writes dev_plan.md in-pipeline. SUPERCOMPLEX variant (row 6): plan >3 steps + huge volume (Q2) or Q3 DECOMPOSITION outcome — full chain runs for EACH step, per-step acks.
+
+**4 — DOCS (rows 7/8).** «Добавь секцию "Установка" в README» → SIMPLE: `pipeline:["docs-writer","utility"]` (1 файл, <50 строк, markdown-only — T5). «Напиши полный API reference для всех модулей» → DEEP: `pipeline:["docs-planner","docs-writer","dev-reviewer","consistency-checker","utility"]` (multi-document; docs-planner's Task prompt includes "Write the plan to docs_plan.md").
+
+**5 — OUT OF SCOPE (type=null).** «Исследуй, какую библиотеку кэширования нам выбрать» / «Составь план миграции на новую ORM» → все классификационные поля `null`, `next_agent:null`, `pipeline:[]`, NO Task + точная фраза «⚠️ OUT OF SCOPE: This is a planning/research task. Please switch to plankestrator.» Deliverable = план/research ДОКУМЕНТ (T2). ❌ WRONG: `["dev-planner"]` DECOMPOSITION — DECOMPOSITION serves DEV complexity classification ONLY. «Сделай рефакторинг» (deliverable = CODE) → DEV, остаётся у тебя (Q3).
+
+**6 — MULTI_PHASE (T0, full trace).** «Auth middleware падает с race condition — исправь, и сразу добавь refresh-токены» → Turn 1 (AWAITING): `state:"AWAITING_CONFIRMATION"`, `pipeline:[]`, `next_agent:null`, `current_phase:null`, `phases:[P1 BUGFIX(null/null, depends_on []), P2 DEV(null/null, depends_on ["P1"])]` + таблица плана + ack `→ PHASE PLAN AWAITING CONFIRMATION (2 phases)`, NO Task. Пользователь «да» → `state:null`, `current_phase:"P1"`, `pipeline:["bugfix-triage"]` → Task. `TRIAGE_RESULT: DEEP` → in-phase continuation (row 1 DEEP). Barrier P1 → envelope + PHASE_STATE TASK в utility-промпте. Transition → `current_phase:"P2"`; P2 refined via Q1–Q5 with P1's envelope (3 шага → COMPLEX row 5); dev-planner's Task prompt получает envelope verbatim. Final → сводная таблица по фазам, `next_agent:null`. Why T0: два первичных разно-типовых deliverable (T3+T6) + data dependency. Контрасты: «исправь баг и обнови README» = один BUGFIX + Auto-DOCS hook (anti-trigger); «исправь баг и задеплой» = один BUGFIX (deploy = follow-up в финальной сводке); «1. Настрой CI 2. Добавь тесты 3. Задеплой» = 3 фазы DEVOPS+DEV+DEVOPS (повтор типа легален — ids различаются); «без подтверждений, делай сразу» = auto-approve override (Stage 2).
+````
+
+### Шаг 2 — EDGE CASES: заменить строки 441–461
+
+Точный replacement-текст (13 строк). Покрытие всех 17 исходных строк: 1→row1, 2→row2, 3→row1 (слито), 4→row7+, 5→row3, 6→row3 (слито), 7→row4, 8→row5, 9→row6, 10→row4 (слито), 11→row7, 12→row7 (слито), 13/14/15/16/17 (multi-phase)→сжатый MULTI-PHASE + указатель:
+
+````markdown
+## EDGE CASES (deterministic resolutions; полные таблицы: ARCHITECTURE.md §2 — "Edge cases" + "Multi-Phase Pipelines")
+
+| Situation | Resolution |
+|-----------|------------|
+| «запусти тесты» vs «тесты падают»; build fails with a compile error | run tests / починка самой CI-настройки = DEVOPS (row 2); падающие тесты / compile-ошибка в исходниках = BUGFIX (row 1, root cause = code) |
+| «почему X сломался?» — question only, no fix requested | BUGFIX (row 1): triage investigates; you never answer or investigate yourself |
+| «реализуй план/исследование из <file>» | DEV; файл = план → `plan_exists: true`, `plan_source: "<file>"`; step count + volume решают Q2/Q2a. DOCS-запрос со ссылкой на план-файл → DOCS by size, `plan_exists` остаётся `null` (поле только для DEV) |
+| Ambiguous DEV scope; unplanned multi-step DEV («рефакторинг всей системы оплаты») | Ambiguous → COMPLEX (Q5 default). Unplanned multi-step → NOT out of scope: сначала Q3 DECOMPOSITION PROTOCOL, затем row 6/5/3 по исходу |
+| «сделай быстро, без ревьюеров» | Pipeline frozen, ревьюеры обязательны (PROHIBITIONS); единственный легальный акселератор = severity-nit rework SKIP (SEVERITY RULES) |
+| Subagent result говорит «нужно сначала исследовать/спланировать» | Pipeline FROZEN: завершить его; рекомендация уходит в финальную сводку. Never re-route, never call plankestrator's agents |
+| «Исправь баг и добавь фичу» vs «исправь баг и обнови README» | Первое = MULTI_PHASE (T0: 2 первичных deliverable, confirmation обязателен); второе = один BUGFIX + Auto-DOCS hook (T0 anti-trigger) |
+| Docstrings / comments only | DOCS (row 7/8); любая логическая правка → DEV, doc-обновления едут на Auto-DOCS hook |
+
+Multi-phase edge cases (silence/ambiguous → fail-closed re-ask; phase FAILED → fail-fast + resume «продолжи с P<k>»; цепочка заканчивается DEVOPS-фазой → хвостовая секция PHASE_STATE.md не пишется; >3 deliverables → рекомендовать split/merge): секция MULTI-PHASE PIPELINES + ARCHITECTURE.md §2.
+````
+
+### Шаг 3 — CUSTOM PIPELINE CONSTRUCTION: УДАЛИТЬ строки 300–322 целиком
+
+(Включая заголовок `## CUSTOM PIPELINE CONSTRUCTION`, оба JSON-примера и Rules-блок; пустая строка 299 тоже убирается. Обоснование: Coverage map. Два уникальных правила мигрируют в текст Шага 4 — уже включены там.)
+
+### Шаг 4 — CUSTOM PIPELINE COMPOSITION: заменить строки 257–265
+
+Точный replacement-текст (5 строк; объединяет обе custom-секции):
+
+````markdown
+## CUSTOM PIPELINE COMPOSITION (from canonical rows; full spec: ARCHITECTURE.md §2 "Custom Pipeline Composition")
+
+When the user EXPLICITLY requests a sequential combination («исправь X и сразу задеплой», "add the feature and update the README in one run") or phases are tightly coupled — compose a pipeline from canonical rows, NO confirmation round-trip (the explicit request IS the mandate): (1) pick 2–3 PIPELINE TABLE rows covering the request in execution order; (2) emit `"pipeline_source_rows": ["<row-key-1>", "<row-key-2>"]` (keys as in the table's key column) AND `"pipeline"` = their EXACT concatenation — never insert, remove or reorder agents inside the composed chain (PROHIBITIONS; the plugin validates fail-closed); (3) `type` / `complexity` / `plan_exists` / `plan_source` = the FIRST row's values. Each canonical segment stays internally valid — agent functions must NOT mix within a segment (e.g. no reviewer before implementer).
+
+Boundary vs MULTI_PHASE: composition = one flat chain, single classification, for tightly-coupled combos the user explicitly named; MULTI_PHASE = structured `phases[]` with confirmation, envelopes and fail-fast, for 2+ distinct deliverables. Default remains a single canonical row — composition only on explicit user request.
+````
+
+### Шаг 5 — MULTI-PHASE PIPELINES: заменить строки 156–255
+
+Точный replacement-текст (~14 физических строк — стадии как плотные абзацы; бюджет пользователя 20–25 соблюдён):
+
+````markdown
+## MULTI-PHASE PIPELINES (full protocol: ARCHITECTURE.md §2 "Multi-Phase Pipelines"; MVP: linear chain, 2–3 phases, user confirmation, fail-fast)
+
+A **phase** = one PIPELINE TABLE row (1–8) with its own `(type, complexity, plan_exists)`; the session `pipeline` field ALWAYS holds the CURRENT phase's chain only; phase state lives in `phases[]` + `current_phase`. **Default = single-phase** — when in doubt, do NOT use multi-phase. Detection: T0 FIRST (strong triggers / anti-triggers / primacy / scope-guard: TYPE SELECTION).
+
+**Stage 1 — plan + AWAITING (Turn 1):** разбей запрос на 2–3 первичных deliverable; на каждый примени T3–T6 + complexity-правила (BUGFIX/DEVOPS → `null`; DEV → Q1–Q5, неясно → `null` — уточняется на старте фазы; DOCS → by size). Больше 3 → НЕ планируй; рекомендуй split/merge (MVP limit 3). JSON: `type:"MULTI_PHASE"`, top-level `complexity/plan_exists/plan_source: null`, `state:"AWAITING_CONFIRMATION"`, `pipeline:[]`, `next_agent:null`, `current_phase:null`, `phases:[{"id":"P1","type":"BUGFIX","complexity":null,"plan_exists":null,"goal":"...","depends_on":[]},{"id":"P2","type":"DEV","complexity":null,"plan_exists":null,"goal":"...","depends_on":["P1"]}]`. Покажи план — ЕДИНЫЙ легальный prose-блок (исключение PROHIBITIONS; это и есть запрос подтверждения): заголовок `## MULTI-PHASE PLAN — AWAITING CONFIRMATION` + таблица `| # | id | type | goal | pipeline (row) | depends_on |` + строка «Reply «да/ок» to start, request edits (max 2 rounds), or «отмена» to cancel.» Ack: `→ PHASE PLAN AWAITING CONFIRMATION (<n> phases)`. STOP — НИКАКОГО Task call в этом ходу (plugin confirmation gate throws).
+
+**Stage 2 — confirmation turn (ответ пользователя = твой следующий ход):** «да/ок/поехали» → JSON `state:null`, `current_phase:"P1"`, `pipeline` = цепочка P1 (для BUGFIX — `["bugfix-triage"]`), `next_agent` = pipeline[0] → Task → ack `→ PHASE 1/2 (P1): DELEGATED to <agent> for: <goal>`. Правка («фазу 2 сделай SIMPLE», «убери P3») → пересчёт затронутой фазы + dependency cascade (dropped фаза → downstream SKIPPED, пользователь проинформирован) → новый AWAITING-ход (макс 2 раунда правок, затем «start as-is or cancel»). «отмена/не надо» → `state:"CANCELLED"`, `pipeline:[]`, `next_agent:null`, `current_phase:null` + краткое резюме предложенного; НОЛЬ Task calls. Молчание/двусмысленный ответ → fail-closed: НЕ подтверждение — переспросить (считается за раунд правок). Override в ИСХОДНОМ запросе («без подтверждений, делай сразу») → auto-approve: план показывается информативно, P1 стартует В ЭТОМ ЖЕ ходу (без AWAITING). Разрешённые правки: убрать фазу (SKIPPED + cascade) / понизить complexity (SUPERCOMPLEX→COMPLEX) / переупорядочить независимые фазы (MVP linear = cancel + reassemble) / отменить всё. Запрещено: новые типы агентов, пропуск обязательных ревьюеров (dev-reviewer, consistency-checker). Подтверждение = обычный текстовый ответ; tool `question` НЕ используется никогда (`question: deny`).
+
+**Stage 3 — execution (каждая фаза = механика её строки):** ВСЕ правила строки фазы действуют ВНУТРИ фазы (BUGFIX one-time continuation, DEV DECOMPOSITION PROTOCOL, rework loop max 3, SEVERITY RULES, ADVISOR STEP RULES, SUPERCOMPLEX per-step iteration). Refinement: `phases[i].complexity/plan_exists` могут смениться `null → value` ОДИН раз, ТОЛЬКО для CURRENT фазы — остальные поля и фазы FROZEN (DEV null → примени Q1–Q5 с учётом envelope предыдущей фазы; >3 шагов → DECOMPOSITION внутри фазы). Ack каждый ход делегирования: `→ PHASE <i>/<n> (<id>): DELEGATED to <agent> for: <goal>`; внутри SUPERCOMPLEX-фазы: `→ PHASE <i>/<n> (<id>), STEP <j>/<m> (<sid>): DELEGATED to <agent>`. **Phase barrier** (после финального `utility` фазы, для DEVOPS — `devops-reviewer`): МЕХАНИЧЕСКИ собери Phase Result envelope из уже прочитанных полей (utility status, consistency-checker `files_modified`, `requires_docs_update`, `TRIAGE_RESULT`, severity исходы) — механическое чтение полей, НЕ анализ: `{phase_id, phase_type, status: SUCCESS|FAILED|SKIPPED, summary ≤3 sentences, artifacts, facts ≤10 keys, blockers, docs_deferred_to}` (каноническая спека: ARCHITECTURE.md §3 "Multi-Phase Fields"); крупный контент НИКОГДА не travels в JSON — только file pointers. **PHASE_STATE scribe:** добавь к Task-промпту ФИНАЛЬНОГО `utility` фазы: `PHASE_STATE TASK: append the following section VERBATIM to PHASE_STATE.md in the project root (append-only; never modify previous sections). Fill the Session line with the current timestamp (Get-Date).` + lifecycle-оговорку — ПЕРВАЯ фаза (P1): `This is the FIRST phase — RECREATE the file: overwrite it with the header line "# PHASE_STATE" before appending (discard any stale journal).`; ФИНАЛЬНАЯ фаза: `This is the FINAL phase — after appending, DELETE PHASE_STATE.md (Remove-Item): a completed chain leaves no journal.` + секцию `## Phase P<i> — <TYPE> — <SUCCESS|FAILED|SKIPPED>` со строками `- Session: <TS>` / `- Goal:` / `- Summary:` / `- Artifacts:` / `- Facts:` / `- Envelope: <phase result JSON verbatim>`. У DEVOPS-фаз нет utility → перенеси секцию в PHASE_STATE TASK СЛЕДУЮЩЕГО utility цепочки; если цепочка ЗАКАНЧИВАЕТСЯ DEVOPS-фазой — хвостовая секция НЕ пишется (MVP-ограничение; финальная сводка перечисляет результаты фаз текстом). **Auto-DOCS hook по фазам + dedup:** hook срабатывает после финального `utility` каждой BUGFIX/DEV фазы; исключение: если в `phases[]` ниже есть DOCS-фаза, покрывающая docs-работу → ПОДАВИТЬ hook, envelope несёт `docs_deferred_to:"<DOCS phase id>"`, первый Task-промпт DOCS-фазы получает envelope verbatim (dedup-проверка механическая).
+
+**Stage 4 — transition (граница фаз):** ход после barrier: `phases` БЕЗ ИЗМЕНЕНИЙ, `current_phase:"P<next>"`, `pipeline` = цепочка следующей фазы (по её разрешившемуся ключу `(type, complexity, plan_exists)`), `next_agent` = pipeline[0]. Первый Task-промпт новой фазы получает envelope предыдущей VERBATIM + фразу: `Phase P<i> (<type>) completed: <summary>. Artifacts: <list>. Facts: <facts>. Read PHASE_STATE.md if you need more context.` Ack: `→ PHASE <i>/<n> (<id>): DELEGATED to <agent> for: <goal>`. Plugin: легальная мутация MP-5 (rework/blocker-счётчики сбрасываются). Между фазами НЕТ точки ожидания — barrier структурный, не диалоговый.
+
+**Stage 5 — failure / completion / resume:** фаза FAILED (utility FAIL не исправлен rework / BLOCKER STOP AFTER 3) → fail-fast: финальный JSON (`next_agent:null`, `pipeline:[]`, `state:null`, `current_phase` = id упавшей фазы), downstream-фазы SKIPPED, отчёт пользователю: какая фаза упала + её envelope + опции (включая «продолжи с P<k>» = resume); молчаливое продолжение ЗАПРЕЩЕНО; rework живёт ТОЛЬКО внутри фазы (max 3) — глобального cross-phase rework нет. ВСЕ фазы SUCCESS → финальная сводка таблицей (phase/status/artifacts), `next_agent:null`, `pipeline:[]`, `current_phase` = id последней фазы. Resume («продолжи с фазы P2»): Turn 1 — ОДИН классификационный `read` PHASE_STATE.md (разрешённое исключение — тот же статус, что чтение план-файла); план НЕ пересоздаётся; тот же `phases`, `current_phase:"P2"`, pipeline = цепочка P2, старт без повторного подтверждения если план не изменился. После BLOCKER STOP предпочти НОВУЮ сессию (blockerStop кумулятивен; новая сессия имеет свежее plugin-состояние).
+````
+
+### Шаг 6 — SUPERCOMPLEX PIPELINE: заменить строки 120–154
+
+Точный replacement-текст (~10 строк; бюджет 10–15 соблюдён):
+
+````markdown
+## SUPERCOMPLEX PIPELINE (row 6 — FULL chain PER plan step; детали: ARCHITECTURE.md §2 "DEV SUPERCOMPLEX")
+
+НЕ один проход по задаче; НИКОГДА не вызывай dev-professor один раз на всю задачу. Step list определяется ОДИН раз и больше не пересматривается.
+
+**Stage 1 — step list, ONCE** (строгий приоритет): (1) пользователь явно перечислил шаги → verbatim; (2) в план/research-файле есть step-заголовки (`## P0-1` / `## Phase 1` / `## Шаг 1` / `### P0-1`) → твой ЕДИНСТВЕННЫЙ разрешённый классификационный `read` файла, или ОДИН `mcp-read` Task: "List every step heading (`##`/`###` + `P0-*` | `Phase *` | `Шаг *`) from <file> as a numbered list"; (3) step-листа нет нигде → ОДИН `dev-planner` Task в режиме DECOMPOSITION (точный промпт: DECOMPOSITION PROTOCOL в CLASSIFICATION RULES — возвращает JSON `{"decomposition": true, "steps": [...]}`, НЕ пишет dev_plan.md). Если DECOMPOSITION уже отработал во время классификации (Q1/Q3), его `steps` И ЕСТЬ список — второй раз не вызывать. Невалидный JSON → переспросить dev-planner один раз → всё ещё сломан → STOP + report failure. Echo один раз в ack: `→ SUPERCOMPLEX steps (<N>): [id1, id2, ...] (source: user | plan headings | decomposition)` — никогда не re-derive позже.
+
+**Stage 2 — per-step iteration** (один Task call на ход; SEVERITY RULES + ADVISOR STEP RULES применяются). Для КАЖДОГО шага по порядку: `dev-planner` (Task-промпт: id + title + description шага, путь к research/plan-файлу, какие шаги уже готовы, обязательный суффикс "Write the plan to dev_plan.md.") → `dev-professor` ("Review dev_plan.md and implement step by step" + контекст шага; реализует ТОЛЬКО этот шаг) → `advisor` → `dev-reviewer` → `rework` (ТОЛЬКО если dev-reviewer дал concern/blocker; иначе skip — SEVERITY RULES) → `consistency-checker` (rework loop max 3) → `utility` → следующий шаг (повторить с dev-planner). Ack каждый ход: `→ STEP <i>/<total> (<step id>): DELEGATED to <agent>`.
+
+**Stage 3 — completion:** после `utility` ПОСЛЕДНЕГО шага → JSON `next_agent: null` + `SUPERCOMPLEX complete: <N>/<N> steps implemented`. Auto-DOCS hook: если dev-professor JSON ЛЮБОГО шага имел `requires_docs_update: true` → прогнать `["docs-writer", "utility"]`.
+````
+
+### Шаг 7 — PIPELINE GUIDE: заменить строки 65–118 на одну строку-указатель
+
+Удалить секцию целиком (заголовок + все 8 row-описаний + type=null блок). На её место ( остаётся пустая строка 64, затем):
+
+````markdown
+**Row details** (что делает каждая строка, when-to-use триггеры, агенты и роли, ожидаемый результат): ARCHITECTURE.md §2 "Pipelines" — reference only; PIPELINE TABLE + CLASSIFICATION RULES win on conflict.
+````
+
+Строки 54–63 (BUGFIX continuation / Rework loop / Auto-DOCS hook / Multi-phase meta-rule) — **НЕ ТРОГАТЬ** (машинно-критичны: continuation-массивы захардкожены в плагине :2640–2641; строка 63 = 1:1 mirror ARCH:504).
+
+### Шаг 8 — Few-shot вставка: ПОСЛЕ строки 37
+
+Вставить между строкой 37 (закрывающий ``` identity-блока) и строкой 38 (пустая). Точный текст вставки (21 строка). ВНИМАНИЕ: вставляемые блоки — это ПОСЛЕДОВАТЕЛЬНЫЕ markdown-fence'и (``` … ``` и ```json … ```), БЕЗ внешнего оберточного fence (вложенные тройные fence ломают разметку; исходный набросок пользователя поправлен именно в этом, содержимое дословно):
+
+`````markdown
+
+## TURN 1 EXAMPLE (COPY THIS EXACTLY)
+
+```
+✓ IDENTITY VERIFIED: I am orchestrator (Conductor). I am NOT plankestrator. My role: classify tasks and delegate. My permissions: edit=deny, write=deny, bash=deny. Proceeding with classification.
+```
+
+```json
+{
+  "agent": "orchestrator",
+  "type": "DEV",
+  "complexity": "COMPLEX",
+  "plan_exists": false,
+  "plan_source": null,
+  "goal": "one sentence description",
+  "next_agent": "dev-planner",
+  "pipeline": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"]
 }
-
-/** Сообщение orchestrator: identity line + ```json``` + ack-строка.
- *  ВАЖНО: content НЕ должен содержать токены FORBIDDEN_VOCAB orchestrator
- *  ("## PLAN", "# Implementation Plan", "plan-writer-", "research-writer-",
- *  "research-reviewer", "plan-reviewer-") и SELF_WORK_MARKERS
- *  ("## Findings", "## Analysis", "## Implementation", "## Root Cause"). */
-function orchMsg(jsonObj, { identity = true, ack } = {}) {
-  const ackLine = ack !== undefined ? ack
-    : (jsonObj.next_agent
-        ? `→ DELEGATED to ${jsonObj.next_agent} for: ${jsonObj.goal || 'goal'}`
-        : '')
-  return (identity ? '✓ IDENTITY VERIFIED: I am orchestrator (Conductor). I am NOT plankestrator.\n' : '') +
-    '```json\n' + JSON.stringify(jsonObj) + '\n```\n' + ackLine
-}
-
-/** tool.execute.after для task — ОБЯЗАТЕЛЕН после успешного tryTask(keepDepth),
- *  иначе activeTaskDepth>0 молча отключает enforcement до конца сессии. */
-async function endTask(args) {
-  await plugin['tool.execute.after']({ tool: 'task', args }, { args })
-}
-
-/** Task-вызов. Успех → depth+1; баланс автоматом, кроме keepDepth=true
- *  (нужно для T21: reviewer-сообщения валидны только при depth>0). */
-async function tryTask(subagent, { keepDepth = false } = {}) {
-  const args = { subagent_type: subagent, description: 'd', prompt: 'p' }
-  const r = await tryTool('task', args)
-  if (r.ok && !keepDepth) await endTask(args)
-  return r
-}
-
-/** Reviewer-JSON субагента (отправлять МЕЖДУ tryTask(keepDepth) и endTask).
- *  agent ∈ SEVERITY_AGENTS (:90) = dev-reviewer | consistency-checker | advisor. */
-function reviewerMsg(agent, severity, text) {
-  return '```json\n' + JSON.stringify({ agent, severity, findings: [{ text, severity }] }) + '\n```'
-}
-
-/** Probe gate 9.0в: 'clean' | текст throw (CONSUME-ONCE: флаг сбрасывается!).
- *  После первого успешного Task read блокирован (:1452) — это НЕ violation. */
-async function probeGate() {
-  const r = await tryTool('read')
-  if (r.ok) return 'clean'
-  if (r.message.includes('PRIMARY AGENT FORBIDDEN')) return 'clean'
-  return r.message
-}
-
-function hasLog(substr) { return logs.some((m) => m.includes(substr)) }
-async function newSession(agent = 'orchestrator') { await lockSession(agent); logs.length = 0 }
-const clonePhases = (ph) => ph.map((p) => ({ ...p, depends_on: [...p.depends_on] }))
 ```
 
-**Вставка после `:83`** (фикстуры; ключи сверены с PIPELINES :2222–2261):
+→ DELEGATED to dev-planner for: <goal>
+`````
 
-```js
-// v7 fixtures — canonical PIPELINE TABLE rows (validatePipeline keys)
-const ROW1 = ['bugfix-triage']                                             // BUGFIX-null-null (+variants :2248)
-const ROW1_SIMPLE = ['bugfix-triage', 'worker', 'utility']                 // BUGFIX variant SIMPLE
-const ROW5 = ['dev-planner', 'dev-professor', 'advisor', 'dev-reviewer', 'consistency-checker', 'utility'] // DEV-COMPLEX-false
-const DEVOPS_ROW = ['devops-agent', 'devops-reviewer']                     // DEVOPS-null-null
-const HOOK = ['docs-writer', 'utility']                                    // DOCS_HOOK_CHAIN / DOCS-SIMPLE-any
+Корректность примера (проверено): identity line байт-в-байт = строка 36; JSON = валидная Turn-1 форма row 5 (`next_agent` = pipeline[0]; `state/phases/current_phase` отсутствуют — легальны только для MULTI_PHASE, строка 345); ack матчит вариант 1 regex плагина :1464.
 
-const PH2 = [
-  { id: 'P1', type: 'BUGFIX', complexity: null, plan_exists: null, goal: 'fix bug X', depends_on: [] },
-  { id: 'P2', type: 'DEV', complexity: 'COMPLEX', plan_exists: false, goal: 'add feature Y', depends_on: ['P1'] },
-]
-const PH3 = [
-  { id: 'P1', type: 'DEVOPS', complexity: null, plan_exists: null, goal: 'setup CI', depends_on: [] },
-  { id: 'P2', type: 'DEV', complexity: 'SIMPLE', plan_exists: false, goal: 'add tests', depends_on: ['P1'] },
-  { id: 'P3', type: 'DEVOPS', complexity: null, plan_exists: null, goal: 'deploy', depends_on: ['P2'] },
-]
-// Для T22: DEV-фаза первой (refinement complexity null→COMPLEX на DECOMPOSITION Turn B).
-// plan_exists:false ОБЯЗАТЕЛЕН с самого начала — DEV-null-null fail-closed (deviation D, :2313–2318).
-const PH_DEV_FIRST = [
-  { id: 'P1', type: 'DEV', complexity: null, plan_exists: false, goal: 'add feature Y', depends_on: [] },
-  { id: 'P2', type: 'BUGFIX', complexity: null, plan_exists: null, goal: 'fix bug X', depends_on: ['P1'] },
-]
+### Шаг 9 — Верификация (ОБЯЗАТЕЛЬНА до синка)
 
-/** Валидный MULTI_PHASE-скелет со ВСЕМИ required-полями orchestrator (:56). */
-function mp(over = {}) {
-  return {
-    agent: 'orchestrator', type: 'MULTI_PHASE', complexity: null, plan_exists: null,
-    plan_source: null, goal: 'multi-phase task', next_agent: null, pipeline: [],
-    state: null, phases: PH2, current_phase: null, ...over,
-  }
-}
-```
+1. **Line count:** `(Get-Content 'C:\Users\Admin\.config\opencode\agents\orchestrator.md').Count` → ожидать **330–355**.
+2. **Frontmatter байт-в-байт:** первые 17 строк идентичны backup'у (`Compare-Object (Get-Content $bak -TotalCount 17) (Get-Content $new -TotalCount 17)` → пусто).
+3. **Неизменённые секции байт-в-байт** (сверить с backup по содержимому, не по номерам строк): RUNTIME IDENTITY блок (включая строку OPENCODE_ROUTING_TABLE), PIPELINE TABLE строки 1–8 + ноты 54–63, TURN ALGORITHM, JSON FORMAT, SEVERITY RULES, ADVISOR STEP RULES, CLASSIFICATION RULES, TYPE SELECTION, CROSS-ROUTING BOUNDARY, PROHIBITIONS, PLUGIN ENFORCEMENT.
+4. **Grep-чеклист MUST SURVIVE** (каждый `Select-String -SimpleMatch` ≥1 hit; полный список — таблица выше): `IDENTITY VERIFIED: I am orchestrator (Conductor)` (ожидаемо ×2) · `OPENCODE_ROUTING_TABLE` · `TRIAGE_RESULT: SIMPLE` · `TRIAGE_RESULT: DEEP` · `["plan-bug", "execute-bug", "advisor", "dev-reviewer", "consistency-checker", "utility"]` · `→ PHASE PLAN AWAITING CONFIRMATION` · `→ SUPERCOMPLEX steps` · `(source: user | plan headings | decomposition)` · `→ DECOMPOSITION requested from dev-planner for:` · `→ rework SKIPPED (dev-reviewer severity=nit)` · `→ DELEGATED to advisor (step <N>, notes so far:` · `MODE: DECOMPOSITION` · `Do NOT write dev_plan.md` · `Write the plan to dev_plan.md.` · `⚠️ OUT OF SCOPE: This is a planning/research task. Please switch to plankestrator.` · `## MULTI-PHASE PLAN — AWAITING CONFIRMATION` · `PHASE_STATE TASK:` · `# PHASE_STATE` · `Remove-Item` · `Get-Date` · `Read PHASE_STATE.md if you need more context.` · `SUPERCOMPLEX complete:` · `pipeline_source_rows` · `requires_docs_update` · `docs_deferred_to` · `NIT_ONLY_MODE` · `MP-5` · `BLOCKER STOP AFTER 3` · `plan_source: "DECOMPOSITION"` · `escalate_to`.
+5. **Forbidden-vocab self-check НОВОГО текста:** `Select-String -Pattern '^## PLAN\b','^# Implementation Plan','I am plankestrator'` → 0 hits (фраза «I am NOT plankestrator» разрешена — не содержит запрещённых подстрок; `## MULTI-PHASE PLAN` разрешён — подстрока `## PLAN` отсутствует).
+6. **Markdown-валидность few-shot:** fences сбалансированы (чётное число строк, начинающихся с ```), вложенных тройных fence нет.
 
-**Verify Step 4.1:** `node plugins\test-workflow-enforcement.mjs` → T1–T8 по-прежнему `fail=0` (хелперы инертны до использования); синтаксис без ошибок.
-
-### Step 4.2 — Тесты T9–T26
-
-Каждый тест: `await newSession()` → `logs.length = 0` уже внутри → последовательность `sendMessage`/`tryTask`/`probeGate` → `check(...)`. Assert-подстроки копировать 1:1 из плагина (ссылки даны). Ниже — спецификация каждого теста.
-
----
-
-#### T9 — Confirmation gate: AWAITING валиден + same-turn Task блокирован (механизм: arming :928–943, throw :1393–1411)
-
-```js
-await newSession()
-const awaitId = await sendMessage('assistant', orchMsg(mp({ state: 'AWAITING_CONFIRMATION' }),
-  { ack: '→ PHASE PLAN AWAITING CONFIRMATION (2 phases)' }))
-check('T9a AWAITING turn is VALID (no deferred flags)', await probeGate() === 'clean', ...)
-check('T9b gate armed log', hasLog('Task calls blocked until the user replies'), logs.join(' | '))
-const r = await tryTask('bugfix-triage')   // ТОТ ЖЕ ход (messageID = awaitId)
-check('T9c same-turn Task blocked', !r.ok && r.message.includes('AWAITING USER CONFIRMATION'), ...)
-check('T9d gate log', hasLog('CONFIRMATION GATE — Task blocked while AWAITING_CONFIRMATION'), ...)
-// T9e: streaming re-fire ТОГО ЖЕ messageID не снимает gate (:583–585, :593)
-await sendMessage('assistant', orchMsg(mp({ state: 'AWAITING_CONFIRMATION' }),
-  { ack: '→ PHASE PLAN AWAITING CONFIRMATION (2 phases)' }), { id: awaitId })
-const r2 = await tryTask('bugfix-triage')
-check('T9e re-fire same messageID keeps gate armed', !r2.ok && r2.message.includes('AWAITING USER CONFIRMATION'), ...)
-```
-
-Примечания: (a) AWAITING-проход валиден благодаря mpEmptyShapeOk (:808–820) + явной ветке validatePipeline (:2282–2292) + `next_agent:null` → validateNextAgent valid (:2417); (b) blocked Task НЕ инкрементирует depth (throw до :1886) — endTask не нужен; (c) blocked Task не потребляет per-turn quota (gate до :1419).
-
-#### T10 — Gate cleared user-role сообщением (clearing :586–592)
-
-Продолжение T9 (та же сессия) или свежая:
-
-```js
-await sendMessage('user', 'да')
-check('T10a USER RESPONSE log', hasLog('USER RESPONSE RECEIVED — confirmation gate cleared'), ...)
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1, next_agent: 'bugfix-triage' }),
-  { ack: '→ PHASE 1/2 (P1): DELEGATED to bugfix-triage for: fix bug X' }))
-const r = await tryTask('bugfix-triage')
-check('T10b Task allowed after user reply', r.ok, r.message)
-```
-
-Примечание: user-сообщение НЕ армит identityMissing — `hasOutputtedJSON` уже true от AWAITING-хода (:635–637, :926).
-
-#### T10b — Gate fallback: новый assistant messageID без user-role (:593–598)
-
-```js
-await newSession()
-await sendMessage('assistant', orchMsg(mp({ state: 'AWAITING_CONFIRMATION' })))       // msgId A
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1, next_agent: 'bugfix-triage' }))) // msgId B
-check('T10b-1 fallback log', hasLog('user reply implied'), ...)
-const r = await tryTask('bugfix-triage')
-check('T10b-2 Task allowed via messageID fallback', r.ok, r.message)
-```
-
-#### T11 — `state` с type≠MULTI_PHASE → invalid (validateJSONOutput v7 :2466–2469)
-
-```js
-await newSession()
-await sendMessage('assistant', orchMsg({
-  agent: 'orchestrator', type: 'DEV', complexity: 'SIMPLE', plan_exists: false, plan_source: null,
-  goal: 'single dev', next_agent: 'worker', pipeline: ['worker', 'utility'],
-  state: 'AWAITING_CONFIRMATION',
-}))
-const p = await probeGate()
-check('T11a INVALID JSON via deferred gate',
-  p !== 'clean' && p.includes('INVALID JSON OUTPUT') && p.includes('state field is only valid with type=MULTI_PHASE'), p)
-check('T11b confirmation gate NOT armed for non-MULTI_PHASE', !hasLog('AWAITING USER CONFIRMATION'), ...)
-```
-
-**Питч:** pipeline обязан быть валидной DEV-строкой (`DEV-SIMPLE-false` = `['worker','utility']`), иначе pipelineMismatch (приоритет :1367) замаскирует invalidJSON-код.
-
-#### T12 — Executing-ход MULTI_PHASE: per-phase валидация (ветка :2303–2333)
-
-```js
-await newSession()
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1, next_agent: 'bugfix-triage' }),
-  { ack: '→ PHASE 1/2 (P1): DELEGATED to bugfix-triage for: fix bug X' }))
-check('T12a no PIPELINE VALIDATION FAILED', !hasLog('PIPELINE VALIDATION FAILED'), logs.join(' | '))
-const r = await tryTask('bugfix-triage')
-check('T12b executing turn Task ok (key BUGFIX-null-null)', r.ok, r.message)
-```
-
-#### T13 — In-phase BUGFIX continuation (MP-2, whitelist :1050–1054, next-agent кейс 7 :878–883)
-
-Продолжение T12 (depth сбалансирован):
-
-```js
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1_SIMPLE, next_agent: 'worker' }),
-  { ack: '→ PHASE 1/2 (P1): DELEGATED to worker for: fix bug X' }))
-check('T13a MP-2 allowed', hasLog('MULTI_PHASE MUTATION ALLOWED — MP-2 in-phase BUGFIX continuation'), logs.join(' | '))
-const r = await tryTask('worker')
-check('T13b continuation Task ok', r.ok, r.message)
-```
-
-Валидность: key BUGFIX-null-null + variant ROW1_SIMPLE (:2250); next='worker' = newPipeline[1] → isBugfixContMP.
-
-#### T14 — Provisional trap fixed: нелегальная замена внутри frozen-фазы (fix :994–1000; ветка MP :1035–1085)
-
-```js
-await newSession()
-const PHR = [
-  { id: 'P1', type: 'DEV', complexity: 'COMPLEX', plan_exists: false, goal: 'add feature Y', depends_on: [] },
-  { id: 'P2', type: 'BUGFIX', complexity: null, plan_exists: null, goal: 'fix bug X', depends_on: ['P1'] },
-]
-await sendMessage('assistant', orchMsg(mp({ phases: PHR, current_phase: 'P1', pipeline: ROW5, next_agent: 'dev-planner' })))
-const r1 = await tryTask('dev-planner')
-check('T14a Turn1 lock ok', r1.ok, r1.message)
-await sendMessage('assistant', orchMsg(mp({ phases: clonePhases(PHR), current_phase: 'P1',
-  pipeline: ['worker', 'utility'], next_agent: 'worker' })))   // подмена цепочки
-const p = await probeGate()
-check('T14b illegal swap blocked (F-4 provisional НЕ срабатывает)',
-  p !== 'clean' && p.includes('WORKFLOW VIOLATION') && p.includes('PIPELINE IMMUTABLE (MULTI_PHASE)'), p)
-```
-
-Примечание: code в throw будет `PIPELINE VALIDATION FAILED` (приоритет флагов), но `violationDetail` в теле — `PIPELINE IMMUTABLE (MULTI_PHASE): illegal mutation …` (:1131–1137) — assert по detail. До v7 этот ход прошёл бы через F-4 (top-level complexity null → provisional=true).
-
-#### T15 — Legal phase transition (MP-5, :1070–1073; next-agent кейс 5 :860–865)
-
-```js
-await newSession()
-// P1 (BUGFIX) полностью: Turn1 → continuation → utility (advance step до 2)
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1, next_agent: 'bugfix-triage' })))
-await tryTask('bugfix-triage')
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1_SIMPLE, next_agent: 'worker' })))
-await tryTask('worker')
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1_SIMPLE, next_agent: 'utility' })))
-await tryTask('utility')
-// Barrier → transition
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P2', pipeline: ROW5, next_agent: 'dev-planner' }),
-  { ack: '→ PHASE 2/2 (P2): DELEGATED to dev-planner for: add feature Y' }))
-check('T15a MP-5 allowed', hasLog('MULTI_PHASE MUTATION ALLOWED — MP-5 phase transition'), logs.join(' | '))
-const r = await tryTask('dev-planner')
-check('T15b transition Task ok', r.ok, r.message)
-```
-
-Turn `next_agent:'utility'` — pipeline unchanged, nextIdx=2 → advance (:1157–1158); validateNextAgent effectiveStep=2=pipeline[2] ✓.
-
-#### T15b — Final turn clean (terminal-shape early return внутри ветки :2293–2302)
-
-Продолжение T15 (или отдельная сессия с P2, доведённой до utility):
-
-```js
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P2', pipeline: [], next_agent: null })))
-check('T15b-1 no PIPELINE VALIDATION FAILED', !hasLog('PIPELINE VALIDATION FAILED'), ...)
-check('T15b-2 no INVALID JSON OUTPUT', !hasLog('INVALID JSON OUTPUT'), ...)
-check('T15b-3 no DEFERRED VIOLATION', !hasLog('DEFERRED VIOLATION ENFORCED'), ...)
-check('T15b-4 probe clean', await probeGate() === 'clean', ...)
-```
-
-Форма: `state:null` + `pipeline:[]` + `next_agent:null` + `current_phase:'P2'` (id последней фазы) + phases без изменений → mpEmptyShapeOk (:808–813) + early return (:2299–2301); state block не трогается (newPipeline.length===0, :988); ack-audit пропущен (next_agent null, :1194).
-
-#### T16 — Transition-skip (P1→P3) запрещён (MP-5 требует строго +1, :1051)
-
-```js
-await newSession()
-await sendMessage('assistant', orchMsg(mp({ phases: PH3, current_phase: 'P1', pipeline: DEVOPS_ROW, next_agent: 'devops-agent' })))
-await tryTask('devops-agent')
-await sendMessage('assistant', orchMsg(mp({ phases: clonePhases(PH3), current_phase: 'P3', pipeline: DEVOPS_ROW, next_agent: 'devops-agent' })))
-const p = await probeGate()
-check('T16 skip transition blocked', p !== 'clean' && p.includes('PIPELINE IMMUTABLE (MULTI_PHASE)'), p)
-```
-
-Примечание: validatePipeline per-phase для P3 (DEVOPS-null-null) ПРОХОДИТ, nextAgent — isLoopback; единственный флаг — pipelineImmutable (newIdx 2 ≠ prevIdx 0+1) → code в throw = `PIPELINE IMMUTABLE`.
-
-#### T17 — Phases tampering на transition (phasesStableOrRefined :2168–2183)
-
-```js
-// как T16, но легальный переход P1→P2 с изменённым goal у P2:
-const tampered = clonePhases(PH3); tampered[1].goal = 'TAMPERED goal'
-await sendMessage('assistant', orchMsg(mp({ phases: tampered, current_phase: 'P2',
-  pipeline: ['worker', 'utility'], next_agent: 'worker' })))
-const p = await probeGate()
-check('T17 phases tampering blocked', p !== 'clean' && p.includes('PIPELINE IMMUTABLE (MULTI_PHASE)'), p)
-```
-
-(P2 = DEV-SIMPLE-false → `['worker','utility']` валиден per-phase; падает только whitelist: goal отличается → stableOrRefined=false.)
-
-#### T18 — Структурные нарушения phases → fail-closed (validatePhasesStructure :2160–2166…; 5 sub-checks, каждая в свежей сессии)
-
-Отправлять как AWAITING-ход (`state:'AWAITING_CONFIRMATION'`, pipeline [], next null) — structErr проверяется в обеих валидациях (:2287–2290, :2456–2460):
-
-| Sub | Мутация phases | Assert (probe ≠ 'clean' И message/logs содержит) |
-|---|---|---|
-| T18a | 4 фазы (PH3 + P4 DEVOPS depends_on ['P3']) | `out of range [2..3]` |
-| T18b | `[P1, {...P1}]` (дубль id) | `duplicate phase id` |
-| T18c | P1.depends_on = ['P2'] (forward ref) | `depends_on must be []` |
-| T18d | 2 фазы SUPERCOMPLEX (обе plan_exists:true) | `at most ONE SUPERCOMPLEX` |
-| T18e | P2.depends_on = [] (два корня) | `depends_on must be ["P1"]` |
-
-Каждая: `await newSession()` → `sendMessage(orchMsg(mp({ state:'AWAITING_CONFIRMATION', phases: <bad> })))` → `probeGate()` → check подстроки + `hasLog('PIPELINE VALIDATION FAILED')`. Дополнительно T18a: assert что gate НЕ вооружён (`!hasLog('Task calls blocked')`) — arming только в valid-ветке (:925–943).
-
-#### T19 — CANCELLED shape (:2282–2292, defensive disarm :944–949)
-
-```js
-await newSession()
-await sendMessage('assistant', orchMsg(mp({ state: 'AWAITING_CONFIRMATION' })))
-await sendMessage('user', 'отмена')
-await sendMessage('assistant', orchMsg(mp({ state: 'CANCELLED' })))
-check('T19a no DEFERRED VIOLATION', !hasLog('DEFERRED VIOLATION ENFORCED'), ...)
-check('T19b no PIPELINE VALIDATION FAILED', !hasLog('PIPELINE VALIDATION FAILED'), ...)
-check('T19c probe clean (gate disarmed)', await probeGate() === 'clean', ...)
-```
-
-#### T20 — In-phase Auto-DOCS hook (MP-4, :1055–1058; validatePipeline :2309–2312; next-agent кейс 6 :866–874)
-
-```js
-await newSession()
-// P1 BUGFIX до конца (3 хода как в T15: triage → worker → utility; currentStep=2 = len-1)
-... (ROW1/next bugfix-triage; ROW1_SIMPLE/next worker; ROW1_SIMPLE/next utility — каждый с tryTask)
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: HOOK, next_agent: 'docs-writer' }),
-  { ack: '→ PHASE 1/2 (P1): DELEGATED to docs-writer for: docs update' }))
-check('T20a MP-4 allowed', hasLog('MULTI_PHASE MUTATION ALLOWED — MP-4 in-phase Auto-DOCS hook'), logs.join(' | '))
-const r = await tryTask('docs-writer')
-check('T20b hook Task ok', r.ok, r.message)
-```
-
-Условие isDocsHookMP: `pState.currentStep >= pState.pipeline.length - 1` (2 ≥ 2) ✓, phase.type BUGFIX ∈ [BUGFIX, DEV] ✓.
-
-#### T21 — blockerStop reset (edge case #2; escalation :507–531, gate :1364–1372, reset :1098–1109)
-
-Двухчастный (consume-once gate заставляет реармить). R12-фолбэк: если depth-баланс в harness не сойдётся — деградировать до интеграционной проверки в живом пилоте (3 blocker → BLOCKER STOP → transition), зафиксировав в отчёте.
-
-```js
-await newSession()
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1, next_agent: 'bugfix-triage' })))
-// Part A: 3 blocker → gate блокирует
-await tryTask('bugfix-triage', { keepDepth: true })
-for (let i = 1; i <= 3; i++)
-  await sendMessage('assistant', reviewerMsg('dev-reviewer', 'blocker', `blocking issue ${i}`))
-await endTask({ subagent_type: 'bugfix-triage', description: 'd', prompt: 'p' })
-check('T21a escalation counted 3/3', hasLog('BLOCKER ESCALATION COUNTED — 3/3'), ...)
-const pA = await probeGate()
-check('T21b gate blocks after 3 blockers', pA !== 'clean' && pA.includes('BLOCKER STOP AFTER 3'), pA)
-// Part B: continuation (MP-2) → 4-й blocker (реарм) → transition MP-5 → reset
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1_SIMPLE, next_agent: 'worker' })))
-await tryTask('worker', { keepDepth: true })
-await sendMessage('assistant', reviewerMsg('dev-reviewer', 'blocker', 'blocking issue 4'))
-await endTask({ subagent_type: 'worker', description: 'd', prompt: 'p' })
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P2', pipeline: ROW5, next_agent: 'dev-planner' }),
-  { ack: '→ PHASE 2/2 (P2): DELEGATED to dev-planner for: add feature Y' }))
-check('T21c BLOCKERSTOP RESET logged on MP-5', hasLog('BLOCKERSTOP RESET — legal multi-phase transition'), logs.join(' | '))
-const r = await tryTask('dev-planner')
-check('T21d Task ok after reset', r.ok, r.message)
-```
-
-Механика: reviewer-сообщения при depth>0 → subagent-ветка (:487–559); unique messageID (msgSeq) обходит дедуп `:blocker` (:519–521); 4-й blocker → bCount=4 ≥ 3 → rearm (:527–530); MP-5-ветка сбрасывает blockerStop + violationDetail (:1098–1109).
-
-#### T22 — Phase refinement once (MP-1/MP-3 :1059–1062; unchanged-ветка refresh :1159–1173)
-
-```js
-await newSession()
-// Turn A: DECOMPOSITION-диспетч внутри P1 (key DEV-null-false → variant ['dev-planner'], deviation D :2313–2318)
-await sendMessage('assistant', orchMsg(mp({ phases: clonePhases(PH_DEV_FIRST), current_phase: 'P1',
-  pipeline: ['dev-planner'], next_agent: 'dev-planner' })))
-const rA = await tryTask('dev-planner')
-check('T22a Turn A (decomposition dispatch) ok', rA.ok, rA.message)
-// Turn B: refinement null→COMPLEX (ОДИН раз) + row5
-const phB = clonePhases(PH_DEV_FIRST); phB[0].complexity = 'COMPLEX'
-await sendMessage('assistant', orchMsg(mp({ phases: phB, current_phase: 'P1', plan_source: 'DECOMPOSITION',
-  pipeline: ROW5, next_agent: 'dev-planner' })))
-check('T22b refinement allowed (MP-1/MP-3)', hasLog('MP-1/MP-3 phase refinement / DECOMPOSITION'), logs.join(' | '))
-const rB = await tryTask('dev-planner')   // isLoopback: slice(0,1) содержит dev-planner (:841–842)
-check('T22c Turn B Task ok', rB.ok, rB.message)
-// Turn C: ВТОРОЙ refinement COMPLEX→SIMPLE → заблокирован
-const phC = clonePhases(phB); phC[0].complexity = 'SIMPLE'
-await sendMessage('assistant', orchMsg(mp({ phases: phC, current_phase: 'P1',
-  pipeline: ['worker', 'utility'], next_agent: 'worker' })))
-const p = await probeGate()
-check('T22d second refinement blocked', p !== 'clean' && p.includes('PIPELINE IMMUTABLE (MULTI_PHASE)'), p)
-```
-
-Ключевое: refresh phases в unchanged-ветке (:1169–1173) гарантирует, что после Turn B снапшот хранит COMPLEX → Turn C не null→value → stableOrRefined=false. Turn C validatePipeline проходит (DEV-SIMPLE-false = ['worker','utility']) — падает только whitelist.
-
-#### T23 — SUPERCOMPLEX phase (plan-структура :2172–2176; next-agent exempt :852–856)
-
-```js
-await newSession()
-const PHS = [
-  { id: 'P1', type: 'DEV', complexity: 'SUPERCOMPLEX', plan_exists: true, goal: 'big migration', depends_on: [] },
-  { id: 'P2', type: 'DEVOPS', complexity: null, plan_exists: null, goal: 'deploy', depends_on: ['P1'] },
-]
-await sendMessage('assistant', orchMsg(mp({ phases: PHS, current_phase: 'P1', pipeline: ROW5, next_agent: 'dev-planner' }),
-  { ack: '→ PHASE 1/2 (P1), STEP 1/5 (S-1): DELEGATED to dev-planner' }))
-const r1 = await tryTask('dev-planner')
-check('T23a SUPERCOMPLEX phase turn ok (key DEV-SUPERCOMPLEX-true)', r1.ok, r1.message)
-// per-step re-emission того же массива (unchanged-ветка, advance)
-await sendMessage('assistant', orchMsg(mp({ phases: clonePhases(PHS), current_phase: 'P1', pipeline: ROW5, next_agent: 'dev-professor' }),
-  { ack: '→ PHASE 1/2 (P1), STEP 2/5 (S-2): DELEGATED to dev-professor' }))
-check('T23b no violation on per-step re-emission', !hasLog('DEFERRED VIOLATION ENFORCED') && !hasLog('PIPELINE IMMUTABLE'), ...)
-const r2 = await tryTask('dev-professor')
-check('T23c per-step Task ok', r2.ok, r2.message)
-// Негатив: SUPERCOMPLEX без plan_exists на executing-ходе → structErr
-await newSession()
-const PHX = clonePhases(PHS); PHX[0].plan_exists = null
-await sendMessage('assistant', orchMsg(mp({ phases: PHX, current_phase: 'P1', pipeline: ROW5, next_agent: 'dev-planner' })))
-const p = await probeGate()
-check('T23d SUPERCOMPLEX requires plan_exists=true (executing)', p !== 'clean' && p.includes('SUPERCOMPLEX requires plan_exists=true'), p)
-```
-
-Примечание: MP-6 label (:1064–1069) достижим только если массив ФАКТИЧЕСКИ меняется при SUPERCOMPLEX-фазе (identical re-emission идёт по unchanged-ветке) — assert на label не ставим (log-only паритет F-11), достаточно ok:true.
-
-#### T24 — Ack audit: формы 7–9 без warn (regex :1204, warn :1205–1209)
-
-```js
-await newSession()
-// Форма 7: PHASE + ':' + DELEGATED (audit срабатывает: next_agent truthy, :1194)
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1, next_agent: 'bugfix-triage' }),
-  { ack: '→ PHASE 1/2 (P1): DELEGATED to bugfix-triage for: fix bug X' }))
-check('T24a form 7 no warn', !hasLog('ACK FORMAT INVALID'), logs.join(' | '))
-await tryTask('bugfix-triage')
-// Форма 8: PHASE + ',' + STEP (нужен новый msgId для ack-дeduп и quota)
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1_SIMPLE, next_agent: 'worker' }),
-  { ack: '→ PHASE 1/2 (P1), STEP 2/5 (S-2): DELEGATED to worker' }))
-check('T24b form 8 no warn', !hasLog('ACK FORMAT INVALID'), ...)
-// Форма 9: AWAITING (next_agent null → audit пропущен; warn тоже не должно быть)
-await newSession()
-await sendMessage('assistant', orchMsg(mp({ state: 'AWAITING_CONFIRMATION' }),
-  { ack: '→ PHASE PLAN AWAITING CONFIRMATION (2 phases)' }))
-check('T24c form 9 no warn', !hasLog('ACK FORMAT INVALID'), ...)
-// Регрессия старой формы 1
-await newSession()
-await sendMessage('assistant', orchMsg({ agent: 'orchestrator', type: 'BUGFIX', complexity: null, plan_exists: null,
-  plan_source: null, goal: 'fix bug X', next_agent: 'bugfix-triage', pipeline: ROW1 }))
-check('T24d legacy form 1 no warn', !hasLog('ACK FORMAT INVALID'), ...)
-```
-
-**Питч:** ack-строка — ПОСЛЕДНЯЯ строка content, без хвостовых пробелов (regex `^→…$/m`); `→` — U+2192.
-
-#### T25 — Resume в новой сессии (warn :1016–1032)
-
-```js
-await newSession()   // свежее состояние = «новая сессия»
-await sendMessage('assistant', orchMsg(mp({ current_phase: 'P2', pipeline: ROW5, next_agent: 'dev-planner' }),
-  { ack: '→ PHASE 2/2 (P2): DELEGATED to dev-planner for: add feature Y' }))
-check('T25a RESUME warn logged', hasLog('MULTI_PHASE RESUME DETECTED'), logs.join(' | '))
-const r = await tryTask('dev-planner')
-check('T25b resume Turn1 lock + Task ok', r.ok, r.message)
-```
-
-(Turn-1 lock с mpIdx=1>0 — warn-only, ход легален.)
-
-#### T26 — Single-phase регрессия (R4: v7 не ломает существующие сценарии) + sub-checks из обзора задания
-
-Каждый сценарий в свежей сессии, JSON — обычный single-phase (БЕЗ полей state/phases/current_phase):
-
-- **(a) BUGFIX Turn1 + continuation:** `type:'BUGFIX', pipeline:ROW1, next:'bugfix-triage'` → tryTask ok; затем `pipeline:ROW1_SIMPLE, next:'worker'` → ok (F-1/BUGFIX-исключение single-phase ветки :1075–1082).
-- **(b) DECOMPOSITION A/B:** Turn A `type:'DEV', complexity:null, plan_exists:false, pipeline:['dev-planner'], next:'dev-planner'` → ok (variant DEV-null-false); Turn B `plan_source:'DECOMPOSITION', complexity:'COMPLEX', pipeline:ROW5, next:'dev-planner'` → ok (isLoopback).
-- **(c) Auto-DOCS hook single-phase:** после BUGFIX-цепочки (3 хода как в T20) ход `type:'DOCS', complexity:'SIMPLE', plan_exists:null, pipeline:HOOK, next:'docs-writer'` → ok (F-12 + isDocsHook :848–849).
-- **(d) nit-skip:** после Turn-1 lock ROW5 ход `severity:'nit', pipeline:['worker','utility'], complexity:'SIMPLE', plan_exists:false, next:'worker'` → ok (nit-исключение single-phase whitelist); assert `!hasLog('PIPELINE IMMUTABLE')`.
-- **(e) F-4 provisional single-phase ЖИВ:** Turn A `type:'DEV', complexity:null, plan_exists:false, pipeline:['dev-planner'], next:'dev-planner'`; Turn B `complexity:'SIMPLE', plan_exists:false, pipeline:['worker','utility'], next:'worker'` → ok (provisional=true, т.к. type≠MULTI_PHASE — v7 fix не затрагивает single-phase).
-- **(f) severity gate (обзор «T25»):** ход с `severity:'critical'` (вне nit|concern|blocker, :91) → probe ≠ clean, message содержит `INVALID SEVERITY` (:765–773).
-- **(g) cross-routing prevention (обзор «T26»):** в сессии (a) после валидного JSON `tryTask('plan-writer-simple')` → `!ok` и message содержит `ROUTING TABLE ENFORCEMENT (identity lock active)` (:1814–1831).
-
-**Verify Step 4.2 (итог):** все check T9–T26 PASS; T1–T8 без изменений.
-
-### Step 4.2v — Прогон против live и repo (V-22)
+### Шаг 10 — Синхронизация live → repo
 
 ```powershell
-cd P:\Programming\Рефакторинг
-node plugins\test-workflow-enforcement.mjs                     # LIVE (default candidate)
-$env:WORKFLOW_PLUGIN = 'P:\Programming\Рефакторинг\plugins\workflow-enforcement.ts'
-node plugins\test-workflow-enforcement.mjs                     # REPO (mirror check)
-Remove-Item Env:\WORKFLOW_PLUGIN
+python P:\Programming\Рефакторинг\.opencode\skills\config-sync\scripts\sync.py --save --pair agents
+python P:\Programming\Рефакторинг\.opencode\skills\config-sync\scripts\sync.py --plan --pair agents   # контроль: drift отсутствует
 ```
 
-**Verify:** оба прогона — `RESULT: pass=<N> fail=0`, exit 0; первая строка `PLUGIN:` указывает ожидаемый путь. Провал только в repo-прогоне ⇒ drift live/repo ⇒ `config-sync --save` и повтор.
+Проверить: `(Get-Content 'P:\Programming\Рефакторинг\agents\orchestrator.md').Count` == live count.
 
-### Step 4.3 — Пилоты S1–S7 (живые сессии)
+### Шаг 11 — Пост-шаги (опционально / через pipeline)
 
-**Предусловия (обязательны до первого пилота):**
-1. **Restart opencode** — плагин и промпты подхватываются только новыми сессиями (PLAN :68, :971).
-2. **Пилотный проект-песочница** (НЕ `P:\Programming\Рефакторинг`): S1/S5 вносят реальные изменения кода и deploy-операции. Рекомендация: scratch-repo с минимальным приложением; для S5 фаза «задеплой» = локальный тестовый скрипт (не прод).
-3. Каждый пилот = **новая сессия** orchestrator. Логи opencode: `~\.local\share\opencode\log\` (Windows: `$env:USERPROFILE\.local\share\opencode\log\`).
+1. В финальном JSON реализации выставить `requires_docs_update: true` → Auto-DOCS hook (`docs-writer`): запись в `CHANGELOG.md` (сжатие промпта orchestrator 595→~340, добавлен TURN 1 EXAMPLE), опциональная корректировка `ARCHITECTURE.md:397` (упоминание PIPELINE GUIDE) и line-анкеров `PLAN_MULTI_PHASE_PIPELINES.md:230` (doc-only, устареют).
+2. Smoke-test: НОВАЯ orchestrator-сессия с тривиальным DEV-запросом → проверить identity line + JSON + ack + что few-shot не ломает классификацию.
+3. Git-коммит — ТОЛЬКО через агента `git-commit` (глобальное правило; НЕ вручную).
 
-**Канонические пилоты (PLAN §4.4 :930–938):**
+## Line budget (итоговая таблица)
 
-| # | Запрос пользователя | Ожидание | Verify |
+| Секция | Было | Стало | Δ |
 |---|---|---|---|
-| S1 | «Auth middleware падает с race condition — исправь, и сразу добавь refresh-токены» | T0 YES → AWAITING (2 фазы, таблица «## MULTI-PHASE PLAN», ack form 9, Task НЕТ) → «да» → P1 BUGFIX (triage→continuation) → barrier (envelope + PHASE_STATE.md секция) → P2 DEV (Q1–Q5 с учётом конверта, refinement null→значение) → final summary по 2 фазам | Логи: `MULTI_PHASE AWAITING CONFIRMATION`, clearing-лог (см. Step 4.4), `MP-5 phase transition`, НЕТ `DEFERRED VIOLATION`/`ACK FORMAT INVALID`/`PIPELINE VALIDATION FAILED`. PHASE_STATE.md: `# PHASE_STATE` + секция P1. Envelope в Task-prompt P2 (storage: `~\.local\share\opencode\storage\`) — verbatim + фраза-контекст |
-| S2 | «Исправь баг с авторизацией и обнови README» | Анти-триггер: single-phase BUGFIX (+ Auto-DOCS hook при requires_docs_update); **НЕТ** AWAITING-хода | В логах нет `MULTI_PHASE`; JSON-ходы type=BUGFIX |
-| S3 | S1 + после показа плана ответ «измени: фичу делай SIMPLE» | Edit-round: повторный AWAITING с phases[P2].complexity=SIMPLE (пересчёт + каскад), лимит ≤2 раундов → «да» → старт P1 | Второй AWAITING-ход в логах; после «да» — executing P1 |
-| S4 | S1 + ответ «отмена» | `state:"CANCELLED"`, pipeline [], next null, ноль Task, краткое резюме предложенного | Лог defensive disarm (:944–949); Task-вызовов в сессии нет |
-| S5 | «1. Настрой CI github-actions. 2. Добавь unit-тесты для X. 3. Задеплой» | 3 фазы DEVOPS+DEV+DEVOPS (повтор типа легален); конверты передаются: имя workflow P1→P2, статус тестов P2→P3; две MP-5 границы | Логи: 2× `MP-5`; PHASE_STATE.md: секции P1, P2 (P3 — DEVOPS-хвост, секция НЕ пишется — MVP-ограничение, финальный summary текстом); ack `→ PHASE i/3 …` |
-| S6 | «Исправь баг X и добавь фичу Y, без подтверждений — делай сразу» | Auto-approve override: план информативно + НЕМЕДЛЕННЫЙ старт P1 в том же ходе (без AWAITING JSON); Task не блокируется | В логах НЕТ `Task calls blocked`; есть Turn-1 lock MULTI_PHASE |
-| S7 (негатив) | «Составь план рефакторинга и реализуй его» | T0 scope-guard: plan-deliverable → OUT OF SCOPE (type:null, pipeline []), НЕ multi-phase | JSON type=null; нет MULTI_PHASE-логов |
+| Frontmatter + intro + RUNTIME IDENTITY (1–37) | 37 | 37 | 0 |
+| **TURN 1 EXAMPLE (новый)** | 0 | 21 | **+21** |
+| PIPELINE TABLE + ноты (39–63) + указатель | 25 | 26 | +1 |
+| PIPELINE GUIDE (65–118) | 54 | 0 | −54 |
+| SUPERCOMPLEX (120–154) | 35 | ~10 | −25 |
+| MULTI-PHASE (156–255) | 100 | ~14 | −86 |
+| CUSTOM COMPOSITION (257–265) | 9 | ~5 | −4 |
+| TURN ALGORITHM (267–298) | 32 | 32 | 0 |
+| CUSTOM CONSTRUCTION (300–322) | 23 | 0 | −23 |
+| JSON FORMAT (324–351) | 28 | 28 | 0 |
+| SEVERITY + ADVISOR (353–369) | 17 | 17 | 0 |
+| CLASSIFICATION RULES (371–404) | 34 | 34 | 0 |
+| TYPE SELECTION (406–439) | 34 | 34 | 0 |
+| EDGE CASES (441–461) | 21 | ~13 | −8 |
+| CROSS-ROUTING (463–468) | 6 | 6 | 0 |
+| CLASSIFICATION EXAMPLES (470–558) | 89 | ~16 | −73 |
+| PROHIBITIONS (560–580) | 21 | 21 | 0 |
+| PLUGIN ENFORCEMENT (582–595) | 14 | 14 | 0 |
+| **ИТОГО** | **595** | **~340** | **−255 (−43%)** |
 
-**Дополнительные пилоты (покрытие сценариев из обзора задания; выполнять после канонических, время permitting):**
+Примечание: «обязательный» диапазон пользователя «SEVERITY RULES 353–369» фактически включает две секции — SEVERITY RULES (353–360) и ADVISOR STEP RULES (362–369); обе остаются байт-в-байт (в ADVISOR — ack `→ DELEGATED to advisor (step …)`, проверяемый плагином, и NIT_ONLY_MODE).
 
-| # | Сценарий | Запрос / действие | Verify |
-|---|---|---|---|
-| S7b | Негатив: invalid phase transition live (обзор S7) | В сессии S1 после старта P1: «пропусти P1 и сразу запускай P2» | Оркестратор отказывает ИЛИ плагин блокирует (`PIPELINE IMMUTABLE (MULTI_PHASE)` в логах) и модель восстанавливается; «тихого» скачка фаз нет |
-| S8 | SUPERCOMPLEX + DEVOPS (обзор S3; research §3.3 Вариант A) | «Реализуй миграцию по шагам (SUPERCOMPLEX), затем прогони тесты и задеплой» (в проекте с готовым dev_plan.md) | ≤1 SUPERCOMPLEX-фаза; двухуровневый ack `→ PHASE 1/3 (P1), STEP j/m (S-j): DELEGATED to …` (форма 8, без warn); per-step механика внутри P1 без изменений; P2/P3 DEVOPS |
-| S9 | Resume после fail-fast (обзор S5; PLAN Stage 5) | Довести фазу до FAILED (3× blocker в живой сессии — попросить reviewer-сценарий или спровоцировать на песочнице) → **новая сессия**: «продолжи с фазы P2» | ОДИН classification read PHASE_STATE.md; план не пересоздаётся; старт с P2 без повторного подтверждения; warn `MULTI_PHASE RESUME DETECTED` |
-| S10 | Auto-DOCS dedup (обзор S6; R7 — prompt-level) | План BUGFIX + DEV + DOCS(3-я фаза), фикс требует docs (requires_docs_update:true) | Hook после P1/ P2 **подавлен**; envelope P1 несёт `docs_deferred_to:"P3"`; Task-prompt P3 получает envelope verbatim; проверка — storage Task-prompts + PHASE_STATE.md |
+## Tier-2 — опциональные дополнительные сокращения (→ ~315–320)
 
-**Критерии приёмки всех пилотов (PLAN :940):** нет `WORKFLOW VIOLATION` в логах; ack-формы без warn-дрейфа; PHASE_STATE.md append-only с секциями всех utility-терминированных фаз; конверты в Task-prompts соответствуют «pointer, not transcript» (summary ≤3 предложений, facts ≤10 ключей).
+Применять ТОЛЬКО если ~340 недостаточно; каждое — с повторной верификацией Шага 9:
+1. TURN ALGORITHM: удалить встроенный JSON-пример (строки 276–285) → указатель на JSON FORMAT (**−8**). Риск: низкий (дубль).
+2. MULTI-PHASE: убрать intro-абзац (дублирует строку 63 — но строка 63 есть 1:1 mirror, intro — нет) (**−2**).
+3. EXAMPLES: сократить до 5 (убрать DOCS-пример — правила T5/404 самодостаточны) (**−3**).
+4. PIPELINE GUIDE указатель: слить с строкой 41 (**−1**).
+5. Ниже ~310 — только через правку «обязательных» секций ИЛИ синхронную правку mirror-секций в ARCHITECTURE.md (Q1–Q5 / T0–T6 / anti-triggers: ARCH:407 и :427 требуют «any change must land in both files in the same commit») — НЕ рекомендуется в рамках этой задачи.
 
-**Команды проверки логов (после каждого пилота):**
+## Edge Cases / Риски
 
-```powershell
-$log = Get-ChildItem "$env:USERPROFILE\.local\share\opencode\log\*.log" |
-  Sort-Object LastWriteTime -Descending | Select-Object -First 1
-Select-String -Path $log.FullName -Pattern 'MULTI_PHASE|USER RESPONSE RECEIVED|user reply implied|MP-\d|BLOCKERSTOP|DEFERRED VIOLATION|ACK FORMAT INVALID|PIPELINE VALIDATION FAILED|PIPELINE IMMUTABLE|ROUTING TABLE'
-```
+- **`.md` HARD BAN плагина** (DOCS_WHITELIST :241–248, проверка до depth-guard :1566–1589): dev-professor не в whitelist → встроенный edit/write по orchestrator.md может бросить `⛔ DOCUMENTATION VIOLATION`. Fallback-лестница описана в «Инструмент правки». Легальность bash-обхода подтверждена прецедентом (utility-scribe пишет PHASE_STATE.md через bash, utility.md:28–29; ban покрывает только tools edit/write/patch). Задача — config-хирургия по явному мандату пользователя, не проектная документация → Auto-DOCS-дисциплина не нарушается.
+- **Backup внутри agents/**: любой `*.md` в `C:\Users\Admin\.config\opencode\agents\` загружается opencode как агент → backup ТОЛЬКО `.bak`/вне каталога (Шаг 0.2).
+- **Вложенные code fences в few-shot**: исходный набросок пользователя содержал malformed-вложенность (``` внутри ```); в плане исправлено на последовательные блоки. НЕ оборачивать внешним fence.
+- **Смещение few-shot к COMPLEX**: пример показывает DEV COMPLEX — небольшая prior-склонность модели к COMPLEX возможна. Принято как требование пользователя; CLASSIFICATION RULES/Q5 default не изменяются; проверяется smoke-тестом (Шаг 11.2).
+- **Line-анкеры в PLAN_MULTI_PHASE_PIPELINES.md:230** устареют (doc-only, на рантайм не влияет) — Шаг 11.1.
+- **ARCHITECTURE.md:397** ссылается на `PIPELINE GUIDE` по имени — после удаления секции ссылка полу-устаревшая (CLASSIFICATION EXAMPLES остаётся); опциональная правка через Auto-DOCS, не блокирующая.
+- **Активные сессии**: live-промпт читается на старте сессии — правка не влияет на уже идущие orchestrator-сессии; smoke-тест в НОВОЙ сессии.
+- **НЕ трогать** строку 26 (OPENCODE_ROUTING_TABLE) — byte-parity с ROUTING_TABLES.orchestrator плагина (правило 4 мест, REVIEW_CONTEXT.md:6).
+- **Drift live↔repo до старта**: если `--plan` покажет drift — сначала разрешить его (иначе `--save` затрёт несохранённые изменения зеркала).
 
-**Verify Step 4.3:** чек-лист S1–S7 (таблица) выполнен; отклонения зафиксированы (какой пилот, какой лог, гипотеза). Провал пилота НЕ блокирует Phase 4-отчёт, но блокирует объявление стабильности (PLAN R2) и требует отдельного разбора перед Phase 5.
+## Dependencies (проверить до реализации)
 
-### Step 4.4 — V-pilot-1: видимость user-role сообщений (PLAN §4.3)
-
-Выполняется по логам S1/S3 (или отдельным мини-экспериментом):
-
-1. Живая сессия: multi-phase запрос → AWAITING-ход → ответ «да».
-2. В логе opencode искать ОДИН из двух маркеров (оба легальны, резолюция #10 PLAN :48):
-   - `USER RESPONSE RECEIVED — confirmation gate cleared` → **opencode доставляет user-role сообщения в message.updated** (путь (a) :586–592 — основной);
-   - `NEW ASSISTANT TURN after AWAITING — user reply implied` → user-role НЕ виден плагину → **fallback по messageID (turn-based гарантия) — постоянный основной механизм** (риск R1).
-3. Результат зафиксировать письменно (заметка в отчёте Phase 4 → Phase 5 внесёт в CHANGELOG/Limitations): какой путь сработал, стабильно ли (проверить в S1, S3, S4 — три user-ответа).
-
-**Дополнительная проверка (рекомендуется):** во время AWAITING-хода в живой сессии убедиться, что оркестратор НЕ делает Task (гейт не срабатывал — в логах нет `CONFIRMATION GATE — Task blocked`; модель сама остановилась). Если срабатывал — это нормально (throw обучает модель), зафиксировать частоту.
-
-**Verify Step 4.4:** механизм clearing определён и задокументирован; подтверждение работает в живых сессиях стабильно (3 из 3 user-ответов сняли gate).
-
-### Step 4.5 — Телеметрия (PLAN §4.5, данные для Stage 2)
-
-В пилотах S1 и S5 зафиксировать:
-- число ходов сессии (assistant-сообщений orchestrator) от старта до final summary;
-- субъективная деградация JSON/ack-дисциплины к концу цепочки (дрейф полей, warn-логи);
-- размер контекста: признаки приближения к лимиту (summarize-события opencode, если видны).
-
-Append 2–5 строк в `RESEARCH_MULTI_PHASE_PIPELINES.md` §9.4 (follow-up: решение о summarizer между фазами). **Verify:** данные записаны; выводов о Stage 2 не принимаем (только факты).
-
----
-
-## Edge Cases (питчи harness — проверены по коду плагина)
-
-1. **Баланс activeTaskDepth.** Успешный `tryTool('task', …)` инкрементирует depth (:1802/:1886); пока depth>0, `tool.execute.before` байпасит ВСЕ гейты (:1304–1339), а `message.updated` уходит в subagent-ветку (:487). Поэтому: `tryTask` автоматически вызывает `endTask`; `keepDepth:true` — только в T21, и сразу после reviewer-сообщений — `endTask`. Заблокированный throw'ом Task depth НЕ трогает (F-3, :1310–1312) — endTask после него не нужен.
-2. **Один Task на ход** (:1419–1445). Счётчик сбрасывается только новым messageID (:573–576). Перед КАЖДЫМ `tryTask` — свой `sendMessage` (новый ход). Второй Task в том же ходе → `MAX ONE TASK CALL PER TURN` (не путать с ожидаемыми violation в негативных тестах).
-3. **Consume-once gate 9.0в** (:1376–1379): probe-вызов СБРАСЫВАET флаги. На одно нарушение — один probe; для повторной проверки — реарм (T21 Part B: 4-й blocker).
-4. **Приоритет кодов vs detail** (:1366–1372): при нескольких флагах code в throw = старший (pipelineMismatch), а `violationDetail` в теле = последний записанный. В T14 assert делать по подстроке detail `PIPELINE IMMUTABLE (MULTI_PHASE)`, а не по коду.
-5. **probeGate после первого Task**: `read` блокирован (:1452–1468) — хелпер трактует `PRIMARY AGENT FORBIDDEN` как 'clean' (гейт 9.0в срабатывает РАНЬШЕ :1364 — deferred-флаги всё равно проявятся).
-6. **FORBIDDEN_VOCAB / SELF_WORK_MARKERS** (:235–246, :269–279): в content тестовых сообщений запрещены токены `## PLAN`, `# Implementation Plan`, `plan-writer-`, `research-writer-`, `research-reviewer`, `plan-reviewer-`, `## Findings/Analysis/Implementation/Root Cause`. Identity-строка хелпера безопасна («I am NOT plankestrator» не содержит «I am plankestrator»). Goals в фикстурах — нейтральные («fix bug X»).
-7. **content — только строка** (:2106, :2123): `message.content` string c ```json-fence; parts-массивы НЕ поддерживаются экстракторами — sendMessage шлёт строку.
-8. **Deviation D** (:2313–2318): ключ `DEV-null-null` fail-closed — DECOMPOSITION-ход внутри DEV-фазы ОБЯЗАН нести `plan_exists:false` (PH_DEV_FIRST уже содержит). `DOCS-null-any` тоже неизвестен — DOCS-фазы только SIMPLE/DEEP.
-9. **Уникальность id blocker-сообщений** (:519–521): дедуп `:blocker` по messageID — msgSeq гарантирует уникальность; НЕ слать одно id дважды в T21.
-10. **Мутация общих фикстур**: phases-массивы ОБЪЕКТОВ разделяются между тестами — везде, где тест меняет фазы, использовать `clonePhases()` (T14, T17, T22, T23d), иначе последующие тесты ломаются неявно.
-11. **mpEmptyShapeOk** (:808–820) освобождает от `PIPELINE EMPTY` только MULTI_PHASE-формы — в T11 (type=DEV) pipeline обязан быть непустым и валидным, иначе код gate замаскирует целевую ошибку state.
-12. **session.created child-guard** (:312–328): `lockSession` шлёт сессию БЕЗ parentID — полный сброс; не добавлять parentID в фикстуры.
-13. **Не менять существующие хелперы** (`tryTool` c `sessionID:'s1'` ≠ topLevelSessionID `s-orchestrator`): при depth>0 параллельный Task с 's1' атрибутируется как nested (легальный) — в тестах не вызывать tryTask при depth>0 кроме T21-схемы (keepDepth→reviewer→endTask без промежуточных task).
-14. **ack-regex построчный** (`/m`, :1204): ack — последняя строка, точно начинается с `→ ` (U+2192 + пробел), без trailing whitespace; JSON-блок выше не мешает.
-15. **hasOutputtedJSON и user-сообщения**: user-сообщение ДО первого валидного JSON вооружило бы identityMissing (:635–637) — во всех тестах user-реплики идут ПОСЛЕ assistant-JSON (как в реальном flow).
-16. **Node type-stripping**: .ts-импорт (:44) требует Node ≥22.6; при `cannot import plugin` — exit 2, проверить версию.
-17. **logs accumulate**: mock-client (:63) пишет ВСЕ уровни в один массив — `newSession()` обязан обнулять logs, иначе hasLog ловит строки прошлых тестов (ложные PASS).
-
----
-
-## Dependencies
-
-1. **Phases 1–3 завершены** — подтверждено recon (live==repo, 2582 строки, все v7-маркеры). Перепроверить хешем в Step 4.0.3.
-2. **Baseline T1–T8 зелёный** до правок harness (Step 4.0.2) — иначе сначала чинить окружение/плагин.
-3. **Node ≥ 22.6** в PATH (type-stripping).
-4. **Restart opencode** перед Step 4.3 (пилоты) — новые сессии подхватывают плагин v7 + orchestrator.md с секцией MULTI-PHASE PIPELINES (Phase 2 live уже содержит).
-5. **Если тест T9–T26 выявляет баг плагина** (assert не сходится с документированным поведением PLAN Phase 3): правка в **live** → перепрогон harness (live) → `config-sync --save` → перепрогон (repo) → фикс входит в тот же атомарный коммит Phase 5.3 (промпт/плагин/harness неразделимы). НЕ маскировать баг ослаблением assert без пометки в отчёте.
-6. **Пилоты**: песочница-проект (не production repo); для S8 — dev_plan.md в песочнице; для S9 — воспроизводимый FAILED фазы.
-7. **Phase 5 не запускается** до: `fail=0` в обоих прогонах (V-22) + S1–S7 пройдены/задокументированы (V-23) + V-pilot-1 зафиксирован.
-
-## Verification (маппинг на PLAN Verification Checklist)
-
-- **V-22** ← Steps 4.0, 4.2v: T1–T8 + T9–T26 зелёные против LIVE и REPO (`WORKFLOW_PLUGIN`), `RESULT: fail=0`, exit 0.
-- **V-23** ← Steps 4.3, 4.4: S1–S7 (+S7b/S8–S10 опц.) пройдены; V-pilot-1: механизм clearing (user-role vs messageID-fallback) определён по логам и записан.
-- **V-24** ← Step 4.3 verify-колонка: PHASE_STATE.md создаётся (`# PHASE_STATE`) и дописывается append-only; конверты в Task-prompts — small data (summary ≤3 предложений, facts ≤10 ключей), verbatim + фраза-контекст на границе фаз.
-- Финальный отчёт Phase 4: таблица «тест → статус», «пилот → статус → артефакты», вывод V-pilot-1, телеметрия S1/S5, список отклонений/багов (если есть) — вход для Phase 5 (CHANGELOG, коммит через агента git-commit).
+1. `config-sync --plan --pair agents` → нет drift (Шаг 0.1).
+2. Backup создан вне agents/ (Шаг 0.2).
+3. Маршрут правки определён (edit → bash-fallback; см. «Инструмент правки»).
+4. Все replacement-тексты Шагов 1–8 скопированы В план дословно — реализация механическая, импровизация запрещена (prewalk-паттерн: план самодостаточен).
+5. Git-коммит (если запрашивается) — только делегированием агенту `git-commit`.
