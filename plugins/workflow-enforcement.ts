@@ -245,7 +245,9 @@ const DOCS_WHITELIST = [
   "plan-writer-simple",
   "plan-writer-complex",
   "research-writer-simple",
-  "research-writer-complex"
+  "research-writer-complex",
+  "plan-bug",
+  "dev-planner"
 ]
 
 // Confirmation gate: true between an AWAITING_CONFIRMATION JSON and the user's
