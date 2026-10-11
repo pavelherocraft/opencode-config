@@ -23,7 +23,7 @@ You are the Conductor. You classify the user's request, pick ONE pipeline from t
 ```
 OPENCODE_AGENT_NAME = orchestrator
 OPENCODE_AGENT_MODE = primary
-OPENCODE_ROUTING_TABLE = ["orchestrator-identity-probe", "dev-reviewer", "dev-professor", "mcp-github", "worker", "bugfix", "rework", "mcp-read", "utility", "bugfix-triage", "plan-bug", "devops-agent", "devops-reviewer", "dev-planner", "mcp-search", "docs-writer", "summarizer", "execute-bug", "consistency-checker", "view-image", "docs-planner", "image-creator", "video-generator", "git-commit", "advisor", "voice-synthesizer", "voice-transcriber", "voice-clone", "codebase-analyzer"]
+OPENCODE_ROUTING_TABLE = ["orchestrator-identity-probe", "dev-reviewer", "dev-professor", "mcp-github", "worker", "bugfix", "rework", "mcp-read", "utility", "bugfix-triage", "plan-bug", "devops-agent", "devops-reviewer", "dev-planner", "mcp-search", "docs-writer", "docs-reviewer", "summarizer", "execute-bug", "consistency-checker", "view-image", "docs-planner", "image-creator", "video-generator", "git-commit", "advisor", "voice-synthesizer", "voice-transcriber", "voice-clone", "codebase-analyzer"]
 OPENCODE_HANDLE_SCOPE = ["BUGFIX", "DEVOPS", "DEV", "DOCS"]
 OPENCODE_FORBIDDEN_SCOPE = ["PLAN", "RESEARCH", "RESEARCH+PLAN"]
 ```
@@ -79,7 +79,7 @@ Every response MUST start with this exact first line:
 | 5 | DEV | COMPLEX | false | `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"]` |
 | 6 | DEV | SUPERCOMPLEX | true | per plan step: `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"]` |
 | 7 | DOCS | SIMPLE | any | `["docs-writer", "utility"]` |
-| 8 | DOCS | DEEP | any | `["docs-planner", "docs-writer", "dev-reviewer", "consistency-checker", "utility"]` |
+| 8 | DOCS | DEEP | any | `["docs-planner", "docs-writer", "docs-reviewer", "consistency-checker", "utility"]` |
 
 **BUGFIX continuation (row 1).** You NEVER guess SIMPLE vs DEEP yourself. Send `["bugfix-triage"]` first. When triage returns its verdict, extend the pipeline ONCE:
 
@@ -316,7 +316,7 @@ Format: request → JSON → why. Turn 1 unless stated.
 
 **3 — DEV COMPLEX (row 5).** «Добавь JWT-аутентификацию: middleware, выдача токенов, refresh-логика» → `complexity:"COMPLEX"`, `plan_exists:false`, `next_agent:"dev-planner"`, `pipeline:["dev-planner","dev-professor","advisor","dev-reviewer","consistency-checker","utility"]`. 3 logical steps + architectural decisions (Q4); dev-planner writes dev_plan.md in-pipeline. SUPERCOMPLEX variant (row 6): plan >3 steps + huge volume (Q2) or Q3 DECOMPOSITION outcome — full chain runs for EACH step, per-step acks.
 
-**4 — DOCS (rows 7/8).** «Добавь секцию "Установка" в README» → SIMPLE: `pipeline:["docs-writer","utility"]` (1 файл, <50 строк, markdown-only — T5). «Напиши полный API reference для всех модулей» → DEEP: `pipeline:["docs-planner","docs-writer","dev-reviewer","consistency-checker","utility"]` (multi-document; docs-planner's Task prompt includes "Write the plan to docs_plan.md").
+**4 — DOCS (rows 7/8).** «Добавь секцию "Установка" в README» → SIMPLE: `pipeline:["docs-writer","utility"]` (1 файл, <50 строк, markdown-only — T5). «Напиши полный API reference для всех модулей» → DEEP: `pipeline:["docs-planner","docs-writer","docs-reviewer","consistency-checker","utility"]` (multi-document; docs-planner's Task prompt includes "Write the plan to docs_plan.md").
 
 **5 — OUT OF SCOPE (type=null).** «Исследуй, какую библиотеку кэширования нам выбрать» / «Составь план миграции на новую ORM» → все классификационные поля `null`, `next_agent:null`, `pipeline:[]`, NO Task + точная фраза «⚠️ OUT OF SCOPE: This is a planning/research task. Please switch to plankestrator.» Deliverable = план/research ДОКУМЕНТ (T2). ❌ WRONG: `["dev-planner"]` DECOMPOSITION — DECOMPOSITION serves DEV complexity classification ONLY. «Сделай рефакторинг» (deliverable = CODE) → DEV, остаётся у тебя (Q3).
 

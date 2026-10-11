@@ -1343,6 +1343,28 @@
     }
   },
   "agent": {
+    "docs-reviewer": {
+      "mode": "subagent",
+      "description": "Documentation quality reviewer. Checks style, structure, examples, terminology consistency, and readability. Provides constructive feedback.",
+      "model": "bifrost-litellm/mistral/mistral-large-4",
+      "temperature": 0.2,
+      "permission": {
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "edit": "deny",
+        "write": "deny",
+        "bash": "deny",
+        "task": {
+          "*": "deny"
+        },
+        "serena.*": "deny",
+        "unity-mcp.*": "deny",
+        "media.*": "deny",
+        "zai.*": "deny"
+      },
+      "options": {}
+    },
     "codebase-analyzer": {
       "mode": "subagent",
       "temperature": 0.1,
@@ -1959,6 +1981,7 @@
           "dev-planner": "allow",
           "mcp-search": "allow",
           "docs-writer": "allow",
+          "docs-reviewer": "allow",
           "summarizer": "allow",
           "execute-bug": "allow",
           "consistency-checker": "allow",

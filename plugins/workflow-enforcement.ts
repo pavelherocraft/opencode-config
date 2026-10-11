@@ -21,6 +21,7 @@ const ROUTING_TABLES = {
     "dev-planner",
     "mcp-search",
     "docs-writer",
+    "docs-reviewer",
     "summarizer",
     "execute-bug",
     "consistency-checker",

@@ -6,7 +6,7 @@ This document declares the project's requirements and consistency rules in full.
 
 ## 1. Routing Tables
 
-### orchestrator Whitelist (29 agents)
+### orchestrator Whitelist (30 agents)
 
 | # | Agent Name | Role |
 |---|------------|------|
@@ -39,6 +39,7 @@ This document declares the project's requirements and consistency rules in full.
 | 27 | voice-transcriber | Speech-to-text (MCP media ASR) |
 | 28 | voice-clone | Voice cloning TTS (MCP media) |
 | 29 | codebase-analyzer | Codebase analysis agent. Deep structural analysis of dependencies, architecture, and refactoring impact. Read-only (read/glob/grep). Kimi K2.8. |
+| 30 | docs-reviewer | Documentation quality review (style, structure, terminology, readability) |
 
 ### plankestrator Whitelist (10 agents)
 
@@ -59,15 +60,15 @@ This document declares the project's requirements and consistency rules in full.
 
 | Primary Agent | Whitelist Count | Total (primary + whitelist) |
 |---------------|-----------------|-----------------------------|
-| orchestrator | 29 | 30 (orchestrator + 29 subagents) |
+| orchestrator | 30 | 31 (orchestrator + 30 subagents) |
 | plankestrator | 10 | 11 (plankestrator + 10 subagents) |
-| **Grand Total** | **39** | **41** |
+| **Grand Total** | **40** | **42** |
 
-Note: 39 whitelist entries (view-image shared by both primaries) = 38 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / DEV SUPERCOMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 39 unique subagents + 2 primary agents = 41 unique agents total.
+Note: 40 whitelist entries (view-image shared by both primaries) = 39 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / DEV SUPERCOMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 40 unique subagents + 2 primary agents = 42 unique agents total.
 
 ### Shared Utility Agents
 
-view-image is a shared utility agent available to BOTH primary agents. It is listed in BOTH routing tables (orchestrator: position 20 of 29; plankestrator: position 10 of 10) and granted `task.view-image: allow` in both permission blocks in opencode.json. It is used for image analysis (screenshots, diagrams, error images) via the Task tool.
+view-image is a shared utility agent available to BOTH primary agents. It is listed in BOTH routing tables (orchestrator: position 21 of 30; plankestrator: position 10 of 10) and granted `task.view-image: allow` in both permission blocks in opencode.json. It is used for image analysis (screenshots, diagrams, error images) via the Task tool.
 
 ## Subagent Models
 
@@ -85,6 +86,7 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | consistency-checker | bifrost-litellm/xiaomi/mimo-v2.6-pro |
 | advisor | bifrost-litellm/tencent/Hy4 |
 | docs-writer | bifrost-litellm/xiaomi/mimo-v2.6-pro |
+| docs-reviewer | bifrost-litellm/mistral/mistral-large-4 |
 | docs-planner | bifrost-litellm/openrouter/deepseek-v4.1-flash |
 | utility | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
 | mcp-github | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
@@ -131,7 +133,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 
 ## Model Roles (single source of truth, OMP model-roles analog)
 
-Роли централизуют назначение моделей 41 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Model Roles), (3) документации. Квота-aware fallback-цепочки — платформенное требование (статус: НЕ реализовано, требует поддержки рантайма/proxy).
+Роли централизуют назначение моделей 42 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Model Roles), (3) документации. Квота-aware fallback-цепочки — платформенное требование (статус: НЕ реализовано, требует поддержки рантайма/proxy).
 
 | Role | Model | Tier | Agents |
 |------|-------|------|--------|
@@ -152,10 +154,11 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | executor-step5 | bifrost-litellm/stepfun/step-5-preview | low | worker |
 | docs | bifrost-litellm/xiaomi/mimo-v2.6-pro | low | docs-writer, research-writer-simple |
 | docs-plan | bifrost-litellm/openrouter/deepseek-v4.1-flash | low | docs-planner |
+| docs-review | bifrost-litellm/mistral/mistral-large-4 | mid | docs-reviewer |
 | micro | bifrost-litellm/MiniMax-M3.1-Flash-Preview | low | scout |
 | analyzer | bifrost-litellm/Kimi K2.8 | mid | codebase-analyzer |
 
-Контроль суммы: 2 primary + 39 subagents = 41 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.
+Контроль суммы: 2 primary + 40 subagents = 42 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.
 
 **Правила:**
 1. **Prewalk-принцип (OMP):** в паре planner→executor роль planner'а ДОЛЖНА быть tier ≥ executor'а: plan-bug (plan-flash, mid) → execute-bug (executor-cheap, low); dev-planner (plan-strong, top) → dev-professor (executor-strong, mid); docs-planner (docs-plan, low) → docs-writer (docs, low). Инверсия запрещена.
@@ -665,8 +668,8 @@ devops-agent → devops-reviewer
 DOCS SIMPLE: docs-writer → utility
 DOCS DEEP:   docs-planner (writes docs_plan.md)
            → docs-writer (reads docs_plan.md)
-            → dev-reviewer
-            → consistency-checker
+           → docs-reviewer
+           → consistency-checker
            → [rework loop: rework → consistency-checker, max 3]
            → utility
 ```
@@ -1125,7 +1128,7 @@ Agents do NOT call each other — the user must manually switch between them.
 ### Live (runtime, единственное место правок)
 `C:\Users\Admin\.config\opencode\`
 - `opencode.json` — конфиг (провайдеры, модели, permissions)
-- `agents/*.md` — 41 определений агентов (frontmatter + промпт)
+- `agents/*.md` — 42 определений агентов (frontmatter + промпт)
 - `plugins/workflow-enforcement.ts` — enforcement-плагин
 - `skills/git-commit/` — юзер-скилл
 - `AGENTS.md` — глобальные инструкции (lean)
@@ -1133,7 +1136,7 @@ Agents do NOT call each other — the user must manually switch between them.
 
 ### Repo (коммит-снапшот live)
 `P:\Programming\Рефакторинг\`
-- `agents/` — зеркало live agents/ (41 .md)
+- `agents/` — зеркало live agents/ (42 .md)
 - `opencode.json` — зеркало
 - `plugins/workflow-enforcement.ts` — зеркало
 - `skills/git-commit/` — зеркало
