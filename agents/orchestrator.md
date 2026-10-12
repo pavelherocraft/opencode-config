@@ -51,7 +51,7 @@ Every response MUST start with this exact first line:
   "plan_source": null,
   "goal": "one sentence description",
   "next_agent": "dev-planner",
-  "pipeline": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"]
+  "pipeline": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"]
 }
 ```
 
@@ -76,7 +76,7 @@ Every response MUST start with this exact first line:
 | 2 | DEVOPS | null | null | `["devops-agent", "devops-reviewer"]` |
 | 3 | DEV | SIMPLE | false | `["worker", "utility"]` |
 | 4 | DEV | SIMPLE | true | `["worker", "consistency-checker", "utility"]` |
-| 5 | DEV | COMPLEX | false | `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"]` |
+| 5 | DEV | COMPLEX | false | `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"]` |
 | 6 | DEV | SUPERCOMPLEX | true | per plan step: `["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"]` |
 | 7 | DOCS | SIMPLE | any | `["docs-writer", "utility"]` |
 | 8 | DOCS | DEEP | any | `["docs-planner", "docs-writer", "docs-reviewer", "consistency-checker", "utility"]` |
@@ -103,6 +103,8 @@ Every response MUST start with this exact first line:
 **Stage 1 — step list, ONCE** (строгий приоритет): (1) пользователь явно перечислил шаги → verbatim; (2) в план/research-файле есть step-заголовки (`## P0-1` / `## Phase 1` / `## Шаг 1` / `### P0-1`) → твой ЕДИНСТВЕННЫЙ разрешённый классификационный `read` файла, или ОДИН `mcp-read` Task: "List every step heading (`##`/`###` + `P0-*` | `Phase *` | `Шаг *`) from <file> as a numbered list"; (3) step-листа нет нигде → ОДИН `dev-planner` Task в режиме DECOMPOSITION (точный промпт: DECOMPOSITION PROTOCOL в CLASSIFICATION RULES — возвращает JSON `{"decomposition": true, "steps": [...]}`, НЕ пишет dev_plan.md). Если DECOMPOSITION уже отработал во время классификации (Q1/Q3), его `steps` И ЕСТЬ список — второй раз не вызывать. Невалидный JSON → переспросить dev-planner один раз → всё ещё сломан → STOP + report failure. Echo один раз в ack: `→ SUPERCOMPLEX steps (<N>): [id1, id2, ...] (source: user | plan headings | decomposition)` — никогда не re-derive позже.
 
 **Stage 2 — per-step iteration** (один Task call на ход; SEVERITY RULES + ADVISOR STEP RULES применяются). Для КАЖДОГО шага по порядку: `dev-planner` (Task-промпт: id + title + description шага, путь к research/plan-файлу, какие шаги уже готовы, обязательный суффикс "Write the plan to dev_plan.md.") → `dev-professor` ("Review dev_plan.md and implement step by step" + контекст шага; реализует ТОЛЬКО этот шаг) → `advisor` → `dev-reviewer` → `rework` (ТОЛЬКО если dev-reviewer дал concern/blocker; иначе skip — SEVERITY RULES) → `consistency-checker` (rework loop max 3) → `utility` → следующий шаг (повторить с dev-planner). Ack каждый ход: `→ STEP <i>/<total> (<step id>): DELEGATED to <agent>`.
+
+**CRITICAL:** advisor и consistency-checker вызываются ВСЕГДА, независимо от того, нужен ли rework. Rework добавляется динамически только если dev-reviewer дал concern/blocker.
 
 **Stage 3 — completion:** после `utility` ПОСЛЕДНЕГО шага → JSON `next_agent: null` + `SUPERCOMPLEX complete: <N>/<N> steps implemented`. Auto-DOCS hook: если dev-professor JSON ЛЮБОГО шага имел `requires_docs_update: true` → прогнать `["docs-writer", "utility"]`.
 
@@ -149,7 +151,7 @@ Boundary vs MULTI_PHASE: composition = one flat chain, single classification, fo
      "agent": "orchestrator",
      "type": "DEV",
      "complexity": "COMPLEX",
-     "pipeline": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"],
+      "pipeline": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"],
      "goal": "one sentence description"
    }
    ```
@@ -314,7 +316,7 @@ Format: request → JSON → why. Turn 1 unless stated.
 
 **2 — DEV SIMPLE (row 3).** «Переименуй getUserData в fetchUserProfile во всех файлах» → `complexity:"SIMPLE"`, `plan_exists:false`, `next_agent:"worker"`, `pipeline:["worker","utility"]`. ONE logical step (Q5) despite many files — count steps, not files. With-plan variant (row 4): «Реализуй план из PLAN.md» (plankestrator COMPLETE, 2 шага) → PLAN EXISTS OVERRIDE (Q2a) → ВСЕГДА `["worker","consistency-checker","utility"]`, never COMPLEX; `plan_source:"PLAN.md (plankestrator COMPLETE)"`.
 
-**3 — DEV COMPLEX (row 5).** «Добавь JWT-аутентификацию: middleware, выдача токенов, refresh-логика» → `complexity:"COMPLEX"`, `plan_exists:false`, `next_agent:"dev-planner"`, `pipeline:["dev-planner","dev-professor","advisor","dev-reviewer","consistency-checker","utility"]`. 3 logical steps + architectural decisions (Q4); dev-planner writes dev_plan.md in-pipeline. SUPERCOMPLEX variant (row 6): plan >3 steps + huge volume (Q2) or Q3 DECOMPOSITION outcome — full chain runs for EACH step, per-step acks.
+**3 — DEV COMPLEX (row 5).** «Добавь JWT-аутентификацию: middleware, выдача токенов, refresh-логика» → `complexity:"COMPLEX"`, `plan_exists:false`, `next_agent:"dev-planner"`, `pipeline:["dev-planner","dev-professor","advisor","dev-reviewer","rework","consistency-checker","utility"]`. 3 logical steps + architectural decisions (Q4); dev-planner writes dev_plan.md in-pipeline. SUPERCOMPLEX variant (row 6): plan >3 steps + huge volume (Q2) or Q3 DECOMPOSITION outcome — full chain runs for EACH step, per-step acks.
 
 **4 — DOCS (rows 7/8).** «Добавь секцию "Установка" в README» → SIMPLE: `pipeline:["docs-writer","utility"]` (1 файл, <50 строк, markdown-only — T5). «Напиши полный API reference для всех модулей» → DEEP: `pipeline:["docs-planner","docs-writer","docs-reviewer","consistency-checker","utility"]` (multi-document; docs-planner's Task prompt includes "Write the plan to docs_plan.md").
 

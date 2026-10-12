@@ -622,8 +622,10 @@ DEV SIMPLE has two variants depending on whether a plan exists:
 ### DEV COMPLEX
 
 ```
-dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
+dev-planner → dev-professor → advisor → dev-reviewer → [rework loop: rework → consistency-checker, max 3] → utility
 ```
+
+**CRITICAL:** advisor и consistency-checker вызываются ВСЕГДА. Rework добавляется динамически только если dev-reviewer дал concern/blocker.
 
 **Rework is conditional:** `rework` is NOT in the base pipeline. It is inserted dynamically ONLY if dev-reviewer or consistency-checker reports issues (severity: concern/blocker). If no issues found → skip rework entirely.
 
@@ -637,18 +639,20 @@ dev-planner → dev-professor → advisor → dev-reviewer → consistency-check
 
 ```
 PER PLAN STEP (repeated for each step in the step list):
-  dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker → [rework loop: rework → consistency-checker, max 3] → utility
+  dev-planner → dev-professor → advisor → dev-reviewer → [rework loop: rework → consistency-checker, max 3] → utility
 ```
+
+**CRITICAL:** advisor и consistency-checker вызываются ВСЕГДА. Rework добавляется динамически только если dev-reviewer дал concern/blocker.
 
 **🚨 CRITICAL: SUPERCOMPLEX executes the FULL pipeline for EACH plan step.**
 
 The pipeline `dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker → [rework loop] → utility` is executed **SEPARATELY for every step** of the plan.
 
 **Example:** If the plan has 8 steps, the orchestrator executes the full pipeline 8 times:
-- Step 1: dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker → utility
-- Step 2: dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker → utility
+- Step 1: dev-planner → dev-professor → advisor → dev-reviewer → [rework loop] → consistency-checker → utility
+- Step 2: dev-planner → dev-professor → advisor → dev-reviewer → [rework loop] → consistency-checker → utility
 - ...
-- Step 8: dev-planner → dev-professor → advisor → dev-reviewer → consistency-checker → utility
+- Step 8: dev-planner → dev-professor → advisor → dev-reviewer → [rework loop] → consistency-checker → utility
 
 **Never** execute the pipeline once for the entire task. **Always** iterate over each plan step.
 

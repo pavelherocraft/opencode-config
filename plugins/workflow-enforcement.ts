@@ -2619,8 +2619,8 @@ function validatePipeline(agent: string, type: string | null, complexity: string
       "DEVOPS-null-null": ["devops-agent", "devops-reviewer"],
       "DEV-SIMPLE-false": ["worker", "utility"],
       "DEV-SIMPLE-true": ["worker", "consistency-checker", "utility"],
-      "DEV-COMPLEX-false": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"],
-      "DEV-SUPERCOMPLEX-true": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "consistency-checker", "utility"],
+      "DEV-COMPLEX-false": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"],
+      "DEV-SUPERCOMPLEX-true": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"],
       "DOCS-SIMPLE-any": ["docs-writer", "utility"],
       "DOCS-DEEP-any": ["docs-planner", "docs-writer", "dev-reviewer", "consistency-checker", "utility"]
     },
