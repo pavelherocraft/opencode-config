@@ -4,13 +4,9 @@ mode: subagent
 model: bifrost-litellm/GLM-5.3 (res)
 temperature: 0.1
 permission:
-  edit:
-    "*.md": "allow"
-    "*": "deny"
-  write:
-    "*.md": "allow"
-    "*": "deny"
+  edit: allow
   bash: deny
+  read: allow
   task:
     "*": "deny"
     "view-image": "allow"
