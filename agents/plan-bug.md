@@ -88,20 +88,59 @@ Codebase-analyzer provides:
 - [ ] **Step 4:** All findings synthesized into understanding
 - [ ] **Step 5:** Ready to write detailed fix plan
 
-Output format:
-```
-ROOT_CAUSE: [detailed analysis]
-FIX_PLAN:
-1. [step 1 with code snippet]
-2. [step 2 with code snippet]
-FILES_TO_MODIFY: [list]
-RISK_LEVEL: LOW | MEDIUM | HIGH
+## Output Format
+
+Write the fix plan to `bug_plan.md` using the `write` tool with this structure:
+
+```markdown
+# Bug Fix Plan
+
+## Root Cause
+[detailed analysis with file:line references from codebase-analyzer and scout]
+
+## Fix Plan
+
+### Step 1: [description]
+- File: `path/to/file.ts`
+- Lines: [line numbers]
+- Change: [old code → new code or full snippet]
+
+### Step 2: [description]
+...
+
+## Files to Modify
+- `path/to/file1.ts`
+- `path/to/file2.ts`
+
+## Verification
+[commands to verify the fix works]
+
+## Risk Level
+LOW | MEDIUM | HIGH
 ```
 
 Prewalk contract (v5, OMP prewalk analog):
 - You are the EXPENSIVE planner; execute-bug is the CHEAP executor on a fresh context.
 - The plan you write to `bug_plan.md` MUST be SELF-CONTAINED: exact file paths, line anchors, Old→New values or full code snippets, verify commands, edge cases. The executor sees ONLY the plan file — never your investigation transcript.
 - "Pointer, not transcript": reference files by path:line, include only the snippets needed to apply the fix blindly.
+
+## Writing bug_plan.md
+
+Use the `write` tool (NOT `edit`) to create the bug_plan.md file:
+
+```
+write({
+  "path": "bug_plan.md",
+  "content": "# Bug Fix Plan\n\n..."
+})
+```
+
+**Why `write` and not `edit`:**
+- `edit` tool requires an EXISTING file (it does string replacements)
+- `write` tool creates NEW files or overwrites existing ones
+- bug_plan.md is a NEW file created by this agent
+
+**File location:** Write to project root as `bug_plan.md` (not in subdirectories).
 
 ## Success Metrics
 
