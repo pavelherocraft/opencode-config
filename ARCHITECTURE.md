@@ -174,8 +174,8 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | bugfix | `bash: allow` | Bug fixing agent — needs bash for running tests, git operations |
 | execute-bug | `bash: allow` | Bug fix implementation — needs bash for running tests, executing commands |
 | rework | `bash: allow` | Rework agent — needs bash for running tests, git operations |
-| plan-bug | `edit, write: allow` (`.md` only) | Bug fix planning — writes plan to `bug_plan.md` for execute-bug to read |
-| docs-planner | `edit, write: allow` (`.md` only) | Documentation planning — writes plan to `docs_plan.md` for docs-writer to read |
+| plan-bug | `edit: allow` | Bug fix planning — writes plan to `bug_plan.md` for execute-bug to read (`edit` covers the `write` tool — see Permission Model) |
+| docs-planner | `edit: allow` (`.md` only) | Documentation planning — writes plan to `docs_plan.md` for docs-writer to read (`edit` covers the `write` tool — see Permission Model) |
 | devops-reviewer | `read: allow` in addition to `bash: allow` | DevOps review — needs bash for running commands, read for checking files |
 | devops-agent | `bash: allow` only | DevOps operations — needs bash for npm, docker, deployment commands |
 
@@ -199,14 +199,15 @@ Worker is the implementation agent — it MUST have `bash: allow` to execute com
 
 ### Edit Permissions (plankestrator subagents)
 
-**Important:** `edit` and `write` are BOTH valid glob-scoped permission keys (verified empirically on a real `plan-bug` run). They gate two different tools with different capabilities:
+**Important:** there is NO separate `write` permission key in opencode. The single key `edit` is glob-scoped and gates ALL file modifications — the `edit` tool, the `write` tool and `patch` (opencode docs: "`edit` — all file modifications (covers `edit`, `write`, `patch`)"; in opencode source the `write` tool registers with permission action `"edit"`).
 
-| Permission key | Tool | Creates new files? | Edits existing files? |
-|----------------|------|:---:|:---:|
+| Tool | Gated by | Creates new files? | Edits existing files? |
+|------|----------|:---:|:---:|
 | `edit` | `edit` | ❌ no (string replacement on an existing file) | ✅ yes |
-| `write` | `write` | ✅ yes | ✅ yes |
+| `write` | `edit` | ✅ yes | ✅ yes |
+| `patch` | `edit` | ✅ yes | ✅ yes |
 
-Because the `edit` tool fails on a non-existent path, an `edit`-only grant cannot create a new file (e.g. `bug_plan.md` / `dev_plan.md`) — the agent must also be granted `write`. A glob restriction such as `{ "*.md": "allow", "*": "deny" }` narrows the tool to matching paths; it does **not** remove the tool from the agent's toolset.
+A glob restriction such as `{ "*.md": "allow", "*": "deny" }` narrows the tools to matching paths; it does **not** remove them from the agent's toolset.
 
 **Recommended pattern for plan/plan-writer agents** (create and edit `.md` only):
 
@@ -215,14 +216,13 @@ permission:
   edit:
     "*.md": "allow"
     "*": "deny"
-  write:
-    "*.md": "allow"
-    "*": "deny"
 ```
+
+`edit` alone grants file creation (via the `write` tool) — no second key is needed. See Permission Model below for the full rationale.
 
 | Agent | Permission | Restriction |
 |-------|------------|-------------|
-| plan-bug | `edit, write: allow` (`.md` only) | Only .md files, writes bug_plan.md |
+| plan-bug | `edit: allow` (`.md` only) | Only .md files, writes bug_plan.md |
 | plan-writer-simple | `edit: allow` (`.md` only) | Only .md files, user request required |
 | plan-writer-complex | `edit: allow` (`.md` only) | Only .md files, user request required |
 | plan-reviewer-simple | `edit: allow` (`.md` only) | Only .md files, user request required |
@@ -255,16 +255,34 @@ result.agent = mergeDeep(result.agent ?? {}, ConfigAgent.load(dir))
 |-------|----------------------|--------|
 | `model` | `agents/*.md` frontmatter | Overwrites JSON; `agent.*.model` removed from opencode.json |
 | `prompt` | `agents/*.md` body | Overwrites JSON; `agent.*.prompt` removed from opencode.json |
-| `permission` | Deep merge of JSON + frontmatter | JSON keeps `task` allowlist / serena / unity-mcp keys; frontmatter wins on shared keys (edit/write/bash) |
+| `permission` | Deep merge of JSON + frontmatter | JSON keeps `task` allowlist / serena / unity-mcp keys; frontmatter wins on shared keys (edit/bash) |
 | `mode`, `temperature` | Frontmatter wins if present | Keep values in sync |
 
 **Rule:** Never define `model` or `prompt` for an agent in opencode.json if that agent has a `.md` file — the JSON value is dead config and misleads.
 
 **Example of the failure mode this prevents:** bugfix-triage once kept running QWEN3.7-plus after opencode.json was changed to GLM-5.3-Flash (res) — because the stale frontmatter `model:` silently won.
 
-**Note:** `write` IS a valid permission key — it is glob-scoped, like `edit`, and gates the `write` tool (which creates new files). `edit` gates the `edit` tool (which only modifies existing files). Agents that must create and then edit a new `.md` (e.g. plan-bug → `bug_plan.md`) need BOTH keys; a glob-scoped `write` key such as `write: { "*.md": "allow", "*": "deny" }` is honoured, not ignored.
+**Note:** `edit` IS the permission key for all file modifications — glob-scoped like a path pattern, and it gates the `write` tool as well (see Permission Model). Agents that must create and then edit a new `.md` (e.g. plan-bug → `bug_plan.md`) need only `edit`; a glob-scoped grant such as `edit: { "*.md": "allow", "*": "deny" }` is honoured.
 
 **Note:** plankestrator has `edit: deny` — it MUST delegate to subagents, never write directly.
+
+### Permission Model (opencode)
+
+Согласно документации opencode (permissions, updated 2026-10-06):
+
+**`edit` permission покрывает ВСЕ файловые операции:**
+- `edit` tool — точечные замены в существующих файлах
+- `write` tool — создание новых файлов или перезапись существующих
+- `patch` tool — применение патчей
+
+**Примеры:**
+- `edit: allow` — полный доступ ко всем файловым операциям
+- `edit: {"*.md": "allow", "*": "deny"}` — только .md файлы (edit + write + patch)
+- `edit: deny` — запрет всех файловых операций
+
+**Важно:** Отдельного `write:` permission key НЕ существует в opencode. Ключ `write:` в frontmatter агентов игнорируется (no-op).
+
+**Практика:** Все writer-агенты (plan-writer-complex, research-writer-complex, docs-writer, plan-bug, dev-planner) используют `edit: allow` без отдельного `write: allow`.
 
 ### Primary Agent Tool Lockdown
 
@@ -276,9 +294,7 @@ Both `orchestrator` and `plankestrator` are locked down to prevent them from doi
 | `read` | ✅ allow | ✅ allow | Inspect ARCHITECTURE.md / AGENTS.md / existing plans |
 | `glob` | ✅ allow | ✅ allow | Assess scope (1 file vs many) |
 | `grep` | ✅ allow | ✅ allow | Find references to inform classification |
-| `edit` | ❌ deny | ❌ deny | Worker / bugfix / plan-writer-* handles this |
-| `write` | ❌ deny | ❌ deny | Worker / docs-writer handles this |
-| `patch` | ❌ deny | ❌ deny | Same as edit |
+| `edit` | ❌ deny | ❌ deny | Worker / bugfix / plan-writer-* handles this (covers `write` and `patch` tools too) |
 | `bash` | ❌ deny | ❌ deny | devops-agent / worker / execute-bug handles this |
 | `webfetch` | ❌ deny | ❌ deny | mcp-read / mcp-search handles this |
 | `question` | ❌ deny | ❌ deny | Primary agents don't ask the user |
@@ -288,7 +304,7 @@ Both `orchestrator` and `plankestrator` are locked down to prevent them from doi
 
 **Defense in depth — this lock is enforced by 4 layers:**
 
-1. **Merged permission ruleset** (opencode.json deep-merged with `agents/*.md` frontmatter) — the runtime refuses to inject denied tools into the agent's toolset
+1. **Merged permission ruleset** (opencode.json deep-merged with `agents/*.md` frontmatter) — the runtime refuses to inject denied tools into the agent's toolset (`edit: deny` blocks `edit`, `write` and `patch`)
 2. **Plugin runtime gate** (`workflow-enforcement.ts` → `PRIMARY_AGENT_ALLOWED_TOOLS`) — throws `⛔ PRIMARY AGENT FORBIDDEN ACTION TOOL` exception if anything bypasses the config
 3. **Identity-lock** — if the agent outputs wrong identity in JSON, the locked routing table is still enforced
 4. **Inspection gate (plankestrator)** — plugin hard-blocks `read`/`grep`/`glob`: (a) after the first pipeline Task call (`⛔ INSPECTION AFTER PIPELINE START`), (b) beyond the inspection budget of 3 calls per session (`⛔ INSPECTION BUDGET EXHAUSTED`; the prompt tells the model max 2), (c) after self-work content markers (`## Findings`, `## Analysis`, `Executive Summary`, ...) were detected in plankestrator's own message. view-image and identity-probe Task calls are auxiliary — they do NOT count as pipeline start. Child (subagent) sessions do not reset the parent's lock (parentID guard); subagent tool calls are excluded from enforcement via `activeTaskDepth`.
@@ -311,7 +327,7 @@ Both `orchestrator` and `plankestrator` are locked down to prevent them from doi
 | Механизм | Источник | Назначение |
 |----------|----------|------------|
 | `subagent_depth` | opencode-core | Жёсткий лимит вложенности: при `depth >= subagent_depth` Task tool отказывается создавать субагента |
-| `activeTaskDepth` | `workflow-enforcement.ts` (плагин) | Подавление enforcement: пока выполняется субагент (`activeTaskDepth > 0`), плагин пропускает tool calls — иначе Gate A блокировал бы `edit`/`write` у writer-агентов |
+| `activeTaskDepth` | `workflow-enforcement.ts` (плагин) | Подавление enforcement: пока выполняется субагент (`activeTaskDepth > 0`), плагин пропускает tool calls — иначе Gate A блокировал бы файловые операции (`edit`/`write`) у writer-агентов |
 
 Плагин НЕ управляет лимитом вложенности — это ответственность ядра. Плагин лишь не вмешивается в работу субагентов, чтобы не нарушать их контракт.
 
@@ -330,7 +346,7 @@ Both `orchestrator` and `plankestrator` are locked down to prevent them from doi
 
 All writer agents have a "Direct Write Instruction" section in their prompts:
 
-- **Write directly** using `edit` permission (controls the `write` tool)
+- **Write directly** using the `write` / `edit` tool (both are gated by the `edit` permission — see Permission Model)
 - **DO NOT call other agents** for file operations
 - **DO NOT delegate** to devops-readonly or any other agent
 
