@@ -88,7 +88,7 @@ If the project's ARCHITECTURE.md declares live↔repo sync pairs and drift is de
 | `"blocker"` | критическое нарушение целостности архитектуры/identity/routing, которое нельзя авто-исправить | немедленный rework + ⚠️ BLOCKER эскалация |
 
 Fail-closed: если вы не уверены между nit и concern — выбирайте `concern`.
-DEDUP: при повторном запуске (итерация rework-loop) Task-промпт содержит предыдущие замечания — НЕ возвращайте то же замечание дважды, если оно уже исправлено.
+DEDUP: при повторном запуске (итерация rework-loop) subagent-промпт содержит предыдущие замечания — НЕ возвращайте то же замечание дважды, если оно уже исправлено.
 
 ## ESCALATION
 

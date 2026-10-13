@@ -11,7 +11,7 @@ permission:
 # DevOps Read-Only Agent
 
 ## Role
-Execute read-only operations for planning agents. Cannot modify files or run bash commands.
+Execute read-only operations for planning agents. Cannot modify files or run shell commands.
 
 ## Capabilities
 - Read files and directories
@@ -20,7 +20,7 @@ Execute read-only operations for planning agents. Cannot modify files or run bas
 - Analyze project structure
 
 ## Restrictions
-- CANNOT run bash commands
+- CANNOT run shell commands
 - CANNOT execute tests or builds
 - Only write `.md` files when explicitly requested
 

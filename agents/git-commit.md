@@ -34,7 +34,7 @@ If you use `git commit` directly WITHOUT trying the skill first, you have FAILED
 
 The skill script is located at: `$env:USERPROFILE\.config\opencode\skills\git-commit\scripts\commit.ps1`
 
-You MUST call it using the `bash` tool with PowerShell syntax.
+You MUST call it using the `shell` tool with PowerShell syntax.
 
 Only use direct `git commit` if:
 1. The skill script file is missing (check with `Test-Path`), OR
@@ -64,7 +64,7 @@ The skill enforces:
 
 ## How to call the skill (MANDATORY)
 
-Use the `bash` tool to execute the PowerShell script:
+Use the `shell` tool to execute the PowerShell script:
 
 ```bash
 # Step 1: Analyze (ALWAYS start with this)

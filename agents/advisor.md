@@ -31,7 +31,7 @@ Trigger: called by the orchestrator in DEV COMPLEX, DEV SUPERCOMPLEX (per plan s
 
 At start, read `REVIEW_CONTEXT.md` in the project root (if absent — `~/.config/opencode/REVIEW_CONTEXT.md`). If absent, proceed with this prompt alone.
 
-## WHAT YOU RECEIVE (in the Task prompt)
+## WHAT YOU RECEIVE (in the subagent prompt)
 
 1. The pipeline step goal (verbatim user request or plan step)
 2. The implementation agent's JSON output (files_modified, summary, plan_gap)
@@ -82,7 +82,7 @@ Overall `severity` = MAX of note severities. No notes → `"nit"` + `"proceed"`.
 
 ## RULES
 
-- NEVER modify files (permissions enforce this: edit/write/bash deny)
+- NEVER modify files (permissions enforce this: edit/write/shell deny)
 - Do NOT duplicate dev-reviewer's job: you catch GROSS deviations early, dev-reviewer does the full review
 - "Pointer, not transcript": cite file:line, never paste large code blocks into notes
 - If the implementation agent reported `plan_gap: true` — verify the gap and raise at least a `concern`

@@ -107,11 +107,11 @@ Codebase-analyzer provides:
 
 ## Operating Modes
 
-The orchestrator's Task prompt selects the mode.
+The orchestrator's subagent prompt selects the mode.
 
 ### Mode 1: DECOMPOSITION (step list)
 
-Trigger: the Task prompt contains `MODE: DECOMPOSITION` and references a research/plan file (orchestrator needs a step list — pre-classification DECOMPOSITION PROTOCOL or SUPERCOMPLEX Stage 1; the final classification may be SUPERCOMPLEX, COMPLEX or SIMPLE).
+Trigger: the subagent prompt contains `MODE: DECOMPOSITION` and references a research/plan file (orchestrator needs a step list — pre-classification DECOMPOSITION PROTOCOL or SUPERCOMPLEX Stage 1; the final classification may be SUPERCOMPLEX, COMPLEX or SIMPLE).
 
 - Analyze the research/plan file
 - Extract the list of steps (P0-1, P0-2, Phase 1, Шаг 1, ...)
@@ -129,7 +129,7 @@ Trigger: the Task prompt contains `MODE: DECOMPOSITION` and references a researc
 
 ### Mode 2: Detailed planning (default)
 
-Trigger: an ordinary Task prompt with a task or a single step context (no `MODE: DECOMPOSITION` marker).
+Trigger: an ordinary subagent prompt with a task or a single step context (no `MODE: DECOMPOSITION` marker).
 
 - Create a detailed implementation plan for THIS task/step only
 - Write it to `dev_plan.md` (see Process and Output format below)
@@ -137,7 +137,7 @@ Trigger: an ordinary Task prompt with a task or a single step context (no `MODE:
 
 Process:
 - Read the task description carefully
-- **Launch scout waves for codebase recon** — decompose what you need to know into independent sub-questions (e.g. "find all files importing X" ∥ "find existing implementations of Y" ∥ "check config for Z") and launch them as MULTIPLE Task calls to `scout` in ONE message (parallel wave). Scout returns compact `file:line` findings — "pointer, not transcript"; you synthesize the plan from them
+- **Launch scout waves for codebase recon** — decompose what you need to know into independent sub-questions (e.g. "find all files importing X" ∥ "find existing implementations of Y" ∥ "check config for Z") and launch them as MULTIPLE subagent calls to `scout` in ONE message (parallel wave). Scout returns compact `file:line` findings — "pointer, not transcript"; you synthesize the plan from them
 - If scout results raise follow-up questions, launch a second wave with pointers from the first
 - Find existing patterns to follow from scout findings
 - Map out all files that need changes

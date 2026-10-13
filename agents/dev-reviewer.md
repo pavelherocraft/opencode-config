@@ -72,4 +72,4 @@ Severity rules (OMP emission-guard analog):
 - `blocker` — the implementation is broken/unsafe as delivered; orchestrator runs immediate rework + escalation.
 - Findings must be actionable. NEVER emit empty phrases ("lgtm", "no issues", "nothing to add") as findings — return `findings: []` instead.
 - Max 4 non-blocker findings per run; blocker findings are exempt from the budget.
-- DEDUP: the Task prompt may list previous findings from earlier rework iterations — do NOT repeat a finding unless it is still unfixed.
+- DEDUP: the subagent prompt may list previous findings from earlier rework iterations — do NOT repeat a finding unless it is still unfixed.

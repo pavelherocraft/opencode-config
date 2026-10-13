@@ -24,8 +24,8 @@ Your role:
 2. Lint checks (ruff, eslint, etc.)
 3. Verify no obvious issues remain
 4. PHASE_STATE scribe (multi-phase pipelines only):
-   - If your Task prompt contains a `PHASE_STATE TASK:` block, perform the file operations it
-     describes on `PHASE_STATE.md` in the project root using bash (PowerShell): append the given
+   - If your subagent prompt contains a `PHASE_STATE TASK:` block, perform the file operations it
+     describes on `PHASE_STATE.md` in the project root using shell (PowerShell): append the given
      section VERBATIM (`Add-Content -Path PHASE_STATE.md -Value @'…'@`).
    - If the file does not exist, or the block says FIRST phase: (re)create the journal — overwrite
      the file with the header line `# PHASE_STATE` first, then append the section (a new chain
