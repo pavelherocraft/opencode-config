@@ -34,9 +34,7 @@ const ROUTING_TABLES = {
     "voice-synthesizer",
     "voice-transcriber",
     "voice-clone",
-    "codebase-analyzer",
-    "audit_IPA",
-    "review_audit_IPA"
+    "codebase-analyzer"
   ],
   plankestrator: [
     "plankestrator-identity-probe",
@@ -90,7 +88,7 @@ const IDENTITY_PROBE_AGENTS = [
 // blocker → triggered turn (немедленный rework + эскалация).
 // Fail-closed: отсутствие severity orchestrator трактует как concern.
 // ============================================================
-const SEVERITY_AGENTS = ["dev-reviewer", "consistency-checker", "advisor", "review_audit_IPA"]
+const SEVERITY_AGENTS = ["dev-reviewer", "consistency-checker", "advisor"]
 const VALID_SEVERITIES = ["nit", "concern", "blocker"]
 // Фильтр пустых фраз (OMP emission-guard, п.2): шумовые «замечания» не считаются findings
 const EMPTY_FINDING_PHRASES = [
@@ -111,7 +109,7 @@ let seenFindings: Map<string, Set<string>> = new Map()
 const CONTEXT_FILE_AGENTS = [
   "dev-reviewer", "consistency-checker", "devops-reviewer",
   "plan-reviewer-simple", "plan-reviewer-complex", "research-reviewer",
-  "advisor", "review_audit_IPA"
+  "advisor"
 ]
 const REVIEW_CONTEXT_FILE = "REVIEW_CONTEXT.md"
 
@@ -249,8 +247,7 @@ const DOCS_WHITELIST = [
   "research-writer-simple",
   "research-writer-complex",
   "plan-bug",
-  "dev-planner",
-  "review_audit_IPA"
+  "dev-planner"
 ]
 
 // Confirmation gate: true between an AWAITING_CONFIRMATION JSON and the user's

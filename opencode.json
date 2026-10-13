@@ -2032,9 +2032,7 @@
           "voice-synthesizer": "allow",
           "voice-transcriber": "allow",
           "voice-clone": "allow",
-          "codebase-analyzer": "allow",
-          "audit_IPA": "allow",
-          "review_audit_IPA": "allow"
+          "codebase-analyzer": "allow"
         }
       },
       "options": {}
