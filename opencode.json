@@ -237,34 +237,8 @@
         "MiniMax-M2.5": {
           "name": "MiniMax-M2.5",
           "limit": {
-            "context": 200000,
-            "output": 131072
-          },
-          "options": {
-            "thinking": {
-              "type": "enabled"
-            }
-          }
-        },
-        "MiniMax-M2.5-highspeed": {
-          "name": "MiniMax-M2.5-highspeed",
-          "limit": {
-            "context": 200000,
-            "output": 131072
-          }
-        },
-        "MiniMax-M2.7": {
-          "name": "MiniMax-M2.7",
-          "limit": {
-            "context": 204800,
-            "output": 131072
-          }
-        },
-        "MiniMax-M2.7-highspeed": {
-          "name": "MiniMax-M2.7-highspeed",
-          "limit": {
-            "context": 204800,
-            "output": 131072
+            "context": 0,
+            "output": 0
           }
         },
         "MiniMax-M3": {
@@ -494,6 +468,35 @@
         },
         "stepfun/step-5-preview": {
           "name": "stepfun/step-5-preview",
+          "limit": {
+            "context": 1000000,
+            "output": 65536
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ]
+          },
+          "attachment": true
+        },
+        "stepfun/step-5-preview (reserved - use when main is exhausted)": {
+          "name": "stepfun/step-5-preview (reserved - use when main is exhausted)",
           "limit": {
             "context": 1000000,
             "output": 65536
