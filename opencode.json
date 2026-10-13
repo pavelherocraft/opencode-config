@@ -1908,6 +1908,44 @@
       },
       "options": {}
     },
+    "audit_IPA": {
+      "mode": "subagent",
+      "temperature": 0.1,
+      "permission": {
+        "edit": "deny",
+        "write": { "*.json": "allow", "*.txt": "allow", "*.tsv": "allow", "*.yaml": "allow", "*": "deny" },
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "bash": { "*": "allow", "git commit*": "deny", "git push*": "deny" },
+        "skill": { "*": "deny", "ipa-audit": "allow" },
+        "task": { "*": "deny" },
+        "serena.*": "deny",
+        "unity-mcp.*": "deny",
+        "media.*": "deny",
+        "zai.*": "deny"
+      },
+      "options": {}
+    },
+    "review_audit_IPA": {
+      "mode": "subagent",
+      "temperature": 0.1,
+      "permission": {
+        "edit": { "*.md": "allow", "*": "deny" },
+        "write": { "*.md": "allow", "*": "deny" },
+        "read": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "bash": { "python*": "allow", "*": "deny" },
+        "skill": { "*": "deny", "ipa-audit-review": "allow" },
+        "task": { "*": "deny" },
+        "serena.*": "deny",
+        "unity-mcp.*": "deny",
+        "media.*": "deny",
+        "zai.*": "deny"
+      },
+      "options": {}
+    },
     "orchestrator-identity-probe": {
       "mode": "subagent",
       "temperature": 0.1,
@@ -1994,7 +2032,9 @@
           "voice-synthesizer": "allow",
           "voice-transcriber": "allow",
           "voice-clone": "allow",
-          "codebase-analyzer": "allow"
+          "codebase-analyzer": "allow",
+          "audit_IPA": "allow",
+          "review_audit_IPA": "allow"
         }
       },
       "options": {}

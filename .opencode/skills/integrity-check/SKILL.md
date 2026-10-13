@@ -65,8 +65,8 @@ PAIR:agents/worker.md -> OK
 DRIFT:agents/utility.md live=2610999D repo=DBFBD96F (use: config-sync --save) -> FAIL
 COUNT:agents_live=40 agents_repo=40 opencode_json=40 (derived, no hardcoded expectation) -> PASS
 COUNT:routing_orchestrator json=28 plugin=28 arch_header=28 arch_rows=28 (derived cross-check) -> PASS
-FORMAT:worker model=bifrost-litellm/stepfun/step-5-preview -> PASS
-EXISTS:worker bifrost-litellm/stepfun/step-5-preview -> PASS
+FORMAT:worker model=bifrost-litellm/xiaomi/mimo-v2.6-flash -> PASS
+EXISTS:worker bifrost-litellm/xiaomi/mimo-v2.6-flash -> PASS
 SUMMARY:checks=<n> pass=<n> fail=<n> warn=<n>
 STATUS:ALL_PASS   |   STATUS:FAILURES fail=<n>
 ```

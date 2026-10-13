@@ -75,7 +75,7 @@ python .opencode/skills/model-key-validate/scripts/validate.py [--both] [--provi
 
 ```
 STATUS:VALIDATE_START agents_dir=<path> catalog=<n providers>/<m models>
-KEY:worker bifrost-litellm/stepfun/step-5-preview -> PASS
+KEY:worker bifrost-litellm/xiaomi/mimo-v2.6-flash -> PASS
 KEY:utility bifrost-litellm/glm-5.3 -> FAIL (not found)
 SUGGEST:utility did_you_mean=bifrost-litellm/GLM-5.3 (res)
 KEY:summarizer model=<missing> -> FAIL (frontmatter without model line)

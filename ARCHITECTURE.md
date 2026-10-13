@@ -6,7 +6,7 @@ This document declares the project's requirements and consistency rules in full.
 
 ## 1. Routing Tables
 
-### orchestrator Whitelist (30 agents)
+### orchestrator Whitelist (32 agents)
 
 | # | Agent Name | Role |
 |---|------------|------|
@@ -39,7 +39,9 @@ This document declares the project's requirements and consistency rules in full.
 | 27 | voice-transcriber | Speech-to-text (MCP media ASR) |
 | 28 | voice-clone | Voice cloning TTS (MCP media) |
 | 29 | codebase-analyzer | Codebase analysis agent. Deep structural analysis of dependencies, architecture, and refactoring impact. Read-only (read/glob/grep). Kimi K2.8. |
-| 30 | docs-reviewer | Documentation quality review (style, structure, terminology, readability) |
+| 30 | audit_IPA | IPA audit executor. Runs the 9-phase App Store Guideline 2.3.1(a) audit of an iOS IPA via the ipa-audit skill (Python scripts). GLM-5.3-Flash. |
+| 31 | review_audit_IPA | IPA audit reviewer. Validates audit artifacts (findings.json, AUDIT_REPORT.md, evidence/, provenance) via the ipa-audit-review skill + 9 criteria; writes REVIEW.md. Read-only except REVIEW.md. Kimi K2.8. |
+| 32 | docs-reviewer | Documentation quality review (style, structure, terminology, readability) |
 
 ### plankestrator Whitelist (10 agents)
 
@@ -60,21 +62,21 @@ This document declares the project's requirements and consistency rules in full.
 
 | Primary Agent | Whitelist Count | Total (primary + whitelist) |
 |---------------|-----------------|-----------------------------|
-| orchestrator | 30 | 31 (orchestrator + 30 subagents) |
+| orchestrator | 32 | 33 (orchestrator + 32 subagents) |
 | plankestrator | 10 | 11 (plankestrator + 10 subagents) |
-| **Grand Total** | **40** | **42** |
+| **Grand Total** | **42** | **44** |
 
-Note: 40 whitelist entries (view-image shared by both primaries) = 39 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / DEV SUPERCOMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 40 unique subagents + 2 primary agents = 42 unique agents total.
+Note: 42 whitelist entries (view-image shared by both primaries) = 41 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / DEV SUPERCOMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 42 unique subagents + 2 primary agents = 44 unique agents total.
 
 ### Shared Utility Agents
 
-view-image is a shared utility agent available to BOTH primary agents. It is listed in BOTH routing tables (orchestrator: position 21 of 30; plankestrator: position 10 of 10) and granted `task.view-image: allow` in both permission blocks in opencode.json. It is used for image analysis (screenshots, diagrams, error images) via the Task tool.
+view-image is a shared utility agent available to BOTH primary agents. It is listed in BOTH routing tables (orchestrator: position 21 of 32; plankestrator: position 10 of 10) and granted `task.view-image: allow` in both permission blocks in opencode.json. It is used for image analysis (screenshots, diagrams, error images) via the Task tool.
 
 ## Subagent Models
 
 | Agent | Model |
 |-------|-------|
-| worker | bifrost-litellm/stepfun/step-5-preview |
+| worker | bifrost-litellm/xiaomi/mimo-v2.6-flash |
 | bugfix-triage | bifrost-litellm/openrouter/deepseek-v4.1-flash |
 | bugfix | bifrost-litellm/QWEN3.7-plus |
 | plan-bug | bifrost-litellm/GLM-5.3 (res) |
@@ -114,6 +116,8 @@ view-image is a shared utility agent available to BOTH primary agents. It is lis
 | voice-transcriber | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
 | voice-clone | bifrost-litellm/MiniMax-M3.1-Flash-Preview |
 | codebase-analyzer | bifrost-litellm/Kimi K2.8 |
+| audit_IPA | bifrost-litellm/GLM-5.3-Flash |
+| review_audit_IPA | bifrost-litellm/Kimi K2.8 |
 
 Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3.7-plus` and are documented in §Identity Lock Mechanism, item 5 — not duplicated in the Subagent Models table.
 
@@ -133,7 +137,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 
 ## Model Roles (single source of truth, OMP model-roles analog)
 
-Роли централизуют назначение моделей 42 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Model Roles), (3) документации. Квота-aware fallback-цепочки — платформенное требование (статус: НЕ реализовано, требует поддержки рантайма/proxy).
+Роли централизуют назначение моделей 44 агентам. Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Model Roles), (3) документации. Квота-aware fallback-цепочки — платформенное требование (статус: НЕ реализовано, требует поддержки рантайма/proxy).
 
 | Role | Model | Tier | Agents |
 |------|-------|------|--------|
@@ -151,14 +155,16 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | advisory | bifrost-litellm/tencent/Hy4 | mid | advisor |
 | executor-strong | bifrost-litellm/GLM-5.3 (res) | mid | dev-professor |
 | executor-cheap | bifrost-litellm/MiniMax-M3.1-Flash-Preview | low | execute-bug, utility, mcp-github, mcp-read, mcp-search, summarizer, devops-agent, devops-readonly, view-image, git-commit, voice-synthesizer, image-creator, video-generator, voice-transcriber, voice-clone |
-| executor-step5 | bifrost-litellm/stepfun/step-5-preview | low | worker |
+| executor-flash | bifrost-litellm/xiaomi/mimo-v2.6-flash | low | worker |
 | docs | bifrost-litellm/xiaomi/mimo-v2.6-pro | low | docs-writer, research-writer-simple |
 | docs-plan | bifrost-litellm/openrouter/deepseek-v4.1-flash | low | docs-planner |
 | docs-review | bifrost-litellm/mistral/mistral-large-4 | mid | docs-reviewer |
 | micro | bifrost-litellm/MiniMax-M3.1-Flash-Preview | low | scout |
 | analyzer | bifrost-litellm/Kimi K2.8 | mid | codebase-analyzer |
+| audit | bifrost-litellm/GLM-5.3-Flash | low | audit_IPA |
+| audit-review | bifrost-litellm/Kimi K2.8 | mid | review_audit_IPA |
 
-Контроль суммы: 2 primary + 40 subagents = 42 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.
+Контроль суммы: 2 primary + 42 subagents = 44 агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли.
 
 **Правила:**
 1. **Prewalk-принцип (OMP):** в паре planner→executor роль planner'а ДОЛЖНА быть tier ≥ executor'а: plan-bug (plan-flash, mid) → execute-bug (executor-cheap, low); dev-planner (plan-strong, top) → dev-professor (executor-strong, mid); docs-planner (docs-plan, low) → docs-writer (docs, low). Инверсия запрещена.
@@ -1148,7 +1154,7 @@ Agents do NOT call each other — the user must manually switch between them.
 ### Live (runtime, единственное место правок)
 `C:\Users\Admin\.config\opencode\`
 - `opencode.json` — конфиг (провайдеры, модели, permissions)
-- `agents/*.md` — 42 определений агентов (frontmatter + промпт)
+- `agents/*.md` — 44 определений агентов (frontmatter + промпт)
 - `plugins/workflow-enforcement.ts` — enforcement-плагин
 - `skills/git-commit/` — юзер-скилл
 - `AGENTS.md` — глобальные инструкции (lean)
@@ -1156,7 +1162,7 @@ Agents do NOT call each other — the user must manually switch between them.
 
 ### Repo (коммит-снапшот live)
 `P:\Programming\Рефакторинг\`
-- `agents/` — зеркало live agents/ (42 .md)
+- `agents/` — зеркало live agents/ (44 .md)
 - `opencode.json` — зеркало
 - `plugins/workflow-enforcement.ts` — зеркало
 - `skills/git-commit/` — зеркало

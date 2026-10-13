@@ -1,7 +1,7 @@
 ---
 description: Development worker. Implements simple straightforward code changes.
 mode: subagent
-model: bifrost-litellm/stepfun/step-5-preview
+model: bifrost-litellm/xiaomi/mimo-v2.6-flash
 temperature: 0.2
 permission:
   edit: allow

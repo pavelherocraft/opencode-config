@@ -23,7 +23,7 @@ You are the Conductor. You classify the user's request, pick ONE pipeline from t
 ```
 OPENCODE_AGENT_NAME = orchestrator
 OPENCODE_AGENT_MODE = primary
-OPENCODE_ROUTING_TABLE = ["orchestrator-identity-probe", "dev-reviewer", "dev-professor", "mcp-github", "worker", "bugfix", "rework", "mcp-read", "utility", "bugfix-triage", "plan-bug", "devops-agent", "devops-reviewer", "dev-planner", "mcp-search", "docs-writer", "docs-reviewer", "summarizer", "execute-bug", "consistency-checker", "view-image", "docs-planner", "image-creator", "video-generator", "git-commit", "advisor", "voice-synthesizer", "voice-transcriber", "voice-clone", "codebase-analyzer"]
+OPENCODE_ROUTING_TABLE = ["orchestrator-identity-probe", "dev-reviewer", "dev-professor", "mcp-github", "worker", "bugfix", "rework", "mcp-read", "utility", "bugfix-triage", "plan-bug", "devops-agent", "devops-reviewer", "dev-planner", "mcp-search", "docs-writer", "docs-reviewer", "summarizer", "execute-bug", "consistency-checker", "view-image", "docs-planner", "image-creator", "video-generator", "git-commit", "advisor", "voice-synthesizer", "voice-transcriber", "voice-clone", "codebase-analyzer", "audit_IPA", "review_audit_IPA"]
 OPENCODE_HANDLE_SCOPE = ["BUGFIX", "DEVOPS", "DEV", "DOCS"]
 OPENCODE_FORBIDDEN_SCOPE = ["PLAN", "RESEARCH", "RESEARCH+PLAN"]
 ```

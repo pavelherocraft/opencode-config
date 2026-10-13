@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **orchestrator.md**: compressed from 595 to 341 lines (−42.7%). Added TURN 1 EXAMPLE (few-shot) after identity block. Removed PIPELINE GUIDE details (→ ARCHITECTURE.md reference), deleted duplicate CUSTOM PIPELINE CONSTRUCTION section, compressed MULTI-PHASE/SUPERCOMPLEX/EXAMPLES/EDGE CASES into dense paragraphs while preserving all 32 plugin-critical literals verbatim.
+- **Routing tables synced with 2 new IPA-audit agents** (`audit_IPA`, `review_audit_IPA`): orchestrator whitelist 30 → 32. Updated `orchestrator.md` `OPENCODE_ROUTING_TABLE`; `ARCHITECTURE.md` §1 (whitelist header + 2 rows, count summary 40 → 42 whitelist / 42 → 44 grand total, view-image position 21 of 32), §Subagent Models (+2 rows, worker model `stepfun/step-5-preview` → `xiaomi/mimo-v2.6-flash`), §Model Roles (42 → 44 agents; `executor-step5` → `executor-flash`; +new roles `audit` = GLM-5.3-Flash, `audit-review` = Kimi K2.8), §8 File Locations (42 → 44).
+- **Skill example output**: `integrity-check/SKILL.md` and `model-key-validate/SKILL.md` example lines updated to the new worker model.
+
+### Added
+- **New agents `audit_IPA` (GLM-5.3-Flash) and `review_audit_IPA` (Kimi K2.8)** for the iOS IPA App Store Guideline 2.3.1(a) audit — executor + reviewer via the `ipa-audit` / `ipa-audit-review` skills. First routed through the orchestrator whitelist.
+- **Новые роли моделей:** `audit` (low) и `audit-review` (mid) — обоснование: изолированный IPA-audit флоу, модели выбраны под задачи (Flash — исполнитель скриптов, K2.8 — ревьюер, консистентно с `devops-reviewer`).
 
 ### Added
 - **Кастомные пайплайны как конкатенация эталонных строк PIPELINE TABLE.** Когда пользователь явно запросил последовательную связку («исправь X и сразу задеплой») или фазы жёстко связаны, orchestrator emit'ит `pipeline_source_rows` (≥2 ключа строк таблицы) + `pipeline` = их точная конкатенация; type/complexity/plan_exists — значения первой строки. Подтверждение не требуется (явный запрос = мандат). Граница: MULTI_PHASE — для 2+ раздельных deliverables с подтверждением плана; компоновка — для тесно связанных явно названных связок; дефолт — одна каноническая строка.
