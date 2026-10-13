@@ -1,4 +1,11 @@
-import type { Plugin } from "@opencode-ai/plugin"
+// OpenCode v2 plugin module (opencode-cli 2.0.x).
+//
+// NOTE: there is deliberately NO runtime import of "@opencode/plugin" here. The
+// v2 loader reads this file directly and transpiles it, and the v1 type package
+// ("@opencode-ai/plugin") is no longer installed. The only contract the loader
+// validates is the default export: `{ id, setup(ctx) }` — see export default at
+// the bottom of this file. The v1 `Plugin` type is therefore gone; the hook
+// bodies below are untyped on purpose so the file loads without a dependency.
 
 // ============================================================
 // Routing Tables — which agents each primary agent can call
@@ -326,14 +333,74 @@ const SELF_WORK_MARKERS: Record<string, string[]> = {
 }
 
 // ============================================================
+// v2 compatibility shims
+// ============================================================
+// The hook bodies below were written against the v1 plugin context: they call
+// `client.app.log(...)` (65 call sites) and the entry point destructured
+// `{ client, $ }`. Under v2 neither exists, so instead of rewriting 2900 lines
+// of gate logic we install a drop-in `client` facade.
+//
+// log() is deliberately NON-BLOCKING. The v2 event stream is consumed with
+// `for await`, so awaiting an HTTP round-trip per event would stall the whole
+// subscription (message.part.delta fires per streaming chunk). Entries are
+// queued and drained in the background instead; ordering is preserved.
+let v2Ctx: any = null
+const logQueue: any[] = []
+let logDraining = false
+
+const formatLog = (body: any) => {
+  let extra = ""
+  try {
+    if (body?.extra && Object.keys(body.extra).length > 0) extra = ` ${JSON.stringify(body.extra)}`
+  } catch {
+    extra = " [unserializable extra]"
+  }
+  return `[workflow-enforcement] ${body?.level ?? "info"}: ${body?.message ?? ""}${extra}`
+}
+
+const drainLogs = async () => {
+  if (logDraining) return
+  logDraining = true
+  try {
+    while (logQueue.length > 0) {
+      const args = logQueue.shift()
+      const app = (v2Ctx as any)?.app
+      if (typeof app?.log === "function") {
+        try {
+          await app.log(args)
+          continue
+        } catch {
+          // structured logging unavailable in this build → fall back to console
+        }
+      }
+      console.log(formatLog(args?.body))
+    }
+  } finally {
+    logDraining = false
+  }
+}
+
+const client = {
+  app: {
+    log: async (args: any) => {
+      logQueue.push(args)
+      void drainLogs()
+      return undefined
+    }
+  }
+}
+
+// ============================================================
 // Plugin Entry Point
 // ============================================================
-export const WorkflowEnforcement: Plugin = async ({ client, $ }) => {
+// Returns the v1-style hook map. Under v2 this is not consumed directly by the
+// loader — the default export below adapts it onto the v2 registration API.
+export const WorkflowEnforcement = async () => {
   await client.app.log({
     body: {
       service: "workflow-enforcement",
       level: "info",
-      message: "Workflow enforcement plugin initialized (v2 — correct hooks)"
+      message: "Workflow enforcement plugin initialized (v9 — OpenCode v2 port)"
     }
   })
 
@@ -1620,8 +1687,8 @@ Use requires_docs_update: true to trigger Auto-DOCS hook.
 Primary agent dispatches EXACTLY ONE Task per turn and waits for the result.
             `)
           }
-          subagentStack.push(String((output as any)?.args?.subagent_type
-            || (input as any)?.args?.subagent_type || "unknown"))
+          subagentStack.push(String(((output as any)?.args?.agent ?? (output as any)?.args?.subagent_type)
+            || ((input as any)?.args?.agent ?? (input as any)?.args?.subagent_type) || "unknown"))
           activeTaskDepth += 1
           await client.app.log({
             body: {
@@ -1641,7 +1708,8 @@ Primary agent dispatches EXACTLY ONE Task per turn and waits for the result.
       // routing tables and JSON-output requirements do NOT apply here.
       if (currentMode === "plan") {
         const targetForLog = input.tool === "subagent"
-          ? ((output as any)?.args?.subagent_type || (input as any)?.args?.subagent_type)
+          ? (((output as any)?.args?.agent ?? (output as any)?.args?.subagent_type)
+            || ((input as any)?.args?.agent ?? (input as any)?.args?.subagent_type))
           : undefined
         workflowSteps.push({
           timestamp,
@@ -1974,7 +2042,8 @@ Identity line → JSON block → Task call with next_agent from your routing tab
       //
       // Kept as a hint-only diagnostic. NO state mutation:
       if (!currentAgent && input.tool === "subagent") {
-        const targetAgent = (output as any)?.args?.subagent_type || (input as any)?.args?.subagent_type
+        const targetAgent = ((output as any)?.args?.agent ?? (output as any)?.args?.subagent_type)
+          || ((input as any)?.args?.agent ?? (input as any)?.args?.subagent_type)
         if (targetAgent) {
           const detected = detectAgentFromSubagent(targetAgent)
           if (detected) {
@@ -1996,7 +2065,8 @@ Identity line → JSON block → Task call with next_agent from your routing tab
 
       // Track this tool call in the workflow log
       const targetForLog = input.tool === "subagent"
-        ? ((output as any)?.args?.subagent_type || (input as any)?.args?.subagent_type)
+        ? (((output as any)?.args?.agent ?? (output as any)?.args?.subagent_type)
+          || ((input as any)?.args?.agent ?? (input as any)?.args?.subagent_type))
         : undefined
 
       workflowSteps.push({
@@ -2020,7 +2090,8 @@ Identity line → JSON block → Task call with next_agent from your routing tab
       // a substitute for delegation.
       // ==========================================================
 
-      const targetAgent = (output as any)?.args?.subagent_type || (input as any)?.args?.subagent_type
+      const targetAgent = ((output as any)?.args?.agent ?? (output as any)?.args?.subagent_type)
+        || ((input as any)?.args?.agent ?? (input as any)?.args?.subagent_type)
 
       if (!currentAgent) {
         await client.app.log({
@@ -2989,4 +3060,115 @@ function collectFindings(json: any): Array<{ text: string, severity: string | nu
     if (text) out.push({ text, severity: d?.severity != null ? String(d.severity) : (json?.severity != null ? String(json.severity) : null) })
   }
   return out
+}
+
+// ============================================================
+// Default export — the OpenCode v2 plugin module contract.
+//
+// The v2 loader validates the default export against
+//   Union({ id, effect: Fn }, { id, setup: Fn })
+// and then calls setup(ctx) exactly once. Named exports are NEVER inspected,
+// so WorkflowEnforcement above must be invoked from here.
+//
+// v1 → v2 mapping applied below:
+//   event                    → ctx.event.subscribe()   (async stream, not a cb)
+//   tool.execute.before      → ctx.tool.hook("execute.before", ...)
+//   tool.execute.after       → ctx.tool.hook("execute.after",  ...)
+//   (input, output)          → one mutable event
+//   output.args              → event.input
+//   client.app.log           → client facade (see shims above)
+// ============================================================
+export default {
+  id: "workflow-enforcement",
+
+  async setup(ctx: any) {
+    v2Ctx = ctx
+    const hooks: any = await WorkflowEnforcement()
+
+    // ----------------------------------------------------------
+    // event — v1 "event" hook → v2 async subscription.
+    // Events are consumed sequentially so the gate state machine keeps its
+    // ordering guarantees (processedMessageIDs dedup, latest-message-wins).
+    // A throw inside an event handler is INERT by design (v1 semantics) and is
+    // swallowed here so one malformed event cannot kill the subscription.
+    // ----------------------------------------------------------
+    const controller = new AbortController()
+    void (async () => {
+      try {
+        const subscribe = ctx?.event?.subscribe
+        if (typeof subscribe !== "function") {
+          console.log("[workflow-enforcement] FATAL: ctx.event.subscribe is unavailable — no event gate")
+          return
+        }
+        for await (const event of subscribe.call(ctx.event, { signal: controller.signal })) {
+          try {
+            await hooks.event({ event })
+          } catch (err: any) {
+            console.log(`[workflow-enforcement] event handler threw (inert): ${err?.message ?? err}`)
+          }
+        }
+      } catch (err: any) {
+        if (!controller.signal.aborted) {
+          console.log(`[workflow-enforcement] event subscription terminated: ${err?.message ?? err}`)
+        }
+      }
+    })()
+
+    // ----------------------------------------------------------
+    // tool.execute.before — the unified enforcement gate.
+    // Throw semantics are preserved: an error thrown here blocks the tool call,
+    // which is exactly what every gate in the hook body relies on.
+    // ----------------------------------------------------------
+    const toolCtx = ctx?.tool
+    if (typeof toolCtx?.hook !== "function") {
+      console.log("[workflow-enforcement] FATAL: ctx.tool.hook is unavailable — no tool gate")
+      return () => controller.abort()
+    }
+
+    await toolCtx.hook.call(toolCtx, "execute.before", async (event: any) => {
+      const args = event?.input
+      // v1 signature: (input, output) where output.args was mutated in place to
+      // inject the REVIEW_CONTEXT.md pointer. v2 passes a single owned mutable
+      // event, so mutating event.input propagates to the executed tool.
+      //
+      // The `input` shim carries BOTH v1 (`args.filePath`) and v2 (`path`/`file`)
+      // spellings. The DOCS_WHITELIST gate resolves the target file through
+      // `output.args.filePath || input.args.filePath || input.path || input.file`;
+      // under v2 the write/edit tools take `path`, so without the `path`/`file`
+      // aliases the gate would read "" and .md enforcement would silently die.
+      const pathValue = args?.path ?? args?.filePath
+      const inputShim: any = {
+        tool: event?.tool,
+        sessionID: event?.sessionID,
+        args,
+        path: pathValue,
+        file: args?.file ?? pathValue
+      }
+      const output: any = { args }
+      await hooks["tool.execute.before"](inputShim, output)
+      if (output.args && args && output.args !== args) Object.assign(args, output.args)
+    })
+
+    await toolCtx.hook.call(toolCtx, "execute.after", async (event: any) => {
+      // v1: output.error → v2: event.status === "error" / event.error
+      const output: any = {
+        error: event?.status === "error" ? (event?.error ?? new Error("tool failed")) : undefined,
+        output: event?.result?.output ?? event?.result,
+        metadata: event?.result?.metadata
+      }
+      await hooks["tool.execute.after"]({ tool: event?.tool, sessionID: event?.sessionID }, output)
+    })
+
+    await client.app.log({
+      body: {
+        service: "workflow-enforcement",
+        level: "info",
+        message: "v2 registration complete: event subscription + tool hooks (execute.before / execute.after)"
+      }
+    })
+
+    return () => {
+      controller.abort()
+    }
+  }
 }
