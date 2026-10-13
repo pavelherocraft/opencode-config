@@ -1597,7 +1597,7 @@ Use requires_docs_update: true to trigger Auto-DOCS hook.
       // сессии → пропускаем. Вложенные делегирования (субагент → суб-субагент)
       // поддерживают баланс счётчика: +1 здесь, -1 в tool.execute.after.
       if (activeTaskDepth > 0) {
-        if (input.tool === "task") {
+        if (input.tool === "subagent") {
           // v6 (Phase 13.2б): caller attribution — a parallel Task from the PRIMARY
           // (top-level session) is a violation; a nested delegation from a RUNNING
           // subagent (child session) is legitimate (research-writer-complex scout wave —
@@ -1640,7 +1640,7 @@ Primary agent dispatches EXACTLY ONE Task per turn and waits for the result.
       // with read-only restrictions enforced by OpenCode itself. Custom agent
       // routing tables and JSON-output requirements do NOT apply here.
       if (currentMode === "plan") {
-        const targetForLog = input.tool === "task"
+        const targetForLog = input.tool === "subagent"
           ? ((output as any)?.args?.subagent_type || (input as any)?.args?.subagent_type)
           : undefined
         workflowSteps.push({
@@ -1694,7 +1694,7 @@ could run. Fix: re-issue a corrected message in the required order:
       // messageID → the gate is still armed. Placed AFTER gate 9.0в (deferred violations
       // take priority) and BEFORE the Phase 13.2 counter (a blocked call must not
       // consume the per-turn Task quota).
-      if (awaitingConfirmation && currentAgent === "orchestrator" && input.tool === "task") {
+      if (awaitingConfirmation && currentAgent === "orchestrator" && input.tool === "subagent") {
         await client.app.log({ body: { service: "workflow-enforcement", level: "error",
           message: "CONFIRMATION GATE — Task blocked while AWAITING_CONFIRMATION",
           extra: { agent: currentAgent, awaitingMsgId } } })
@@ -1713,7 +1713,7 @@ pipeline = P1's chain, next_agent = pipeline[0]) → ONE Task call.
       // scout wave is legitimate). Turn boundary = a NEW primary message (13.3 dedup by
       // messageID). The counter increments only for allowed calls; calls blocked by
       // downstream gates (JSON-before-Task, routing) reset with the next message anyway.
-      if (input.tool === "task" &&
+      if (input.tool === "subagent" &&
           (currentAgent === "orchestrator" || currentAgent === "plankestrator")) {
         // v6 (advisor Note 3 fix): the per-turn counter is meaningful ONLY when
         // messageID extraction works — the 13.3 turn-boundary reset keys on the
@@ -1742,7 +1742,7 @@ identity line → JSON → ONE Task call → ack.
       }
 
       // NEW: Track first Task call for primary agents
-      if (input.tool === "task" && (currentAgent === "orchestrator" || currentAgent === "plankestrator")) {
+      if (input.tool === "subagent" && (currentAgent === "orchestrator" || currentAgent === "plankestrator")) {
         primaryAgentFirstTaskCall.set(currentAgent, true)
       }
 
@@ -1804,7 +1804,7 @@ Fix: Identity line → JSON block → ONE Task call with next_agent from your ro
       // (bash, edit, write, webfetch, todowrite, question) — those are worker/
       // specialist tools. If something bypasses the frontmatter (opencode.json
       // override, MCP tool added later, future tool), this runtime gate catches it.
-      const PRIMARY_AGENT_ALLOWED_TOOLS = new Set(["task", "read", "glob", "grep"])
+      const PRIMARY_AGENT_ALLOWED_TOOLS = new Set(["subagent", "read", "glob", "grep"])
       if (
         identityLocked &&
         (lockedAgentName === "orchestrator" || lockedAgentName === "plankestrator") &&
@@ -1870,7 +1870,7 @@ ${(ROUTING_TABLES[lockedAgentName as keyof typeof ROUTING_TABLES] || []).map(a =
         // пайплайна (консервативно).
         const AUXILIARY_TARGETS = new Set([...IDENTITY_PROBE_AGENTS, "view-image"])
         const pipelineStarted = workflowSteps.some(
-          s => s.tool === "task" && (!s.target || !AUXILIARY_TARGETS.has(s.target))
+          s => s.tool === "subagent" && (!s.target || !AUXILIARY_TARGETS.has(s.target))
         )
         const inspectionsUsed = workflowSteps.filter(
           s => s.tool === "read" || s.tool === "grep" || s.tool === "glob"
@@ -1973,7 +1973,7 @@ Identity line → JSON block → Task call with next_agent from your routing tab
       //     which means unknown agents proceed without enforcement
       //
       // Kept as a hint-only diagnostic. NO state mutation:
-      if (!currentAgent && input.tool === "task") {
+      if (!currentAgent && input.tool === "subagent") {
         const targetAgent = (output as any)?.args?.subagent_type || (input as any)?.args?.subagent_type
         if (targetAgent) {
           const detected = detectAgentFromSubagent(targetAgent)
@@ -1995,7 +1995,7 @@ Identity line → JSON block → Task call with next_agent from your routing tab
       }
 
       // Track this tool call in the workflow log
-      const targetForLog = input.tool === "task"
+      const targetForLog = input.tool === "subagent"
         ? ((output as any)?.args?.subagent_type || (input as any)?.args?.subagent_type)
         : undefined
 
@@ -2036,7 +2036,7 @@ Identity line → JSON block → Task call with next_agent from your routing tab
       // Block execution tools (edit/write/bash/patch) before JSON classification.
       // Analysis tools (read/grep/glob) are ALLOWED before JSON — they are the
       // instruments of the ANALYZE step; execution must follow classification.
-      if (input.tool === "edit" || input.tool === "write" || input.tool === "bash" || input.tool === "patch") {
+      if (input.tool === "edit" || input.tool === "write" || input.tool === "shell" || input.tool === "patch") {
         const agentJSONStatus = hasOutputtedJSON.get(currentAgent) ?? false
         if (!agentJSONStatus) {
           throw new Error(`
@@ -2056,7 +2056,7 @@ Direct execution without classification violates the routing contract.
       }
 
       // Task tool requires JSON (classification must come first)
-      if (input.tool === "task") {
+      if (input.tool === "subagent") {
         const AUXILIARY_TASK_TARGETS = [...IDENTITY_PROBE_AGENTS, "view-image"]
         const agentJSONStatus = hasOutputtedJSON.get(currentAgent) ?? false
         if (!agentJSONStatus && targetAgent && !AUXILIARY_TASK_TARGETS.includes(targetAgent)) {
@@ -2076,8 +2076,8 @@ This is enforced by the workflow-enforcement plugin.
         }
       }
 
-      // Only enforce routing on "task" tool calls (agent delegation)
-      if (input.tool !== "task") return
+      // Only enforce routing on "subagent" tool calls (agent delegation)
+      if (input.tool !== "subagent") return
 
       // v6 (Phase 14.2): rework loop max 3 (orchestrator.md SEVERITY RULES: "if a blocker
       // persists after the 3rd rework iteration → STOP and report failure to the user").
@@ -2219,7 +2219,7 @@ Plankestrator handles: PLAN, RESEARCH, RESEARCH+PLAN
     "tool.execute.after": async (input, output) => {
       // v4: Task-субагент завершён (успешно или с ошибкой — after-хук fires в обоих
       // случаях, см. success-флаг ниже) → вернуть enforcement в родительскую сессию.
-      if (input.tool === "task") {
+      if (input.tool === "subagent") {
         activeTaskDepth = Math.max(0, activeTaskDepth - 1)
         subagentStack.pop()
       }
@@ -2391,7 +2391,7 @@ function detectPlanMode(sessionData: any): "plan" | "build" {
   // read-only tools allowed (no edit, write, bash, or task). If we see such a
   // shape, treat it as plan-mode regardless of agent/mode fields.
   if (perm && typeof perm === "object" && !Array.isArray(perm)) {
-    const writeLikeKeys = ["edit", "write", "bash", "task", "patch", "apply"]
+    const writeLikeKeys = ["edit", "write", "shell", "subagent", "patch", "apply"]
     const hasWriteLike = writeLikeKeys.some(k => k in perm)
     if (!hasWriteLike) {
       return "plan"
@@ -2406,7 +2406,7 @@ function detectPlanMode(sessionData: any): "plan" | "build" {
       return "build"
     }
     // permission array of allowed tool names
-    const writeLike = new Set(["edit", "write", "bash", "task", "patch", "apply"])
+    const writeLike = new Set(["edit", "write", "shell", "subagent", "patch", "apply"])
     const hasWriteLike = perm.some((p: any) => typeof p === "string" && writeLike.has(p))
     if (!hasWriteLike) {
       return "plan"
