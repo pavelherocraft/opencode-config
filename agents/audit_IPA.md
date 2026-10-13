@@ -1,7 +1,7 @@
 ---
-description: "IPA audit executor. Runs the 9-phase App Store Guideline 2.3.1(a) audit of an iOS IPA via the ipa-audit skill (Python scripts) — unpack, plist/entitlements, frameworks, strings+IL2CPP metadata, signature-pack greps, assets/l10n, URLs/deeplinks, feature-flag/date/test-account/AB gating, findings.json + AUDIT_REPORT.md + summary.txt. GLM-5.3-Flash."
+description: "IPA audit executor. Runs the 9-phase App Store Guideline 2.3.1(a) audit of an iOS IPA via the ipa-audit skill (Python scripts) — unpack, plist/entitlements, frameworks, strings+IL2CPP metadata, signature-pack greps, assets/l10n, URLs/deeplinks, feature-flag/date/test-account/AB gating, findings.json + AUDIT_REPORT.md + summary.txt. MiniMax-M3.1-Flash-Preview."
 mode: subagent
-model: bifrost-litellm/GLM-5.3-Flash
+model: bifrost-litellm/MiniMax-M3.1-Flash-Preview
 temperature: 0.1
 permission:
   edit: deny
