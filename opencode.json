@@ -133,11 +133,11 @@
           },
           "attachment": true
         },
-        "Kimi K2.7": {
-          "name": "Kimi K2.7",
+        "Kimi K2.7 HighSpeed": {
+          "name": "Kimi K2.7 HighSpeed",
           "limit": {
             "context": 262144,
-            "output": 262144
+            "output": 131072
           },
           "options": {
             "thinking": {
@@ -147,7 +147,37 @@
           "modalities": {
             "input": [
               "text",
-              "image"
+              "image",
+              "video"
+            ]
+          },
+          "attachment": true
+        },
+        "Kimi K2.8": {
+          "name": "Kimi K2.8",
+          "limit": {
+            "context": 1048576,
+            "output": 131072
+          },
+          "options": {
+            "reasoningEffort": "high"
+          },
+          "variants": {
+            "low": {
+              "reasoningEffort": "low"
+            },
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          },
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
             ]
           },
           "attachment": true
@@ -201,24 +231,6 @@
               "reasoningEffort": "max"
             }
           }
-        },
-        "Kimi K2.8": {
-          "name": "Kimi K2.8",
-          "limit": {
-            "context": 262144,
-            "output": 32768
-          },
-          "options": {
-            "thinking": {
-              "type": "enabled"
-            }
-          },
-          "modalities": {
-            "input": [
-              "text"
-            ]
-          },
-          "attachment": false
         },
         "MiniMax-M2.1-highspeed": {
           "name": "MiniMax-M2.1-highspeed",
