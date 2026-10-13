@@ -64,7 +64,7 @@ This document declares the project's requirements and consistency rules in full.
 | plankestrator | 10 | 11 (plankestrator + 10 subagents) |
 | **Grand Total** | **40** | **42** |
 
-Note: 40 whitelist entries (view-image shared by both primaries) = 39 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / DEV SUPERCOMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 39 unique subagents + scout = 40 unique subagents + 2 primary agents = 42 unique agents total. Agent definition files remain 44: audit_IPA and review_audit_IPA stay as agent .md files but are removed from orchestrator routing (allowlist, plugin tables, severity/context/docs lists) — unrouted, callable only manually.
+Note: 40 whitelist entries (view-image shared by both primaries) = 39 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / DEV SUPERCOMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 39 unique subagents + scout = 40 unique subagents + 2 primary agents = 42 unique agents total. Agent definition files = 42: audit_IPA and review_audit_IPA were MOVED OUT of the global config into the project-local `iOs_banking_info/.opencode/agents/` (see §Local Project Agents) — they are gone from global `agents/`, from the opencode.json `agent` section, and from orchestrator routing (allowlist, plugin tables, severity/context/docs lists) — available only when working in their project.
 
 ### Shared Utility Agents
 
@@ -133,7 +133,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 
 ## Model Roles (single source of truth, OMP model-roles analog)
 
-Роли централизуют назначение моделей 42 агентам (всего в `agents/` — 44 файла: дополнительно 2 нероутинговых агента audit_IPA / review_audit_IPA вне orchestrator routing). Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Model Roles), (3) документации. Квота-aware fallback-цепочки — платформенное требование (статус: НЕ реализовано, требует поддержки рантайма/proxy).
+Роли централизуют назначение моделей 42 агентам (всего в `agents/` — 42 файла; нероутинговые агенты audit_IPA / review_audit_IPA перенесены в локальные агенты проекта `iOs_banking_info`, см. §Local Project Agents). Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Model Roles), (3) документации. Квота-aware fallback-цепочки — платформенное требование (статус: НЕ реализовано, требует поддержки рантайма/proxy).
 
 | Role | Model | Tier | Agents |
 |------|-------|------|--------|
@@ -158,7 +158,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 | micro | bifrost-litellm/MiniMax-M3.1-Flash-Preview | low | scout |
 | analyzer | bifrost-litellm/Kimi K2.8 | mid | codebase-analyzer |
 
-Контроль суммы: 2 primary + 40 subagents = 42 роутинговых агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли. Нероутинговые audit_IPA / review_audit_IPA (агентские файлы сохранены) в таблицу не входят.
+Контроль суммы: 2 primary + 40 subagents = 42 роутинговых агентов; каждая строка Subagent Models (§выше) принадлежит ровно одной роли. Нероутинговые audit_IPA / review_audit_IPA (локальные агенты проекта iOs_banking_info) в таблицу не входят.
 
 **Правила:**
 1. **Prewalk-принцип (OMP):** в паре planner→executor роль planner'а ДОЛЖНА быть tier ≥ executor'а: plan-bug (plan-flash, mid) → execute-bug (executor-cheap, low); dev-planner (plan-strong, top) → dev-professor (executor-strong, mid); docs-planner (docs-plan, low) → docs-writer (docs, low). Инверсия запрещена.
@@ -1148,7 +1148,7 @@ Agents do NOT call each other — the user must manually switch between them.
 ### Live (runtime, единственное место правок)
 `C:\Users\Admin\.config\opencode\`
 - `opencode.json` — конфиг (провайдеры, модели, permissions)
-- `agents/*.md` — 44 определений агентов (frontmatter + промпт)
+- `agents/*.md` — 42 определения агентов (frontmatter + промпт)
 - `plugins/workflow-enforcement.ts` — enforcement-плагин
 - `skills/git-commit/` — юзер-скилл
 - `AGENTS.md` — глобальные инструкции (lean)
@@ -1156,7 +1156,7 @@ Agents do NOT call each other — the user must manually switch between them.
 
 ### Repo (коммит-снапшот live)
 `P:\Programming\Рефакторинг\`
-- `agents/` — зеркало live agents/ (44 .md)
+- `agents/` — зеркало live agents/ (42 .md)
 - `opencode.json` — зеркало
 - `plugins/workflow-enforcement.ts` — зеркало
 - `skills/git-commit/` — зеркало
@@ -1192,6 +1192,13 @@ Agents do NOT call each other — the user must manually switch between them.
 ### Per-Audience Context Files (OMP WATCHDOG.md analog)
 
 Конвенция: инструкции для конкретного класса агентов хранятся ОТДЕЛЬНО от общего AGENTS.md и подключаются только в промпты этого класса. Действующие файлы: `REVIEW_CONTEXT.md` (reviewer-агенты; два уровня — project root и user-level `~/.config/opencode/`). Будущие кандидаты: `PLAN_CONTEXT.md` (planner-агенты) — вне текущего объёма. Правило: «every loaded instruction consumes context» — файл ≤150 строк.
+
+## Local Project Agents
+
+Some agents are project-specific and live in `<project>/.opencode\agents\`:
+- `audit_IPA`, `review_audit_IPA` — iOS IPA audit agents for `iOs_banking_info` project
+
+These agents are NOT in the global routing table and are only available when working in their respective projects.
 
 ## 9. Plugin Hooks
 
