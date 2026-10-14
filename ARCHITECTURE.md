@@ -320,7 +320,7 @@ Both `orchestrator` and `plankestrator` are locked down to prevent them from doi
 
 `subagent_depth` — параметр opencode-core (top-level поле в `opencode.json`), ограничивающий максимальную глубину вложенности вызовов субагентов через Task tool. При превышении лимита ядро отклоняет попытку создать следующего субагента.
 
-**Текущее значение:** `3` (задаётся в live `~/.config/opencode/opencode.json`, строка 3, сразу после `$schema`; repo-зеркало — `opencode.json` в корне репо). Документация: <https://opencode.ai/docs/config>.
+**Текущее значение:** `4` (задаётся в live `~/.config/opencode/opencode.json`, строка 3, сразу после `$schema`; repo-зеркало — `opencode.json` в корне репо). Документация: <https://opencode.ai/docs/config>.
 
 **Отличие от `activeTaskDepth` (плагин):**
 
@@ -337,10 +337,11 @@ Both `orchestrator` and `plankestrator` are locked down to prevent them from doi
 Уровень 0 (depth 0): primary — orchestrator / plankestrator
 Уровень 1 (depth 1): research-writer-complex / plan-writer-complex / worker / bugfix / ...
 Уровень 2 (depth 2): scout / codebase-analyzer / mcp-search / mcp-read / mcp-github / devops-readonly / docs-writer (прямой вызов из worker/dev-professor/execute-bug)
-Уровень 3 (depth 3): (резерв; потолок — следующий Task будет отклонён ядром)
+Уровень 3 (depth 3): (резерв)
+Уровень 4 (depth 4): (резерв; потолок — следующий Task будет отклонён ядром)
 ```
 
-При `subagent_depth: 3` цепочка `primary → research-writer-complex → scout` помещается в лимит с запасом в один уровень. Любая попытка вызвать субагента на depth = 3 будет отклонена ядром opencode до старта сессии.
+При `subagent_depth: 4` цепочка `primary → research-writer-complex → scout` помещается в лимит с запасом в два уровня. Любая попытка вызвать субагента на depth = 4 будет отклонена ядром opencode до старта сессии.
 
 ### Direct Write Instruction
 
@@ -721,7 +722,9 @@ Set `requires_docs_update: true` if ANY of these were modified:
 
 ### Direct docs-writer Call (in-flight, BUGFIX/DEV)
 
-Implementation agents (worker, dev-professor, execute-bug) hold `task.docs-writer: allow` (opencode.json) and MAY call docs-writer directly DURING their step when user-facing documentation is needed (user instructions, portal guides). Rules: at most ONE call per task; the Task prompt must be self-contained (`docs_plan.md` is NOT written for direct calls); a direct call does NOT replace the `requires_docs_update` flag — the Auto-DOCS hook stays independent. Depth: primary(0) → implementation agent(1) → docs-writer(2) — within `subagent_depth: 3`.
+Implementation agents (worker, dev-professor, execute-bug, rework) hold `task.docs-writer: allow` (opencode.json) and MAY call docs-writer directly DURING their step when user-facing documentation is needed (user instructions, portal guides). Rules: at most ONE call per task; the Task prompt must be self-contained (`docs_plan.md` is NOT written for direct calls); a direct call does NOT replace the `requires_docs_update` flag — the Auto-DOCS hook stays independent. Depth: primary(0) → implementation agent(1) → docs-writer(2) — within `subagent_depth: 4`.
+
+Implementation agents holding `task.docs-reviewer: allow`: rework. Orchestrator also holds this permission for DOCS DEEP pipeline dispatch (row 8).
 
 ### PLAN
 
@@ -1249,7 +1252,7 @@ The workflow-enforcement plugin (OpenCode v2 API) implements the following lifec
 
 | Hook | When | Purpose |
 |------|------|---------|
-| `ctx.tool.hook("execute.before")` | Before any tool call | Routing table enforcement; classification gate (read/grep/glob allowed before JSON; edit/write/bash/patch/task blocked until JSON emitted; no grace for locked agents); inspection budget & post-pipeline inspection ban for plankestrator; suppressed while a Task subagent runs (`activeTaskDepth > 0`, except the `.md` edit ban); unified deferred-violation gate; max ONE Task per turn + parallel-Task block from primary; rework max 3 per rework-loop; orchestrator self-work inspection block; confirmation gate — Task blocked while AWAITING_CONFIRMATION in the same turn; hard ban on `.md`/`.markdown` edits for non-whitelisted agents (see Documentation Edit Restriction below); agent-DEFINITION `.md` files additionally editable by `AGENT_FILE_EDITORS` (worker, dev-professor — see Agent-Definition Edit Exception below) |
+| `ctx.tool.hook("execute.before")` | Before any tool call | Routing table enforcement; classification gate (read/grep/glob allowed before JSON; edit/write/bash/patch/task blocked until JSON emitted; no grace for locked agents); inspection budget & post-pipeline inspection ban for plankestrator; suppressed while a Task subagent runs (`activeTaskDepth > 0`, except the `.md` edit ban); unified deferred-violation gate; max ONE Task per turn + parallel-Task block from primary; rework max 3 per rework-loop; orchestrator self-work inspection block; confirmation gate — Task blocked while AWAITING_CONFIRMATION in the same turn; hard ban on `.md`/`.markdown` edits for non-whitelisted agents (see Documentation Edit Restriction below); agent-DEFINITION `.md` files additionally editable by `AGENT_FILE_EDITORS` (worker, dev-professor, rework — see Agent-Definition Edit Exception below) |
 | `ctx.tool.hook("execute.after")` | After tool completes | Logs tool completion |
 | `message.part.updated` | Text part updated | Text transport: buffers cumulative text parts (`part.type === "text"`); reasoning parts ignored so JSON extraction stays clean |
 | `message.part.delta` | Text delta streamed | Text transport: accumulates incremental deltas, but only for parts already known to be `type === "text"` (reasoning-delta filter) |
@@ -1298,14 +1301,14 @@ Note: the session lifecycle events (`session.created`, `session.updated`, `sessi
 
 ### Agent-Definition Edit Exception (AGENT_FILE_EDITORS)
 
-Agent-DEFINITION files are NOT documentation: `worker` and `dev-professor` may edit them, while the `.md` documentation ban stays in force for both.
+Agent-DEFINITION files are NOT documentation: `worker`, `dev-professor` and `rework` may edit them, while the `.md` documentation ban stays in force for all three.
 
 ```ts
-const AGENT_FILE_EDITORS = ["worker", "dev-professor"]
+const AGENT_FILE_EDITORS = ["worker", "dev-professor", "rework"]
 const isAgentDefinitionPath = (p) => /(^|\/)(agents?|\.opencode\/agents?)\/[^/]+\.md$/.test(norm)
 ```
 
-`AGENT_FILE_EDITORS` holds 2 entries. The path check covers all three agent-definition locations:
+`AGENT_FILE_EDITORS` holds 3 entries. The path check covers all three agent-definition locations:
 
 | Location | Path |
 |----------|------|

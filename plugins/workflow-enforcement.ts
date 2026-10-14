@@ -261,13 +261,14 @@ const DOCS_WHITELIST = [
 
 // ============================================================
 // v10 — Agent-definition files are CONFIGURATION, not documentation.
-// worker / dev-professor implement agent changes end-to-end (edit the
-// agent .md itself). They stay OUTSIDE DOCS_WHITELIST — regular docs
-// remain locked for them — but may edit files that live in an `agents/`
-// directory (global ~/.config/opencode/agents/, project .opencode/agents/,
-// and the repo mirror agents/).
+// worker / dev-professor / rework implement agent changes end-to-end (edit
+// the agent .md itself; rework fixes reviewer findings in agent files).
+// They stay OUTSIDE DOCS_WHITELIST — regular docs remain locked for them —
+// but may edit files that live in an `agents/` directory (global
+// ~/.config/opencode/agents/, project .opencode/agents/, and the repo
+// mirror agents/).
 // ============================================================
-const AGENT_FILE_EDITORS = ["worker", "dev-professor"]
+const AGENT_FILE_EDITORS = ["worker", "dev-professor", "rework"]
 
 const isAgentDefinitionPath = (p: string): boolean => {
   const norm = String(p).replace(/\\/g, "/").toLowerCase()
@@ -2772,7 +2773,7 @@ function validatePipeline(agent: string, type: string | null, complexity: string
       "DEV-COMPLEX-false": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"],
       "DEV-SUPERCOMPLEX-true": ["dev-planner", "dev-professor", "advisor", "dev-reviewer", "rework", "consistency-checker", "utility"],
       "DOCS-SIMPLE-any": ["docs-writer", "utility"],
-      "DOCS-DEEP-any": ["docs-planner", "docs-writer", "dev-reviewer", "consistency-checker", "utility"]
+      "DOCS-DEEP-any": ["docs-planner", "docs-writer", "docs-reviewer", "consistency-checker", "utility"]
     },
     plankestrator: {
       "PLAN-SIMPLE": ["plan-writer-simple", "plan-reviewer-simple"],

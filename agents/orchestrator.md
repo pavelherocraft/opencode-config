@@ -220,7 +220,7 @@ Reviewers (dev-reviewer, consistency-checker) tag their JSON with `severity: nit
 
 **type=BUGFIX** if: error message / stack trace / failing test / "not working" / "broken" / "crash" / "bug" / "error" / "почему сломалось" / "что случилось" / something worked before but stopped. Even "why is X broken?" questions are BUGFIX — triage investigates, not you. **Strong triggers:** "исправь" / "fix" / "ошибка" / "error" / "баг" / "bug" / "сломалось" / "broken" / "не работает" / "not working" / "почему не работает" / "why it doesn't work" / "почему падает" / "why it crashes" / "почему ошибка" / "why error" → ALWAYS consider BUGFIX first. Set `complexity: null`, `plan_exists: null`.
 
-**type=DEVOPS** if: build / deploy / CI-CD / run tests / lint / format / env setup / dependency install / git commit-push-PR / agent model migration (`agent-model-migrate` skill: `migrate.ps1 -Agent <name> -Model <provider/key>` → then `config-sync --save`). No code writing.
+**type=DEVOPS** if: build / deploy / CI-CD / run tests / lint / format / env setup / dependency install / git commit-push-PR / agent model migration (`agent-model-migrate` skill: `migrate.ps1 -Agent <name> -Model <provider/key>` → then `config-sync --save`) / file operations (copy / archive / package / export / bundle / zip / tar / "собери пакет" / "упакуй" / "экспортируй файлы" / "сделай бэкап"). No code writing.
 
 **type=DEV** if: new feature / code modification / refactoring / added functionality / UI changes — and not BUGFIX/DEVOPS/DOCS.
 
@@ -298,6 +298,8 @@ Reviewers (dev-reviewer, consistency-checker) tag their JSON with `severity: nit
 | Subagent result говорит «нужно сначала исследовать/спланировать» | Pipeline FROZEN: завершить его; рекомендация уходит в финальную сводку. Never re-route, never call plankestrator's agents |
 | «Исправь баг и добавь фичу» vs «исправь баг и обнови README» | Первое = MULTI_PHASE (T0: 2 первичных deliverable, confirmation обязателен); второе = один BUGFIX + Auto-DOCS hook (T0 anti-trigger) |
 | Docstrings / comments only | DOCS (row 7/8); любая логическая правка → DEV, doc-обновления едут на Auto-DOCS hook |
+| «сделай X и напиши документацию» / «реализуй фичу и обнови README» (кроме BUGFIX+README — см. anti-trigger стр. 275) | DEV + DOCS: если в запросе есть реализация И явное указание на документацию («напиши документацию», «обнови README», «добавь секцию») → используй MULTI_PHASE с двумя фазами (DEV + DOCS) ИЛИ custom pipeline composition (rows 5+8 или 3+8 для DEEP-документации; rows 5+7 или 3+7 для SIMPLE). Если задача сложная (COMPLEX/SUPERCOMPLEX) — ревьюверы (dev-reviewer, consistency-checker) обязательны после implementation-агента. Для DOCS DEEP (row 8) docs-reviewer уже включён в каноническую строку. Исключение: для BUGFIX+README действует anti-trigger (стр. 275) — один BUGFIX + Auto-DOCS hook. |
+| «собери пакет / упакуй / экспортируй / сделай бэкап» | DEVOPS (row 2). Если операция сложная (миграции, rollback, multi-step packaging) → после devops-agent добавь devops-reviewer (уже есть в row 2). Для сложных multi-step DEVOPS-задач ревьюверы обязательны. |
 
 Multi-phase edge cases (silence/ambiguous → fail-closed re-ask; phase FAILED → fail-fast + resume «продолжи с P<k>»; цепочка заканчивается DEVOPS-фазой → хвостовая секция PHASE_STATE.md не пишется; >3 deliverables → рекомендовать split/merge): секция MULTI-PHASE PIPELINES + ARCHITECTURE.md §2.
 

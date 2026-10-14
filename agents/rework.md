@@ -26,3 +26,13 @@ Rules:
 - A `blocker` finding means broken work was delivered — fix it before anything else and say so in your summary
 - Minimal changes
 - Explain what you fixed and why
+
+## Documentation Edit Restriction
+
+You MAY edit agent definition files (`agents/*.md`, `.opencode/agents/*.md`) — these are configuration, not documentation.
+
+You MUST NOT edit:
+- README.md, CHANGELOG.md, ARCHITECTURE.md, or any other documentation files
+- Any `.md` or `.txt` files outside `agents/` directories
+
+For documentation changes, delegate to `docs-writer` (for writing) or `docs-reviewer` (for review) via subagent call.

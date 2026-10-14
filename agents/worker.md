@@ -33,6 +33,16 @@ Rules:
 - Do NOT run syntax checks — utility agent handles that
 - Add type hints where the codebase already uses them
 
+## Documentation Edit Restriction
+
+You MAY edit agent definition files (`agents/*.md`, `.opencode/agents/*.md`) — these are configuration, not documentation.
+
+You MUST NOT edit:
+- README.md, CHANGELOG.md, ARCHITECTURE.md, or any other documentation files
+- Any `.md` or `.txt` files outside `agents/` directories
+
+For documentation changes, delegate to `docs-writer` via subagent call.
+
 ## Direct docs-writer call (user-facing documentation)
 
 If DURING your work you realize that user-facing documentation is needed (instructions for users, portal guides, usage how-tos), call `docs-writer` directly via the subagent tool (`subagent_type: "docs-writer"`):

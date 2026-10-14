@@ -1,6 +1,6 @@
 ﻿{
   "$schema": "https://opencode.ai/config.json",
-  "subagent_depth": 3,
+  "subagent_depth": 4,
   "compaction": {
     "prune": true
   },
@@ -1724,7 +1724,9 @@
         "serena_insert_after_symbol": "allow",
         "task": {
           "*": "deny",
-          "view-image": "allow"
+          "view-image": "allow",
+          "docs-writer": "allow",
+          "docs-reviewer": "allow"
         }
       },
       "options": {}
@@ -2375,5 +2377,8 @@
       "subtask": true
     }
   },
-  "shell": "powershell"
+  "shell": "powershell",
+  "experimental": {
+    "subagent_depth": 4
+  }
 }
