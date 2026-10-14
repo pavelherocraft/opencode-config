@@ -64,7 +64,7 @@ This document declares the project's requirements and consistency rules in full.
 | plankestrator | 10 | 11 (plankestrator + 10 subagents) |
 | **Grand Total** | **40** | **42** |
 
-Note: 40 whitelist entries (view-image shared by both primaries) = 39 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / DEV SUPERCOMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 39 unique subagents + scout = 40 unique subagents + 2 primary agents = 42 unique agents total. Agent definition files = 42: audit_IPA and review_audit_IPA were MOVED OUT of the global config into the project-local `iOs_banking_info/.opencode/agents/` (see §Local Project Agents) — they are gone from global `agents/`, from the opencode.json `agent` section, and from orchestrator routing (allowlist, plugin tables, severity/context/docs lists) — available only when working in their project.
+Note: 40 whitelist entries (view-image shared by both primaries) = 39 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / DEV SUPERCOMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 39 unique subagents + scout = 40 unique subagents + 2 primary agents = 42 unique agents total. Agent definition files: 42 in global `agents/` PLUS 3 local agent files of project `iOs_banking_info` (`audit_IPA`, `review_audit_IPA`, `orchestrator` — see §Local Project Agents). audit_IPA and review_audit_IPA live ONLY in the project-local `iOs_banking_info/.opencode/agents/` — they are absent from global `agents/`, from the opencode.json `agent` section, and from orchestrator routing (allowlist, plugin tables, severity/context lists), but they remain in `DOCS_WHITELIST` (10 entries) as project-local agents — available only when working in their project.
 
 ### Shared Utility Agents
 
@@ -133,7 +133,7 @@ Note: primary agents (orchestrator, plankestrator) run on `bifrost-litellm/QWEN3
 
 ## Model Roles (single source of truth, OMP model-roles analog)
 
-Роли централизуют назначение моделей 42 агентам (всего в `agents/` — 42 файла; нероутинговые агенты audit_IPA / review_audit_IPA перенесены в локальные агенты проекта `iOs_banking_info`, см. §Local Project Agents). Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Model Roles), (3) документации. Квота-aware fallback-цепочки — платформенное требование (статус: НЕ реализовано, требует поддержки рантайма/proxy).
+Роли централизуют назначение моделей 42 агентам (всего в глобальном `agents/` — 42 файла, плюс 3 локальных файла агентов проекта `iOs_banking_info` — audit_IPA / review_audit_IPA / orchestrator, см. §Local Project Agents). Рантайм opencode НЕ поддерживает role-алиасы (`model:` во frontmatter литерален) — таблица является каноническим mapping'ом для: (1) массовых смен моделей (правка таблицы → синхронная правка frontmatter), (2) валидации consistency-checker (Model Roles), (3) документации. Квота-aware fallback-цепочки — платформенное требование (статус: НЕ реализовано, требует поддержки рантайма/proxy).
 
 | Role | Model | Tier | Agents |
 |------|-------|------|--------|
@@ -803,27 +803,69 @@ Rules:
 
 | Violation | Detection point | Delivery | Blocks |
 |-----------|-----------------|----------|--------|
-| identity missing (first message) | message.updated | deferred flag → unified gate in tool.execute.before | any tool call of the primary |
+| identity missing (first message) | message.updated | deferred flag → unified gate in `ctx.tool.hook("execute.before")` | any tool call of the primary |
 | pipeline mismatch (PIPELINE TABLE / variants) | message.updated | deferred flag → gate | any tool call |
 | next_agent mismatch (real step tracking; whitelists: loopback, nit-skip, Auto-DOCS hook, SUPERCOMPLEX-exempt) | message.updated | deferred flag → gate | any tool call |
 | invalid JSON / invalid severity in primary JSON | message.updated | deferred flag → gate | any tool call |
 | forbidden IDENTITY claim (identity tokens only; agent-name tokens stay log-only) | message.updated | deferred flag → gate | any tool call |
 | identity drift under identity lock | message.updated | DIRECT throw from the event hook (caveat: may be swallowed by the runtime) | remaining handler for that event |
 | pipeline changed after Turn 1 (exceptions: provisional classification, BUGFIX continuation, DECOMPOSITION Turn B, nit-skip, Auto-DOCS hook, SUPERCOMPLEX per-plan-step re-emission, MULTI_PHASE phase refinement (null→resolved, once per phase), MULTI_PHASE in-phase Auto-DOCS hook, MULTI_PHASE legal phase transition (+1, phases stable)). Self-heal: the locked baseline is re-validated against its own lock-time classification, and an invalid baseline is recaptured instead of blocking the corrected JSON | message.updated | deferred flag → gate | any tool call |
-| second Task call in the same turn | tool.execute.before | DIRECT throw | the Task call |
-| parallel Task from the primary while a subagent runs (sessionID attribution) | tool.execute.before depth-bypass | DIRECT throw (before depth increment) | the Task call |
-| 4th rework dispatch per rework-loop | tool.execute.before Task section | DIRECT throw | the Task call |
+| second Task call in the same turn | `ctx.tool.hook("execute.before")` | DIRECT throw | the Task call |
+| parallel Task from the primary while a subagent runs (sessionID attribution) | `ctx.tool.hook("execute.before")` depth-bypass | DIRECT throw (before depth increment) | the Task call |
+| 4th rework dispatch per rework-loop | `ctx.tool.hook("execute.before")` Task section | DIRECT throw | the Task call |
 | 3rd reviewer blocker per rework-loop | message.updated (subagent branch) | deferred flag (cumulative, no recovery) → gate | any tool call until rework-loop end |
 | orchestrator self-work markers in message text | message.updated | selfWorkDetected → inspection block | read/grep/glob (Task calls are NOT blocked — delegation is the correction) |
 | ack format drift (6 legal variants) | message.updated | warn-only log | nothing (audit) |
 | unknown type/complexity/plan_exists combination | validatePipeline | fail-closed → pipeline flag → gate | any tool call |
-| Task call while `state: "AWAITING_CONFIRMATION"` (same turn, before user reply) | tool.execute.before | DIRECT throw (confirmation gate) | the Task call |
+| Task call while `state: "AWAITING_CONFIRMATION"` (same turn, before user reply) | `ctx.tool.hook("execute.before")` | DIRECT throw (confirmation gate) | the Task call |
 | illegal phase transition (skip / phases tampering / wrong chain for the phase) | message.updated | deferred flag (pipelineImmutable) → gate | any tool call |
 | MULTI_PHASE schema violation (phases 2–3, unique ids, depends_on ⊆ earlier, ≤1 SUPERCOMPLEX, AWAITING/CANCELLED shapes) | message.updated (validateJSONOutput/validatePipeline) | deferred flag (invalidJSON / pipelineMismatch) → gate | any tool call |
 
-Deferred-violation pattern: a throw inside an event hook cannot retract an already-sent message, so message.updated sets a flag and the unified gate in tool.execute.before throws at the primary's NEXT tool call (consume-once; a clean valid message clears message-derived flags — latest-message-wins against streaming artifacts). All plugin state resets in the unconditional session.created reset block AFTER the parentID guard (child sessions never wipe parent state).
+Deferred-violation pattern: a throw inside an event hook cannot retract an already-sent message, so message.updated sets a flag and the unified gate in `ctx.tool.hook("execute.before")` throws at the primary's NEXT tool call (consume-once; a clean valid message clears message-derived flags — latest-message-wins against streaming artifacts). All plugin state resets in the unconditional session.created reset block AFTER the parentID guard (child sessions never wipe parent state).
 
 **Terminal-turn exemption (clarification):** the shape-based terminal exemption in validatePipeline (`pipeline: []` + `next_agent: null` → valid without further checks) would make an AWAITING_CONFIRMATION turn indistinguishable from a final turn. Therefore `state: "AWAITING_CONFIRMATION"` is validated by an EXPLICIT MULTI_PHASE branch of validatePipeline placed BEFORE the terminal exemption (research §7.5 row 4; plugin `workflow-enforcement.ts`, Phase 3 step 3.4).
+
+#### Plugin runtime (OpenCode v2 API)
+
+The plugin is a LOCAL file `~/.config/opencode/plugins/workflow-enforcement.ts` picked up by auto-discovery. The `plugin`/`plugins` key in `opencode.json` is NOT needed — in v2 a relative entry resolves as an npm package and produces a WARN.
+
+Module contract (the loader reads the DEFAULT export only — named exports are not inspected):
+
+```ts
+export default {
+  id: "workflow-enforcement",
+  setup(ctx) {
+    // ...
+    return () => controller.abort()
+  }
+}
+```
+
+v1 → v2 correspondence:
+
+| v1 | v2 |
+|----|----|
+| `event` (callback) | `ctx.event.subscribe()` — async stream |
+| `tool.execute.before` | `ctx.tool.hook("execute.before", ...)` |
+| `tool.execute.after` | `ctx.tool.hook("execute.after", ...)` |
+| `(input, output)` | one mutable `event` |
+| `output.args` | `event.input` |
+| `client.app.log` | v2-shim facade over `ctx.app.log` (65 call sites, unchanged) |
+
+Runtime semantics:
+- Events are processed SEQUENTIALLY via `for await`. A throw inside an event handler is INERT (v1 semantics) — the only real blocking point is a throw inside `execute.before`.
+- Cleanup: `setup` returns a function that calls `controller.abort()`.
+- The `client` shim exists so the ~2900 lines of enforcement logic stay untouched. Logging through it is non-blocking (queue + background drain).
+- **Input adapter:** the adapter adds `path`/`file` aliases next to `args`. In v2 `write`/`edit` take `path`, NOT `filePath`. The DOCS_WHITELIST gate resolves the target file via `output.args.filePath || input.args.filePath || input.path || input.file`.
+
+#### Attribution (v2 native agent field)
+
+The v2 hook event natively carries an `agent` field — this is the ONLY reliable attribution source. The v1 pair `before(subagent)` / `after(subagent)` does NOT form brackets in v2: `after` may fire BEFORE the subagent's own tool calls, so a stack built from that pair collapses (`currentAgent` = null, attribution = `unknown`, and the `.md` gate blocks everyone — including whitelisted docs agents).
+
+- `event.agent` is the primary attribution source. For an `edit` inside the docs-writer subagent it equals `"docs-writer"`; for a primary turn it equals `"orchestrator"` / `"plankestrator"`.
+- DOCS_WHITELIST gate attribution chain: `input.agent || subagentStack.top || currentAgent` (native field first).
+- Depth-guard fail-closed rule: `callerIsSubagent || (activeTaskDepth > 0 && agent unknown)`, where `callerIsPrimary = agent === "orchestrator" || "plankestrator"` — this closes the fail-open hole on a depth leak.
+- The v1 depth/stack mechanism is kept as a FALLBACK only — it is not the primary attribution source.
 
 ## 3. JSON Validation Fields
 
@@ -1195,19 +1237,20 @@ Agents do NOT call each other — the user must manually switch between them.
 
 ## Local Project Agents
 
-Some agents are project-specific and live in `<project>/.opencode\agents\`:
+Some agents are project-specific and live in `<project>/.opencode\agents\`. The `iOs_banking_info` project has 3 local agent files:
 - `audit_IPA`, `review_audit_IPA` — iOS IPA audit agents for `iOs_banking_info` project
+- `orchestrator` — project-local agent definition for `iOs_banking_info` project
 
-These agents are NOT in the global routing table and are only available when working in their respective projects.
+These agents are available only when working in their respective projects. `audit_IPA` and `review_audit_IPA` are NOT in the global routing table, but both are in `DOCS_WHITELIST` (10 entries) as project-local `.md` editors.
 
 ## 9. Plugin Hooks
 
-The workflow-enforcement plugin implements the following lifecycle hooks (event-shape compatible with opencode 1.18.34+):
+The workflow-enforcement plugin (OpenCode v2 API) implements the following lifecycle hooks — tool hooks via `ctx.tool.hook(...)`, message/session events via the `ctx.event.subscribe()` async stream (event-shape compatible with opencode 1.18.34+):
 
 | Hook | When | Purpose |
 |------|------|---------|
-| `tool.execute.before` | Before any tool call | Routing table enforcement; classification gate (read/grep/glob allowed before JSON; edit/write/bash/patch/task blocked until JSON emitted; no grace for locked agents); inspection budget & post-pipeline inspection ban for plankestrator; suppressed while a Task subagent runs (`activeTaskDepth > 0`, except the `.md` edit ban); unified deferred-violation gate; max ONE Task per turn + parallel-Task block from primary; rework max 3 per rework-loop; orchestrator self-work inspection block; confirmation gate — Task blocked while AWAITING_CONFIRMATION in the same turn; hard ban on `.md`/`.markdown` edits for non-whitelisted agents (see Documentation Edit Restriction below) |
-| `tool.execute.after` | After tool completes | Logs tool completion |
+| `ctx.tool.hook("execute.before")` | Before any tool call | Routing table enforcement; classification gate (read/grep/glob allowed before JSON; edit/write/bash/patch/task blocked until JSON emitted; no grace for locked agents); inspection budget & post-pipeline inspection ban for plankestrator; suppressed while a Task subagent runs (`activeTaskDepth > 0`, except the `.md` edit ban); unified deferred-violation gate; max ONE Task per turn + parallel-Task block from primary; rework max 3 per rework-loop; orchestrator self-work inspection block; confirmation gate — Task blocked while AWAITING_CONFIRMATION in the same turn; hard ban on `.md`/`.markdown` edits for non-whitelisted agents (see Documentation Edit Restriction below); agent-DEFINITION `.md` files additionally editable by `AGENT_FILE_EDITORS` (worker, dev-professor — see Agent-Definition Edit Exception below) |
+| `ctx.tool.hook("execute.after")` | After tool completes | Logs tool completion |
 | `message.part.updated` | Text part updated | Text transport: buffers cumulative text parts (`part.type === "text"`); reasoning parts ignored so JSON extraction stays clean |
 | `message.part.delta` | Text delta streamed | Text transport: accumulates incremental deltas, but only for parts already known to be `type === "text"` (reasoning-delta filter) |
 | `message.updated` | Message finalized | Finalization-gated: validates JSON output format ONLY once the message is finalized (`finish="stop"` or `time.completed`); text is assembled from the `message.part.*` buffers (INVALID JSON logged as error); detects identity drift (a locked agent claiming a different identity is rejected, L492); detects forbidden vocabulary and self-work content markers; skipped while a Task subagent runs; deferred-violation flags escalate log-only checks to a THROW at the next tool call; pipeline step tracking + immutability after Turn 1; blocker counter with BLOCKER STOP after 3; primary severity validation; ack format audit (warn-only); identity drift under lock throws directly; multi-phase per-phase pipeline validation (key = phase's type-complexity-plan_exists); confirmation-gate tracking (AWAITING set / user-reply clear); phase-transition mutation whitelist; blockerStop reset on legal phase transition. Pipeline state locks only pipelines that passed validation; a rejected pipeline leaves the state unlocked, so the next corrected JSON locks as the true Turn-1 baseline. |
@@ -1236,13 +1279,13 @@ Primary agents (orchestrator, plankestrator) follow a two-phase workflow:
 
 ### Documentation Edit Restriction
 
-Only `docs-writer`, `docs-planner`, `plan-writer-simple`, `plan-writer-complex`, `research-writer-simple`, and `research-writer-complex` agents can edit `.md` files. All other agents (including implementation agents like dev-professor, worker, execute-bug) are blocked at the plugin level from modifying documentation.
+Only the `DOCS_WHITELIST` agents (10 entries) can edit `.md` files: `docs-writer`, `docs-planner`, `plan-writer-simple`, `plan-writer-complex`, `research-writer-simple`, `research-writer-complex`, `plan-bug`, `dev-planner`, `review_audit_IPA`, `audit_IPA` (the last two are project-local agents of `iOs_banking_info`). All other agents (including implementation agents like dev-professor, worker, execute-bug) are blocked at the plugin level from modifying documentation — with the single exception of agent-DEFINITION files (see Agent-Definition Edit Exception below), which are not documentation.
 
-**Enforcement:** plugin `tool.execute.before` checks `edit`/`write`/`patch` tool calls for `.md`/`.markdown` extensions and blocks non-whitelisted agents with explicit error message pointing to Auto-DOCS hook.
+**Enforcement:** plugin `ctx.tool.hook("execute.before")` checks `edit`/`write`/`patch` tool calls for `.md`/`.markdown` extensions and blocks non-whitelisted agents with explicit error message pointing to Auto-DOCS hook.
 
 **Rationale:** prevents implementation agents from bypassing Auto-DOCS hook discipline. Documentation updates must go through `requires_docs_update: true` → docs-writer → utility pipeline.
 
-**Attribution note:** the check runs BEFORE the `activeTaskDepth > 0` bypass and resolves the acting agent from a subagent stack (mirrors Task push/pop) — while a Task subagent runs, `currentAgent` still holds the parent primary, so stack-top attribution is what allows `docs-writer` itself through while blocking every other subagent (worker, execute-bug, utility, …) and the primary agents' own direct edits.
+**Attribution note:** the check runs BEFORE the `activeTaskDepth > 0` bypass and resolves the acting agent from the v2 native `event.agent` field — attribution chain `input.agent || subagentStack.top || currentAgent`, where the v1 Task push/pop stack survives only as fallback (see Attribution (v2 native agent field) above). For an edit inside the docs-writer subagent the native field is `docs-writer`, which is what lets `docs-writer` itself through while blocking every other subagent (worker, execute-bug, utility, …) and the primary agents' own direct edits.
 
 **Event shape compatibility (opencode 1.18.34+):**
 Плагин поддерживает два формата событий:
@@ -1251,7 +1294,26 @@ Only `docs-writer`, `docs-planner`, `plan-writer-simple`, `plan-writer-complex`,
 
 Нормализация: `resolveSessionData()` и `resolveMessage()` хелперы обеспечивают единый интерфейс.
 
-Note: the session lifecycle events (`session.created`, `session.updated`, `session.idle`, `message.part.updated`, `message.part.delta`, `message.updated`) are dispatched inside the plugin's single `event` hook. The `session.updated` branch detects + locks the agent from `info.agent` (opencode 1.18.34); `message.part.updated`/`message.part.delta` buffer text parts (reasoning-filtered); `message.updated` finalizes and validates (only on `finish="stop"` || `time.completed`). Identity-drift detection still lives in the `message.updated` branch.
+Note: the session lifecycle events (`session.created`, `session.updated`, `session.idle`, `message.part.updated`, `message.part.delta`, `message.updated`) are dispatched through the plugin's single `ctx.event.subscribe()` stream. The `session.updated` branch detects + locks the agent from `info.agent` (opencode 1.18.34); `message.part.updated`/`message.part.delta` buffer text parts (reasoning-filtered); `message.updated` finalizes and validates (only on `finish="stop"` || `time.completed`). Identity-drift detection still lives in the `message.updated` branch.
+
+### Agent-Definition Edit Exception (AGENT_FILE_EDITORS)
+
+Agent-DEFINITION files are NOT documentation: `worker` and `dev-professor` may edit them, while the `.md` documentation ban stays in force for both.
+
+```ts
+const AGENT_FILE_EDITORS = ["worker", "dev-professor"]
+const isAgentDefinitionPath = (p) => /(^|\/)(agents?|\.opencode\/agents?)\/[^/]+\.md$/.test(norm)
+```
+
+`AGENT_FILE_EDITORS` holds 2 entries. The path check covers all three agent-definition locations:
+
+| Location | Path |
+|----------|------|
+| Global | `~/.config/opencode/agents/` |
+| Project | `.opencode/agents/` |
+| Repo mirror | `agents/` |
+
+Allowed edits are logged: `Agent-definition edit allowed — <agent> on <path>`.
 
 ## 10. Identity Verification Format
 
