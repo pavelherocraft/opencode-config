@@ -1295,6 +1295,14 @@
     }
   },
   "mcp": {
+    "IPA Audit MCP": {
+      "type": "remote",
+      "url": "https://hcbifrost.herocraft.com/litellm/IPA Audit MCP/mcp",
+      "enabled": true,
+      "headers": {
+        "Authorization": "Bearer {env:LITELLM_API_KEY}"
+      }
+    },
     "Johnny the Knight MCP": {
       "type": "remote",
       "url": "https://hcbifrost.herocraft.com/litellm/Johnny the Knight MCP/mcp",
