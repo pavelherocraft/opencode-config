@@ -1637,9 +1637,16 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
         const filePath = String((output as any)?.args?.filePath || (input as any)?.args?.filePath
           || (input as any).path || (input as any).file || "")
         if (filePath.endsWith(".md") || filePath.endsWith(".markdown")) {
-          const actingAgent = subagentStack.length > 0
-            ? subagentStack[subagentStack.length - 1]
-            : currentAgent
+          // v9 (attribution fix): `input.agent` is the v2-native acting agent
+          // (passed through from the hook event). It is checked FIRST because
+          // the v1 subagentStack/activeTaskDepth pairing is unreliable under
+          // v2 — execute.after of the subagent tool can fire before the
+          // subagent's own tool calls, collapsing the stack to empty and
+          // degrading every subagent to `currentAgent` (often null → "unknown"),
+          // which blocked whitelisted docs agents from editing .md at all.
+          const actingAgent = ((input as any).agent as string | undefined)
+            || (subagentStack.length > 0 ? subagentStack[subagentStack.length - 1] : null)
+            || currentAgent
           if (!DOCS_WHITELIST.includes(actingAgent ?? "")) {
             await client.app.log({
               body: {
@@ -1663,7 +1670,18 @@ Use requires_docs_update: true to trigger Auto-DOCS hook.
       // в ожидании результата). Enforcement атрибутирован только родительской
       // сессии → пропускаем. Вложенные делегирования (субагент → суб-субагент)
       // поддерживают баланс счётчика: +1 здесь, -1 в tool.execute.after.
-      if (activeTaskDepth > 0) {
+      //
+      // v9 (attribution fix): под v2 спаривание before/after вокруг subagent-
+      // инструмента ненадёжно (after может сработать ДО собственных tool-вызовов
+      // субагента), поэтому условие дополнено нативной атрибуцией `input.agent`.
+      // Если acting-agent известен и это НЕ primary — вызов принадлежит субагенту
+      // и primary-гейты к нему не применяются. Это же закрывает fail-open при
+      // утечке activeTaskDepth (залипший depth > 0 больше не глушит enforcement,
+      // когда агент известен и является primary).
+      const callerAgentName = String((input as any)?.agent ?? "")
+      const callerIsPrimary = callerAgentName === "orchestrator" || callerAgentName === "plankestrator"
+      const callerIsSubagent = callerAgentName !== "" && !callerIsPrimary
+      if (callerIsSubagent || (activeTaskDepth > 0 && callerAgentName === "")) {
         if (input.tool === "subagent") {
           // v6 (Phase 13.2б): caller attribution — a parallel Task from the PRIMARY
           // (top-level session) is a violation; a nested delegation from a RUNNING
@@ -2093,6 +2111,26 @@ Identity line → JSON block → Task call with next_agent from your routing tab
       const targetAgent = ((output as any)?.args?.agent ?? (output as any)?.args?.subagent_type)
         || ((input as any)?.args?.agent ?? (input as any)?.args?.subagent_type)
 
+      // v9 (attribution fix): the depth/stack bookkeeping for a subagent dispatch is
+      // NOT tied to primary-agent routing. It is bookkeeping about WHO is
+      // running: while a subagent is active, every tool call belongs to it.
+      //
+      // Historically the push lived only at the very end of the routing section,
+      // after every throw. In any session that is not running as
+      // orchestrator/plankestrator (currentAgent === null) the `if (!currentAgent)
+      // return` early-out fired first, so activeTaskDepth stayed 0 and
+      // subagentStack stayed empty. Subagent tool calls were then attributed to
+      // `currentAgent` (null) -> "unknown", and the DOCS_WHITELIST gate blocked
+      // EVERY subagent from touching .md files, whitelisted ones included
+      // (docs-writer, plan-writer-*, research-writer-*, plan-bug, dev-planner).
+      //
+      // The push is therefore replicated on EVERY terminal path of this branch
+      // (unknown-primary early-out, built-in bypass, accepted routing), always
+      // AFTER the throws on that path. Doing it unconditionally up-front would
+      // leak depth: a routing-violation throw prevents execute.after from ever
+      // firing, so the +1 would never be undone and depth > 0 would silently
+      // disable all enforcement for the rest of the session.
+
       if (!currentAgent) {
         await client.app.log({
           body: {
@@ -2101,6 +2139,10 @@ Identity line → JSON block → Task call with next_agent from your routing tab
             message: "Current agent not detected, cannot enforce routing table"
           }
         })
+        // v9: attribution still applies even without a locked primary — otherwise
+        // every subagent of a non-primary session is treated as "unknown".
+        subagentStack.push(String(targetAgent || "unknown"))
+        activeTaskDepth += 1
         return
       }
 
@@ -2185,7 +2227,7 @@ final summary with the unresolved findings (BLOCKER ack format per SEVERITY RULE
             extra: { currentAgent, mode: currentMode }
           }
         })
-        subagentStack.push(targetAgent)
+        subagentStack.push(String(targetAgent || "unknown"))
         activeTaskDepth += 1 // v4: built-in агент (explore/general) тоже субагент
         return
       }
@@ -2270,6 +2312,8 @@ Plankestrator handles: PLAN, RESEARCH, RESEARCH+PLAN
       // v4: родительский Task-вызов прошёл routing — сейчас запустится субагент.
       // Пока activeTaskDepth > 0, все tool-вызовы и сообщения принадлежат СУБАГЕНТУ
       // (родитель приостановлен) → enforcement для них подавляется (см. depth-guard).
+      // v9: push/increment на этой ветке обязателен — до неё срабатывают
+      // early-out'ы, у которых свой push (см. «v9 attribution fix» выше).
       subagentStack.push(String(targetAgent || "unknown"))
       activeTaskDepth += 1
 
@@ -2290,7 +2334,7 @@ Plankestrator handles: PLAN, RESEARCH, RESEARCH+PLAN
     "tool.execute.after": async (input, output) => {
       // v4: Task-субагент завершён (успешно или с ошибкой — after-хук fires в обоих
       // случаях, см. success-флаг ниже) → вернуть enforcement в родительскую сессию.
-      if (input.tool === "subagent") {
+      if (input.tool === "subagent" && activeTaskDepth > 0) {
         activeTaskDepth = Math.max(0, activeTaskDepth - 1)
         subagentStack.pop()
       }
@@ -3136,10 +3180,18 @@ export default {
       // `output.args.filePath || input.args.filePath || input.path || input.file`;
       // under v2 the write/edit tools take `path`, so without the `path`/`file`
       // aliases the gate would read "" and .md enforcement would silently die.
+      //
+      // v9 (attribution): `agent` is the v2-native acting agent, taken straight
+      // from the hook event. Verified empirically: for a tool call made inside a
+      // docs-writer subagent it is exactly "docs-writer", for a primary it is
+      // "orchestrator"/"plankestrator". It is the ONLY reliable attribution
+      // source under v2 — the v1 depth/stack pairing around the subagent tool
+      // does not hold (execute.after can fire before the subagent's own work).
       const pathValue = args?.path ?? args?.filePath
       const inputShim: any = {
         tool: event?.tool,
         sessionID: event?.sessionID,
+        agent: event?.agent,
         args,
         path: pathValue,
         file: args?.file ?? pathValue
