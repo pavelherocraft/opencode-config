@@ -254,8 +254,25 @@ const DOCS_WHITELIST = [
   "research-writer-simple",
   "research-writer-complex",
   "plan-bug",
-  "dev-planner"
+  "dev-planner",
+  "review_audit_IPA",
+  "audit_IPA"
 ]
+
+// ============================================================
+// v10 — Agent-definition files are CONFIGURATION, not documentation.
+// worker / dev-professor implement agent changes end-to-end (edit the
+// agent .md itself). They stay OUTSIDE DOCS_WHITELIST — regular docs
+// remain locked for them — but may edit files that live in an `agents/`
+// directory (global ~/.config/opencode/agents/, project .opencode/agents/,
+// and the repo mirror agents/).
+// ============================================================
+const AGENT_FILE_EDITORS = ["worker", "dev-professor"]
+
+const isAgentDefinitionPath = (p: string): boolean => {
+  const norm = String(p).replace(/\\/g, "/").toLowerCase()
+  return /(^|\/)(agents?|\.opencode\/agents?)\/[^/]+\.md$/.test(norm)
+}
 
 // Confirmation gate: true between an AWAITING_CONFIRMATION JSON and the user's
 // reply. Clearing: (a) a user-role message (role pattern of the self-work guard
@@ -1648,6 +1665,12 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
             || (subagentStack.length > 0 ? subagentStack[subagentStack.length - 1] : null)
             || currentAgent
           if (!DOCS_WHITELIST.includes(actingAgent ?? "")) {
+            // v10: agent-definition .md files are config, not docs. The
+            // implementation agents that own agent changes may edit them;
+            // every other .md path for them stays under DOCS_WHITELIST.
+            const agentFileEdit = AGENT_FILE_EDITORS.includes(actingAgent ?? "")
+              && isAgentDefinitionPath(filePath)
+            if (!agentFileEdit) {
             await client.app.log({
               body: {
                 service: "workflow-enforcement",
@@ -1661,6 +1684,18 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
 Only ${DOCS_WHITELIST.join(", ")} can modify documentation.
 Use requires_docs_update: true to trigger Auto-DOCS hook.
             `)
+            } else {
+              // v10: allowed agent-file edit by an implementation agent — log it
+              // so agent-definition changes are traceable like every other gate.
+              await client.app.log({
+                body: {
+                  service: "workflow-enforcement",
+                  level: "info",
+                  message: `Agent-definition edit allowed — ${actingAgent} on ${filePath}`,
+                  extra: { agent: actingAgent ?? null, tool: input.tool, filePath, agentFileEdit: true }
+                }
+              })
+            }
           }
         }
       }
