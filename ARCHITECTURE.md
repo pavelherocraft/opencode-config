@@ -64,7 +64,7 @@ This document declares the project's requirements and consistency rules in full.
 | plankestrator | 10 | 11 (plankestrator + 10 subagents) |
 | **Grand Total** | **40** | **42** |
 
-Note: 40 whitelist entries (view-image shared by both primaries) = 39 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / DEV SUPERCOMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 39 unique subagents + scout = 40 unique subagents + 2 primary agents = 42 unique agents total. Agent definition files: 42 in global `agents/` PLUS 3 local agent files of project `iOs_banking_info` (`audit_IPA`, `review_audit_IPA`, `orchestrator` — see §Local Project Agents). audit_IPA and review_audit_IPA live ONLY in the project-local `iOs_banking_info/.opencode/agents/` — they are absent from global `agents/`, from the opencode.json `agent` section, and from orchestrator routing (allowlist, plugin tables, severity/context lists), but they remain in `DOCS_WHITELIST` (10 entries) as project-local agents — available only when working in their project.
+Note: 40 whitelist entries (view-image shared by both primaries) = 39 unique whitelisted subagents (incl. advisor — a step-boundary reviewer inside DEV COMPLEX / DEV SUPERCOMPLEX / BUGFIX DEEP pipelines), PLUS scout — a subagent OUTSIDE both routing tables (never a pipeline step; called only internally by whitelisted subagents via their own permission.task allowlists). 39 unique subagents + scout = 40 unique subagents + 2 primary agents = 42 unique agents total. Agent definition files: 42 in global `agents/` PLUS 3 local agent files of project `iOs_banking_info` (`audit_IPA`, `review_audit_IPA`, `orchestrator` — see §Local Project Agents). audit_IPA and review_audit_IPA live ONLY in the project-local `iOs_banking_info/.opencode/agents/` — they are absent from global `agents/`, from the opencode.json `agent` section, and from orchestrator routing (allowlist, plugin tables, severity/context lists), but they remain in `DOCS_WHITELIST` (11 entries) as project-local agents — available only when working in their project.
 
 ### Shared Utility Agents
 
@@ -1244,7 +1244,7 @@ Some agents are project-specific and live in `<project>/.opencode\agents\`. The 
 - `audit_IPA`, `review_audit_IPA` — iOS IPA audit agents for `iOs_banking_info` project
 - `orchestrator` — project-local agent definition for `iOs_banking_info` project
 
-These agents are available only when working in their respective projects. `audit_IPA` and `review_audit_IPA` are NOT in the global routing table, but both are in `DOCS_WHITELIST` (10 entries) as project-local `.md` editors.
+These agents are available only when working in their respective projects. `audit_IPA` and `review_audit_IPA` are NOT in the global routing table, but both are in `DOCS_WHITELIST` (11 entries) as project-local `.md` editors.
 
 ## 9. Plugin Hooks
 
@@ -1282,7 +1282,7 @@ Primary agents (orchestrator, plankestrator) follow a two-phase workflow:
 
 ### Documentation Edit Restriction
 
-Only the `DOCS_WHITELIST` agents (10 entries) can edit `.md` files: `docs-writer`, `docs-planner`, `plan-writer-simple`, `plan-writer-complex`, `research-writer-simple`, `research-writer-complex`, `plan-bug`, `dev-planner`, `review_audit_IPA`, `audit_IPA` (the last two are project-local agents of `iOs_banking_info`). All other agents (including implementation agents like dev-professor, worker, execute-bug) are blocked at the plugin level from modifying documentation — with the single exception of agent-DEFINITION files (see Agent-Definition Edit Exception below), which are not documentation.
+Only the `DOCS_WHITELIST` agents (11 entries) can edit `.md` files: `docs-writer`, `docs-planner`, `plan-writer-simple`, `plan-writer-complex`, `research-writer-simple`, `research-writer-complex`, `plan-bug`, `dev-planner`, `review_audit_IPA`, `audit_IPA`, `dev-reviewer` (`review_audit_IPA` and `audit_IPA` are project-local agents of `iOs_banking_info`). All other agents (including implementation agents like dev-professor, worker, execute-bug) are blocked at the plugin level from modifying documentation — with the single exception of agent-DEFINITION files (see Agent-Definition Edit Exception below), which are not documentation.
 
 **Enforcement:** plugin `ctx.tool.hook("execute.before")` checks `edit`/`write`/`patch` tool calls for `.md`/`.markdown` extensions and blocks non-whitelisted agents with explicit error message pointing to Auto-DOCS hook.
 

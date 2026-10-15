@@ -256,7 +256,8 @@ const DOCS_WHITELIST = [
   "plan-bug",
   "dev-planner",
   "review_audit_IPA",
-  "audit_IPA"
+  "audit_IPA",
+  "dev-reviewer"
 ]
 
 // ============================================================
