@@ -77,7 +77,9 @@ const VALID_VALUES: Record<string, Record<string, (string | null)[]>> = {
   },
   plankestrator: {
     agent: ["plankestrator"],
-    state: ["CLASSIFY", "EXECUTE", "REVIEW", "COMPLETE"],
+    // v11 (universal confirmation gate): AWAITING_CONFIRMATION / CANCELLED are now
+    // legal for plankestrator too (proposal turn / cancellation). state stays REQUIRED.
+    state: ["AWAITING_CONFIRMATION", "CLASSIFY", "EXECUTE", "REVIEW", "COMPLETE", "CANCELLED"],
     type: ["PLAN", "RESEARCH", "RESEARCH+PLAN", null],
     complexity: ["SIMPLE", "COMPLEX", null]
   }
@@ -168,6 +170,7 @@ let invalidJSON = false          // Phase 9.4  — JSON schema violation (incl. 
 let forbiddenIdentity = false    // Phase 9.5  — foreign identity claim ("I am plankestrator")
 let pipelineImmutable = false    // Phase 17.2 — pipeline changed after Turn 1
 let blockerStop = false          // Phase 14.3 — 3 blockers; NOT cleared by recovery (cumulative)
+let confirmationBypass = false   // v11 (1f) — executing-form Turn-1 lock without a confirmed proposal
 let violationDetail = ""         // detail text for the deferred THROW message
 
 // v6 (Phase 9.0б): dedup of NON-idempotent operations by messageID (streaming re-fires)
@@ -240,6 +243,25 @@ const MULTI_PHASE_TYPES = ["BUGFIX", "DEVOPS", "DEV", "DOCS"]
 const MULTI_PHASE_STATES = ["AWAITING_CONFIRMATION", "CANCELLED"]
 const DOCS_HOOK_CHAIN = ["docs-writer", "utility"]
 
+// v11 (F1): the delegation tool is "subagent" under OpenCode v2 and "task" under
+// v1 (the test harness still simulates the v1 name). Accept BOTH everywhere so
+// enforcement is identical on the live wire and in tests.
+const isTaskTool = (t: any): boolean => t === "subagent" || t === "task"
+
+// v11: auto-approve override — explicit user instruction to skip confirmation
+// round-trips for the whole session. Best-effort: requires user-role messages to
+// surface to the plugin (same caveat as the gate-clearing fallback, risk R1).
+const AUTO_APPROVE_PATTERNS: RegExp[] = [
+  /без подтверждени/i,        // без подтверждения / без подтверждений
+  /делай сразу/i,
+  /не спрашивай/i,
+  /не подтверждать/i,
+  /без вопросов/i,
+  /auto[- ]?approve/i,
+  /skip (?:the )?confirmation/i,
+  /don'?t ask/i,
+]
+
 // ============================================================
 // HARD BAN on .md / .markdown edits — only these agents may modify
 // documentation. Enforced in tool.execute.before BEFORE the depth-guard
@@ -284,6 +306,10 @@ const isAgentDefinitionPath = (p: string): boolean => {
 // surface user-role messages to plugins — risk R1, V-pilot-1 in Phase 4).
 let awaitingConfirmation = false
 let awaitingMsgId: string | null = null
+// v11 (universal confirmation gate): protocol state
+let confirmationDone = false          // an armed gate was cleared by a user response (either clearing branch)
+let autoApprove = false               // user override ("без подтверждений" / "делай сразу") detected
+let awaitingProposalType: string | null = null  // type of the armed proposal (MP-specific throw hint)
 
 // ============================================================
 // v7.1 (P0 event-shape fix, opencode 1.18.34) — message TEXT transport.
@@ -414,12 +440,21 @@ const client = {
 // ============================================================
 // Returns the v1-style hook map. Under v2 this is not consumed directly by the
 // loader — the default export below adapts it onto the v2 registration API.
-export const WorkflowEnforcement = async () => {
+export const WorkflowEnforcement = async (ctx?: any) => {
+  // v11 (test-compat): the v1 entry point received the plugin context (client, $)
+  // and the hook bodies logged through it. The v9 port dropped the parameter and
+  // routed logging through the internal facade (console fallback when v2Ctx is
+  // null). Re-accept the context here so the harness mock captures logs again;
+  // live v2 is unaffected — setup() sets v2Ctx to the real ctx BEFORE calling
+  // this function with no arguments. Both shapes are accepted: the v1 context
+  // ({ client: { app } }) and a bare client ({ app }).
+  if (ctx?.client?.app) v2Ctx = ctx.client
+  else if (ctx?.app) v2Ctx = ctx
   await client.app.log({
     body: {
       service: "workflow-enforcement",
       level: "info",
-      message: "Workflow enforcement plugin initialized (v9 — OpenCode v2 port)"
+      message: "Workflow enforcement plugin initialized (v11 — universal confirmation gate)"
     }
   })
 
@@ -489,6 +524,7 @@ export const WorkflowEnforcement = async () => {
         // NOT wipe the parent's state (same bug the guard was written for).
         identityMissing = pipelineMismatch = nextAgentMismatch = invalidJSON =
           forbiddenIdentity = pipelineImmutable = blockerStop = false
+        confirmationBypass = false
         violationDetail = ""
         pipelineState.clear()
         taskCallsPerTurn.clear()
@@ -505,6 +541,10 @@ export const WorkflowEnforcement = async () => {
         // v7 (Multi-Phase MVP): confirmation gate state (V-21)
         awaitingConfirmation = false
         awaitingMsgId = null
+        // v11 (universal confirmation gate): protocol state
+        confirmationDone = false
+        autoApprove = false
+        awaitingProposalType = null
         // v6 (Phase 13.2б): remember the top-level session ID for parallel-Task
         // attribution. childCheckData is in scope (defined above, before the guard).
         // If extraction fails (field names differ), topLevelSessionID stays null and
@@ -660,6 +700,7 @@ export const WorkflowEnforcement = async () => {
         if (suModeChanged || suAgentChanged) {
           identityMissing = pipelineMismatch = nextAgentMismatch = invalidJSON =
             forbiddenIdentity = pipelineImmutable = blockerStop = false
+          confirmationBypass = false
           violationDetail = ""
           pipelineState.clear()
           await client.app.log({
@@ -847,6 +888,22 @@ export const WorkflowEnforcement = async () => {
           taskCallsPerTurn.set(currentAgent, 0)
         }
 
+        // v11: AUTO-APPROVE OVERRIDE detection — scan USER message text only (never
+        // assistant — the model must not be able to self-approve). Idempotent. Must run
+        // BEFORE the finalized early-return below: user messages are never finalized on
+        // the 1.18.34 wire (no finish/time.completed).
+        if (msgRole === "user" && !autoApprove) {
+          const userText = String(message.content || "")
+          if (userText && AUTO_APPROVE_PATTERNS.some(p => p.test(userText))) {
+            autoApprove = true
+            awaitingConfirmation = false
+            awaitingMsgId = null
+            await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
+              message: "AUTO-APPROVE OVERRIDE detected in user message — confirmation gate disabled for this session",
+              extra: { agent: currentAgent } } })
+          }
+        }
+
         // v7 (Multi-Phase MVP): confirmation gate CLEARING. (a) explicit user-role
         // message (role pattern of the self-work guard below); (b) FALLBACK — any NEW
         // assistant messageID: the primary only wakes on user input or Task completion,
@@ -860,11 +917,13 @@ export const WorkflowEnforcement = async () => {
           if (gateRole === "user") {
             awaitingConfirmation = false
             awaitingMsgId = null
+            confirmationDone = true
             await client.app.log({ body: { service: "workflow-enforcement", level: "info",
               message: "USER RESPONSE RECEIVED — confirmation gate cleared" } })
           } else if (turnMsgId && turnMsgId !== awaitingMsgId) {
             awaitingConfirmation = false
             awaitingMsgId = null
+            confirmationDone = true
             await client.app.log({ body: { service: "workflow-enforcement", level: "info",
               message: "NEW ASSISTANT TURN after AWAITING — user reply implied (turn-based guarantee); gate cleared" } })
           }
@@ -1089,12 +1148,19 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
             // 9.0в would then mask the confirmation-gate message (T9) and break the
             // "AWAITING turn is VALID" design (T15b/T19). Single-phase semantics
             // (incl. OUT OF SCOPE type=null) are UNCHANGED (R4).
-            const mpEmptyShapeOk = currentAgent === "orchestrator" &&
-              String(jsonContent.type) === "MULTI_PHASE" &&
-              (jsonContent.state === "AWAITING_CONFIRMATION" ||
-               jsonContent.state === "CANCELLED" ||
-               ((jsonContent.state === null || jsonContent.state === undefined) &&
-                (jsonContent.next_agent === null || jsonContent.next_agent === undefined)))
+            // v11: legacy MULTI_PHASE shapes (AWAITING / CANCELLED / terminal state=null+next_agent=null)
+            // are preserved VERBATIM (T15b depends on the terminal clause — F3), plus the
+            // universal protocol: an AWAITING_CONFIRMATION / CANCELLED turn of ANY type
+            // (either primary) legally carries pipeline=[] + next_agent=null.
+            const mpEmptyShapeOk =
+              (currentAgent === "orchestrator" &&
+                String(jsonContent.type) === "MULTI_PHASE" &&
+                (jsonContent.state === "AWAITING_CONFIRMATION" ||
+                 jsonContent.state === "CANCELLED" ||
+                 ((jsonContent.state === null || jsonContent.state === undefined) &&
+                  (jsonContent.next_agent === null || jsonContent.next_agent === undefined)))) ||
+              ((jsonContent.state === "AWAITING_CONFIRMATION" || jsonContent.state === "CANCELLED") &&
+               (!pipeline || pipeline.length === 0))
             if ((currentAgent === "orchestrator" || currentAgent === "plankestrator") &&
                 jsonContent.state !== "COMPLETE" && !mpEmptyShapeOk &&
                 (!pipeline || pipeline.length === 0)) {
@@ -1210,25 +1276,30 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
           } else {
             hasOutputtedJSON.set(currentAgent, true)
 
-            // v7 (Multi-Phase MVP): confirmation gate ARMING — a VALID
-            // AWAITING_CONFIRMATION JSON arms the gate; Task calls are blocked until
-            // the user replies (direct throw in tool.execute.before — a throw here in
-            // message.updated would be inert). Idempotent assignments; the warn is
-            // deduped because message.updated re-fires per streaming chunk.
-            if (currentAgent === "orchestrator" && String(jsonContent.type) === "MULTI_PHASE" &&
+            // v11 (Universal Confirmation Gate): a VALID AWAITING_CONFIRMATION JSON from
+            // EITHER primary arms the gate for ANY type (previously orchestrator+MULTI_PHASE
+            // only). Task calls are blocked until the user replies (direct throw in
+            // tool.execute.before — a throw here would be inert). Idempotent assignments;
+            // the warn is deduped because message.updated re-fires per streaming chunk.
+            // autoApprove (user override) suppresses arming entirely (T36).
+            if (!autoApprove &&
+                (currentAgent === "orchestrator" || currentAgent === "plankestrator") &&
                 String(jsonContent.state) === "AWAITING_CONFIRMATION") {
               const alreadyArmed = awaitingConfirmation && awaitingMsgId === (turnMsgId || null)
               awaitingConfirmation = true
               awaitingMsgId = turnMsgId || null
+              awaitingProposalType = jsonContent.type != null ? String(jsonContent.type) : null
+              confirmationDone = false   // a fresh proposal requires a fresh confirmation (T37 edit round)
               if (!alreadyArmed) {
                 await client.app.log({ body: { service: "workflow-enforcement", level: "warn",
-                  message: "MULTI_PHASE AWAITING CONFIRMATION — Task calls blocked until the user replies",
-                  extra: { agent: currentAgent, msgId: turnMsgId } } })
+                  message: "AWAITING CONFIRMATION — Task calls blocked until the user replies",
+                  extra: { agent: currentAgent, msgId: turnMsgId, proposalType: awaitingProposalType } } })
               }
             }
-            // v7: CANCELLED — defensive disarm (normally already cleared by the new
-            // messageID in the gate-clearing block)
-            if (currentAgent === "orchestrator" && jsonContent?.state === "CANCELLED") {
+            // v11: CANCELLED — defensive disarm for BOTH primaries (normally already
+            // cleared by the new messageID in the gate-clearing block)
+            if ((currentAgent === "orchestrator" || currentAgent === "plankestrator") &&
+                jsonContent?.state === "CANCELLED") {
               awaitingConfirmation = false
               awaitingMsgId = null
             }
@@ -1240,6 +1311,7 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
             if (!v6FlagSetThisEvent) {
               pipelineMismatch = nextAgentMismatch = invalidJSON =
                 forbiddenIdentity = pipelineImmutable = false
+              confirmationBypass = false
               violationDetail = ""
             }
 
@@ -1272,7 +1344,11 @@ Claimed identity: ${String(jsonContent.agent)}. Identity cannot be changed mid-s
               // view-image) do NOT lock state — classification is not finished yet.
               // v8: + pipelineOk — an invalid pipeline must never be locked either
               // (deadlock fix; see the pipelineOk declaration above).
-              if (pipelineOk && newPipeline && newPipeline.length > 0 && !nextAgentIsAux) {
+              // v11: an AWAITING/CANCELLED turn NEVER locks pipeline state — a proposal may be
+              // edited/re-proposed (T37); locking it would poison step-tracking (effectiveStep
+              // off-by-one on the confirmed executing turn).
+              if (pipelineOk && newPipeline && newPipeline.length > 0 && !nextAgentIsAux &&
+                  jsonContent.state !== "AWAITING_CONFIRMATION" && jsonContent.state !== "CANCELLED") {
                 const nextIdx = jsonContent.next_agent
                   ? newPipeline.indexOf(String(jsonContent.next_agent)) : -1
                 // F-4: classification turns with complexity=null (DECOMPOSITION Turn A,
@@ -1719,7 +1795,7 @@ Use requires_docs_update: true to trigger Auto-DOCS hook.
       const callerIsPrimary = callerAgentName === "orchestrator" || callerAgentName === "plankestrator"
       const callerIsSubagent = callerAgentName !== "" && !callerIsPrimary
       if (callerIsSubagent || (activeTaskDepth > 0 && callerAgentName === "")) {
-        if (input.tool === "subagent") {
+        if (isTaskTool(input.tool)) {
           // v6 (Phase 13.2б): caller attribution — a parallel Task from the PRIMARY
           // (top-level session) is a violation; a nested delegation from a RUNNING
           // subagent (child session) is legitimate (research-writer-complex scout wave —
@@ -1762,7 +1838,7 @@ Primary agent dispatches EXACTLY ONE Task per turn and waits for the result.
       // with read-only restrictions enforced by OpenCode itself. Custom agent
       // routing tables and JSON-output requirements do NOT apply here.
       if (currentMode === "plan") {
-        const targetForLog = input.tool === "subagent"
+        const targetForLog = isTaskTool(input.tool)
           ? (((output as any)?.args?.agent ?? (output as any)?.args?.subagent_type)
             || ((input as any)?.args?.agent ?? (input as any)?.args?.subagent_type))
           : undefined
@@ -1817,13 +1893,14 @@ could run. Fix: re-issue a corrected message in the required order:
       // messageID → the gate is still armed. Placed AFTER gate 9.0в (deferred violations
       // take priority) and BEFORE the Phase 13.2 counter (a blocked call must not
       // consume the per-turn Task quota).
-      if (awaitingConfirmation && currentAgent === "orchestrator" && input.tool === "subagent") {
+      // v11: throw for BOTH primaries
+      if (awaitingConfirmation && (currentAgent === "orchestrator" || currentAgent === "plankestrator") && isTaskTool(input.tool)) {
         await client.app.log({ body: { service: "workflow-enforcement", level: "error",
           message: "CONFIRMATION GATE — Task blocked while AWAITING_CONFIRMATION",
           extra: { agent: currentAgent, awaitingMsgId } } })
         throw new Error(`
-⛔ AWAITING USER CONFIRMATION (MULTI_PHASE):
-You presented a phase plan with state="AWAITING_CONFIRMATION". Do NOT dispatch any
+⛔ CONFIRMATION SKIPPED — ${currentAgent} proposal requires user confirmation before dispatching subagents.
+AWAITING USER CONFIRMATION: You presented a phase plan with state="AWAITING_CONFIRMATION". Do NOT dispatch any
 Task until the USER replies. Your turn ended with the plan + ack line.
 On the user's approval: identity line → JSON (state: null, current_phase: "P1",
 pipeline = P1's chain, next_agent = pipeline[0]) → ONE Task call.
@@ -1836,7 +1913,7 @@ pipeline = P1's chain, next_agent = pipeline[0]) → ONE Task call.
       // scout wave is legitimate). Turn boundary = a NEW primary message (13.3 dedup by
       // messageID). The counter increments only for allowed calls; calls blocked by
       // downstream gates (JSON-before-Task, routing) reset with the next message anyway.
-      if (input.tool === "subagent" &&
+      if (isTaskTool(input.tool) &&
           (currentAgent === "orchestrator" || currentAgent === "plankestrator")) {
         // v6 (advisor Note 3 fix): the per-turn counter is meaningful ONLY when
         // messageID extraction works — the 13.3 turn-boundary reset keys on the
@@ -1865,7 +1942,7 @@ identity line → JSON → ONE Task call → ack.
       }
 
       // NEW: Track first Task call for primary agents
-      if (input.tool === "subagent" && (currentAgent === "orchestrator" || currentAgent === "plankestrator")) {
+      if (isTaskTool(input.tool) && (currentAgent === "orchestrator" || currentAgent === "plankestrator")) {
         primaryAgentFirstTaskCall.set(currentAgent, true)
       }
 
@@ -1927,7 +2004,7 @@ Fix: Identity line → JSON block → ONE Task call with next_agent from your ro
       // (bash, edit, write, webfetch, todowrite, question) — those are worker/
       // specialist tools. If something bypasses the frontmatter (opencode.json
       // override, MCP tool added later, future tool), this runtime gate catches it.
-      const PRIMARY_AGENT_ALLOWED_TOOLS = new Set(["subagent", "read", "glob", "grep"])
+      const PRIMARY_AGENT_ALLOWED_TOOLS = new Set(["subagent", "task", "read", "glob", "grep"])
       if (
         identityLocked &&
         (lockedAgentName === "orchestrator" || lockedAgentName === "plankestrator") &&
@@ -2096,7 +2173,7 @@ Identity line → JSON block → Task call with next_agent from your routing tab
       //     which means unknown agents proceed without enforcement
       //
       // Kept as a hint-only diagnostic. NO state mutation:
-      if (!currentAgent && input.tool === "subagent") {
+      if (!currentAgent && isTaskTool(input.tool)) {
         const targetAgent = ((output as any)?.args?.agent ?? (output as any)?.args?.subagent_type)
           || ((input as any)?.args?.agent ?? (input as any)?.args?.subagent_type)
         if (targetAgent) {
@@ -2119,14 +2196,17 @@ Identity line → JSON block → Task call with next_agent from your routing tab
       }
 
       // Track this tool call in the workflow log
-      const targetForLog = input.tool === "subagent"
+      const targetForLog = isTaskTool(input.tool)
         ? (((output as any)?.args?.agent ?? (output as any)?.args?.subagent_type)
           || ((input as any)?.args?.agent ?? (input as any)?.args?.subagent_type))
         : undefined
 
       workflowSteps.push({
         timestamp,
-        tool: input.tool,
+        // v11 (F1): normalize the delegation tool name so downstream filters
+        // (plankestrator pipeline-start detection in the INSPECTION GATE) keep
+        // matching a single canonical spelling for both v1/v2 names.
+        tool: isTaskTool(input.tool) ? "subagent" : String(input.tool),
         agent: currentAgent || "unknown",
         target: targetForLog
       })
@@ -2206,7 +2286,7 @@ Direct execution without classification violates the routing contract.
       }
 
       // Task tool requires JSON (classification must come first)
-      if (input.tool === "subagent") {
+      if (isTaskTool(input.tool)) {
         const AUXILIARY_TASK_TARGETS = [...IDENTITY_PROBE_AGENTS, "view-image"]
         const agentJSONStatus = hasOutputtedJSON.get(currentAgent) ?? false
         if (!agentJSONStatus && targetAgent && !AUXILIARY_TASK_TARGETS.includes(targetAgent)) {
@@ -2227,7 +2307,7 @@ This is enforced by the workflow-enforcement plugin.
       }
 
       // Only enforce routing on "subagent" tool calls (agent delegation)
-      if (input.tool !== "subagent") return
+      if (!isTaskTool(input.tool)) return
 
       // v6 (Phase 14.2): rework loop max 3 (orchestrator.md SEVERITY RULES: "if a blocker
       // persists after the 3rd rework iteration → STOP and report failure to the user").
@@ -2371,7 +2451,7 @@ Plankestrator handles: PLAN, RESEARCH, RESEARCH+PLAN
     "tool.execute.after": async (input, output) => {
       // v4: Task-субагент завершён (успешно или с ошибкой — after-хук fires в обоих
       // случаях, см. success-флаг ниже) → вернуть enforcement в родительскую сессию.
-      if (input.tool === "subagent" && activeTaskDepth > 0) {
+      if (isTaskTool(input.tool) && activeTaskDepth > 0) {
         activeTaskDepth = Math.max(0, activeTaskDepth - 1)
         subagentStack.pop()
       }
@@ -3033,10 +3113,15 @@ function validateJSONOutput(json: any, agent: string): {valid: boolean, errors: 
       if (json.current_phase == null) errors.push(`MULTI_PHASE executing turn requires current_phase`)
     }
   }
-  // v7: state is MULTI_PHASE-only for orchestrator (single-phase turns never carry it;
-  // plankestrator has its own state enum — untouched)
-  if (agent === "orchestrator" && json.state != null && String(json.type) !== "MULTI_PHASE") {
-    errors.push(`state field is only valid with type=MULTI_PHASE (got type=${json.type})`)
+  // v11: state is UNIVERSAL for orchestrator — AWAITING_CONFIRMATION / CANCELLED are
+  // legal with ANY type (universal confirmation protocol), no longer MULTI_PHASE-only.
+  // The enum itself is enforced by the VALID_VALUES loop below; this check only yields
+  // a clearer error for out-of-enum values. plankestrator has its OWN state enum
+  // (VALID_VALUES.plankestrator — incl. CLASSIFY/EXECUTE/REVIEW/COMPLETE) and MUST
+  // NOT be checked here (F2).
+  if (agent === "orchestrator" && json.state != null &&
+      !MULTI_PHASE_STATES.includes(String(json.state))) {
+    errors.push(`Invalid state value: ${json.state}. Must be AWAITING_CONFIRMATION, CANCELLED, or null`)
   }
 
   // Check valid values

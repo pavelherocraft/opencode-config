@@ -158,6 +158,16 @@ function orchMsg(jsonObj, { identity = true, ack } = {}) {
     '```json\n' + JSON.stringify(jsonObj) + '\n```\n' + ackLine
 }
 
+/** Сообщение plankestrator: identity line + ```json``` + ack-строка.
+ *  ВАЖНО: content НЕ должен содержать FORBIDDEN_VOCAB.plankestrator
+ *  ("I am orchestrator", "bugfix-triage", "execute-bug", "devops-agent",
+ *  "consistency-checker") и SELF_WORK_MARKERS.plankestrator
+ *  ("## Findings", "Executive Summary", "## Выводы", ...). */
+function plkMsg(jsonObj, { ack } = {}) {
+  return '✓ IDENTITY VERIFIED: I am plankestrator. I am NOT orchestrator.\n' +
+    '```json\n' + JSON.stringify(jsonObj) + '\n```\n' + (ack !== undefined ? ack : '')
+}
+
 /** tool.execute.after для task — ОБЯЗАТЕЛЕН после успешного tryTask(keepDepth),
  *  иначе activeTaskDepth>0 молча отключает enforcement до конца сессии. */
 async function endTask(args) {
@@ -182,11 +192,14 @@ function reviewerMsg(agent, severity, text) {
 }
 
 /** Probe gate 9.0в: 'clean' | текст throw (CONSUME-ONCE: флаг сбрасывается!).
- *  После первого успешного Task read блокирован — это НЕ violation. */
+ *  После первого успешного Task read блокирован — это НЕ violation.
+ *  (ANALYSIS AFTER DELEGATION — read-lock, стоит ПОСЛЕ гейта 9.0в, поэтому
+ *  deferred-нарушения probe по-прежнему возвращает раньше.) */
 async function probeGate() {
   const r = await tryTool('read')
   if (r.ok) return 'clean'
   if (r.message.includes('PRIMARY AGENT FORBIDDEN')) return 'clean'
+  if (r.message.includes('ANALYSIS AFTER DELEGATION')) return 'clean'
   return r.message
 }
 
@@ -203,7 +216,7 @@ const ALLOWED = ['read', 'glob', 'grep']
 // ============================================================================
 const ROW1 = ['bugfix-triage']                                             // BUGFIX-null-null (+variants)
 const ROW1_SIMPLE = ['bugfix-triage', 'worker', 'utility']                 // BUGFIX variant SIMPLE
-const ROW5 = ['dev-planner', 'dev-professor', 'advisor', 'dev-reviewer', 'consistency-checker', 'utility'] // DEV-COMPLEX-false
+const ROW5 = ['dev-planner', 'dev-professor', 'advisor', 'dev-reviewer', 'rework', 'consistency-checker', 'utility'] // DEV-COMPLEX-false (canonical, incl. rework)
 const DEVOPS_ROW = ['devops-agent', 'devops-reviewer']                     // DEVOPS-null-null
 const HOOK = ['docs-writer', 'utility']                                    // DOCS_HOOK_CHAIN / DOCS-SIMPLE-any
 
@@ -357,21 +370,24 @@ await newSession()
 }
 
 // ============================================================================
-// T11 — state field with type≠MULTI_PHASE → INVALID JSON (not gate-armed)
+// T11 — v11 UNIVERSAL CONFIRMATION GATE: state="AWAITING_CONFIRMATION" is
+//       valid for ANY type (previously MULTI_PHASE-only) AND arms the gate
+//       for non-MULTI_PHASE types — Task calls are blocked until the reply.
 // ============================================================================
 await newSession()
 {
   await sendMessage('assistant', orchMsg({
     agent: 'orchestrator', type: 'DEV', complexity: 'SIMPLE', plan_exists: false, plan_source: null,
-    goal: 'single dev', next_agent: 'worker', pipeline: ['worker', 'utility'],
+    goal: 'single dev', next_agent: null, pipeline: ['worker', 'utility'],
     state: 'AWAITING_CONFIRMATION',
   }))
-  check('T11b confirmation gate NOT armed for non-MULTI_PHASE',
-    !hasLog('Task calls blocked until the user replies'), logs.join(' | '))
-  const p = await probeGate()
-  check('T11a INVALID JSON via deferred gate',
-    p !== 'clean' && p.includes('INVALID JSON OUTPUT') && p.includes('state field is only valid with type=MULTI_PHASE'),
-    p === 'clean' ? 'gate clean (state accepted — BUG)' : p.split('\n')[0])
+  check('T11a AWAITING_CONFIRMATION valid for DEV type (no INVALID JSON; probe clean)',
+    !hasLog('INVALID JSON OUTPUT') && await probeGate() === 'clean', logs.join(' | '))
+  const r = await tryTask('worker')
+  check('T11b gate armed for non-MULTI_PHASE — Task calls blocked (CONFIRMATION SKIPPED)',
+    hasLog('Task calls blocked until the user replies') &&
+      !r.ok && r.message.includes('CONFIRMATION SKIPPED'),
+    r.ok ? 'NOT blocked' : r.message.split('\n')[0])
 }
 
 // ============================================================================
@@ -912,6 +928,219 @@ await newSession()
   check('T30b unknown row key rejected (unknown row(s); Task BLOCKED)',
     !r.ok && r.message.includes('PIPELINE VALIDATION FAILED') && r.message.includes('unknown row(s)'),
     r.ok ? 'NOT blocked' : r.message.split('\n')[0])
+}
+
+// ============================================================================
+// T31 — v11 universal gate (orchestrator): proposal → AWAITING_CONFIRMATION →
+//       user approves → executing turn dispatches OK
+// ============================================================================
+await newSession()
+{
+  await sendMessage('assistant', orchMsg({
+    agent: 'orchestrator', type: 'DEV', complexity: 'SIMPLE', plan_exists: false, plan_source: null,
+    goal: 'add feature Y', next_agent: null, pipeline: ['worker', 'utility'],
+    state: 'AWAITING_CONFIRMATION',
+  }))
+  check('T31a gate armed for the orchestrator proposal',
+    hasLog('Task calls blocked until the user replies'), logs.join(' | '))
+  await sendMessage('user', 'да, делай')
+  check('T31b USER RESPONSE clears the gate',
+    hasLog('USER RESPONSE RECEIVED — confirmation gate cleared'), logs.join(' | '))
+  await sendMessage('assistant', orchMsg({ agent: 'orchestrator', type: 'DEV', complexity: 'SIMPLE',
+    plan_exists: false, plan_source: null, goal: 'add feature Y', next_agent: 'worker',
+    pipeline: ['worker', 'utility'] }))
+  check('T31c executing turn valid (no INVALID JSON / PIPELINE VALIDATION FAILED)',
+    !hasLog('INVALID JSON OUTPUT') && !hasLog('PIPELINE VALIDATION FAILED'), logs.join(' | '))
+  const r = await tryTask('worker')
+  check('T31d dispatch after approval OK', r.ok, r.message.split('\n')[0])
+}
+
+// ============================================================================
+// T32 — orchestrator proposal → Task BEFORE the user confirms → throw
+//       CONFIRMATION SKIPPED
+// ============================================================================
+await newSession()
+{
+  await sendMessage('assistant', orchMsg({
+    agent: 'orchestrator', type: 'BUGFIX', complexity: null, plan_exists: null, plan_source: null,
+    goal: 'fix bug X', next_agent: null, pipeline: ['bugfix-triage'],
+    state: 'AWAITING_CONFIRMATION',
+  }))
+  check('T32a gate armed for the BUGFIX proposal',
+    hasLog('Task calls blocked until the user replies'), logs.join(' | '))
+  const r = await tryTask('bugfix-triage')
+  check('T32b Task before confirm throws CONFIRMATION SKIPPED',
+    !r.ok && r.message.includes('CONFIRMATION SKIPPED'),
+    r.ok ? 'NOT blocked' : r.message.split('\n')[0])
+}
+
+// ============================================================================
+// T33 — v11 universal gate (plankestrator): proposal → AWAITING_CONFIRMATION →
+//       approve → state:"CLASSIFY" turn dispatches OK
+// ============================================================================
+await newSession('plankestrator')
+{
+  await sendMessage('assistant', plkMsg({
+    agent: 'plankestrator', state: 'AWAITING_CONFIRMATION', type: 'PLAN', complexity: 'SIMPLE',
+    goal: 'draft the migration plan', next_agent: null,
+    pipeline: ['plan-writer-simple', 'plan-reviewer-simple'],
+  }))
+  check('T33a gate armed for the plankestrator proposal',
+    hasLog('Task calls blocked until the user replies'), logs.join(' | '))
+  check('T33b proposal JSON valid (no INVALID JSON OUTPUT)',
+    !hasLog('INVALID JSON OUTPUT'), logs.join(' | '))
+  await sendMessage('user', 'да, план одобрен')
+  check('T33c USER RESPONSE clears the gate',
+    hasLog('USER RESPONSE RECEIVED — confirmation gate cleared'), logs.join(' | '))
+  await sendMessage('assistant', plkMsg({
+    agent: 'plankestrator', state: 'CLASSIFY', type: 'PLAN', complexity: 'SIMPLE',
+    goal: 'draft the migration plan', next_agent: 'plan-writer-simple',
+    pipeline: ['plan-writer-simple', 'plan-reviewer-simple'],
+  }, { ack: '→ DELEGATED to plan-writer-simple for: draft the migration plan' }))
+  check('T33d state=CLASSIFY turn valid (no INVALID JSON / PIPELINE VALIDATION FAILED)',
+    !hasLog('INVALID JSON OUTPUT') && !hasLog('PIPELINE VALIDATION FAILED'), logs.join(' | '))
+  const r = await tryTask('plan-writer-simple')
+  check('T33e dispatch after approval OK', r.ok, r.message.split('\n')[0])
+}
+
+// ============================================================================
+// T34 — plankestrator proposal → Task BEFORE the user confirms → throw
+//       CONFIRMATION SKIPPED
+// ============================================================================
+await newSession('plankestrator')
+{
+  await sendMessage('assistant', plkMsg({
+    agent: 'plankestrator', state: 'AWAITING_CONFIRMATION', type: 'PLAN', complexity: 'SIMPLE',
+    goal: 'draft the migration plan', next_agent: null,
+    pipeline: ['plan-writer-simple', 'plan-reviewer-simple'],
+  }))
+  check('T34a gate armed for the plankestrator proposal',
+    hasLog('Task calls blocked until the user replies'), logs.join(' | '))
+  const r = await tryTask('plan-writer-simple')
+  check('T34b Task before confirm throws CONFIRMATION SKIPPED',
+    !r.ok && r.message.includes('CONFIRMATION SKIPPED'),
+    r.ok ? 'NOT blocked' : r.message.split('\n')[0])
+}
+
+// ============================================================================
+// T35 — DECOMPOSITION Turn A (complexity: null, single-agent) → EXEMPT:
+//       no AWAITING_CONFIRMATION round-trip is needed, the gate stays disarmed
+// ============================================================================
+await newSession()
+{
+  await sendMessage('assistant', orchMsg({ agent: 'orchestrator', type: 'DEV', complexity: null,
+    plan_exists: false, plan_source: null, goal: 'add feature Y', next_agent: 'dev-planner',
+    pipeline: ['dev-planner'] }))
+  check('T35a gate NOT armed (no AWAITING log)',
+    !hasLog('Task calls blocked until the user replies'), logs.join(' | '))
+  check('T35b turn clean (no deferred violations)', await probeGate() === 'clean', logs.join(' | '))
+  const r = await tryTask('dev-planner')
+  check('T35c Turn A dispatch without confirmation OK', r.ok, r.message.split('\n')[0])
+}
+
+// ============================================================================
+// T36 — auto-approve override ("без подтверждений") → AWAITING_CONFIRMATION
+//       proposal is EXEMPT: the gate never arms, Task calls stay allowed
+// ============================================================================
+await newSession()
+{
+  await sendMessage('user', 'Работай без подтверждений: делай сразу, не спрашивай.')
+  check('T36a AUTO-APPROVE OVERRIDE detected',
+    hasLog('AUTO-APPROVE OVERRIDE detected in user message'), logs.join(' | '))
+  await sendMessage('assistant', orchMsg({
+    agent: 'orchestrator', type: 'DEV', complexity: 'SIMPLE', plan_exists: false, plan_source: null,
+    goal: 'add feature Y', next_agent: null, pipeline: ['worker', 'utility'],
+    state: 'AWAITING_CONFIRMATION',
+  }))
+  check('T36b gate NOT armed under auto-approve',
+    !hasLog('Task calls blocked until the user replies'), logs.join(' | '))
+  const r = await tryTask('worker')
+  check('T36c Task allowed under auto-approve', r.ok, r.message.split('\n')[0])
+}
+
+// ============================================================================
+// T37 — edit round (re-propose): an AWAITING/CANCELLED turn NEVER locks the
+//       pipeline — a fresh proposal may CHANGE it; each proposal re-arms the
+//       gate (fresh confirmation required)
+// ============================================================================
+await newSession()
+{
+  await sendMessage('assistant', orchMsg({
+    agent: 'orchestrator', type: 'DEV', complexity: 'SIMPLE', plan_exists: false, plan_source: null,
+    goal: 'add feature Y', next_agent: null, pipeline: ['worker', 'utility'],
+    state: 'AWAITING_CONFIRMATION',
+  }))
+  await sendMessage('assistant', orchMsg({
+    agent: 'orchestrator', type: 'DEV', complexity: 'COMPLEX', plan_exists: false, plan_source: null,
+    goal: 'add feature Y', next_agent: null, pipeline: ROW5,
+    state: 'AWAITING_CONFIRMATION',
+  }))
+  check('T37a re-proposal re-arms the gate (2 arming logs)',
+    countLog('Task calls blocked until the user replies') >= 2, logs.join(' | '))
+  check('T37b pipeline NOT locked by a proposal turn (no IMMUTABLE, no lock, probe clean)',
+    !hasLog('PIPELINE IMMUTABLE') && !__testPipelineState?.get('orchestrator') &&
+      await probeGate() === 'clean', logs.join(' | '))
+  await sendMessage('user', 'подтверждаю')
+  await sendMessage('assistant', orchMsg({ agent: 'orchestrator', type: 'DEV', complexity: 'COMPLEX',
+    plan_exists: false, plan_source: null, goal: 'add feature Y', next_agent: 'dev-planner',
+    pipeline: ROW5 }))
+  const r = await tryTask('dev-planner')
+  check('T37c CHANGED pipeline dispatches OK after approval', r.ok, r.message.split('\n')[0])
+}
+
+// ============================================================================
+// T38 — CANCELLED (non-MULTI_PHASE): empty pipeline is legal for ANY type,
+//       the confirmation gate is disarmed — the session is over
+// ============================================================================
+await newSession()
+{
+  await sendMessage('assistant', orchMsg({
+    agent: 'orchestrator', type: 'DEV', complexity: 'SIMPLE', plan_exists: false, plan_source: null,
+    goal: 'add feature Y', next_agent: null, pipeline: ['worker', 'utility'],
+    state: 'AWAITING_CONFIRMATION',
+  }))
+  const r1 = await tryTask('worker')
+  check('T38a gate armed before cancellation (CONFIRMATION SKIPPED)',
+    !r1.ok && r1.message.includes('CONFIRMATION SKIPPED'),
+    r1.ok ? 'NOT blocked' : r1.message.split('\n')[0])
+  await sendMessage('user', 'отмена')
+  await sendMessage('assistant', orchMsg({
+    agent: 'orchestrator', type: 'DEV', complexity: 'SIMPLE', plan_exists: false, plan_source: null,
+    goal: 'add feature Y', next_agent: null, pipeline: [], state: 'CANCELLED',
+  }))
+  check('T38b CANCELLED empty pipeline valid (no INVALID JSON / PIPELINE VALIDATION FAILED)',
+    !hasLog('INVALID JSON OUTPUT') && !hasLog('PIPELINE VALIDATION FAILED'), logs.join(' | '))
+  check('T38c probe clean after CANCELLED', await probeGate() === 'clean', logs.join(' | '))
+  const r2 = await tryTask('worker')
+  check('T38d gate disarmed by CANCELLED (no CONFIRMATION SKIPPED)',
+    r2.ok || !r2.message.includes('CONFIRMATION SKIPPED'),
+    r2.ok ? 'allowed' : r2.message.split('\n')[0])
+}
+
+// ============================================================================
+// T39 — MULTI_PHASE regression: the original T9–T10 flow (proposal → approve →
+//       dispatch) must keep passing under the v11 universal gate
+// ============================================================================
+await newSession()
+{
+  await sendMessage('assistant', orchMsg(mp({ state: 'AWAITING_CONFIRMATION' }),
+    { ack: '→ PHASE PLAN AWAITING CONFIRMATION (2 phases)' }))
+  check('T39a MP proposal arms the gate',
+    hasLog('Task calls blocked until the user replies'), logs.join(' | '))
+  const r1 = await tryTask('bugfix-triage')
+  check('T39b MP Task before confirm blocked',
+    !r1.ok && (r1.message.includes('CONFIRMATION SKIPPED') ||
+      r1.message.includes('AWAITING USER CONFIRMATION')),
+    r1.ok ? 'NOT blocked' : r1.message.split('\n')[0])
+  await sendMessage('user', 'да')
+  check('T39c USER RESPONSE clears the gate',
+    hasLog('USER RESPONSE RECEIVED — confirmation gate cleared'), logs.join(' | '))
+  await sendMessage('assistant', orchMsg(mp({ current_phase: 'P1', pipeline: ROW1, next_agent: 'bugfix-triage' }),
+    { ack: '→ PHASE 1/2 (P1): DELEGATED to bugfix-triage for: fix bug X' }))
+  check('T39d MP executing turn valid (no INVALID JSON / PIPELINE VALIDATION FAILED)',
+    !hasLog('INVALID JSON OUTPUT') && !hasLog('PIPELINE VALIDATION FAILED'), logs.join(' | '))
+  const r2 = await tryTask('bugfix-triage')
+  check('T39e MP dispatch after approval OK', r2.ok, r2.message.split('\n')[0])
 }
 
 console.log('')
