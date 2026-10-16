@@ -498,6 +498,32 @@ Selects the TYPE (BUGFIX / DEVOPS / DEV / DOCS / null) BEFORE the complexity rul
 | Multi-phase: user silence / ambiguous reply after the plan | Fail-closed: NOT a confirmation; re-show the plan (max 2 edit rounds), then CANCELLED |
 | Multi-phase: phase FAILED | Fail-fast: downstream phases SKIPPED, report to the user; resume via PHASE_STATE.md (new session preferred) |
 
+### Pipeline Confirmation Protocol (universal, all pipelines)
+
+**Mandatory step:** after building the pipeline, the primary agent MUST output the proposal and WAIT for user confirmation before calling any subagent. This applies to ALL pipeline types (BUGFIX, DEV, DEVOPS, DOCS, MULTI_PHASE) and both primaries (orchestrator, plankestrator).
+
+**Process:**
+1. Output JSON with `state: "AWAITING_CONFIRMATION"`, `next_agent: null`, `pipeline` filled (non-MP) or `[]` (MP)
+2. Output human-readable pipeline description (type, steps, rationale)
+3. STOP — do NOT call subagent tool
+4. Wait for user reply:
+   - "yes"/"ok"/"подтверждаю"/"да" → proceed: set `state: null` (orchestrator) or `state: "CLASSIFY"` (plankestrator), `next_agent: pipeline[0]`, call subagent
+   - Edits/suggestions → re-propose with changes (max 2 edit rounds)
+   - "no"/"cancel"/"отмена" → set `state: "CANCELLED"`, `pipeline: []`, `next_agent: null`; session over
+   - Ambiguous/silence → re-ask (fail-closed)
+
+**Doubt handling:** if classification is ambiguous (type/complexity unclear, T0 boundary, DOCS SIMPLE/DEEP), propose 2–3 variants:
+- First variant = recommended (with rationale)
+- JSON carries the recommended pipeline
+- User picks by letter ("A", "B") or describes preference
+
+**Exemptions** (no confirmation needed):
+- DECOMPOSITION Turn A (helper call, complexity: null)
+- MULTI_PHASE resume (continuation after barrier)
+- Auto-approve override in original request ("без подтверждений", "делай сразу")
+
+**Anti-bypass:** this rule is enforced by plugin (direct throw in `tool.execute.before`). Prompt alone is insufficient — the plugin blocks any subagent call without prior confirmed proposal. The `question` tool is NOT used (`question: deny`); confirmation = plain text reply.
+
 ### Multi-Phase Pipelines (MVP — linear chain, 2–3 phases, user-confirmed)
 
 **Definition.** A MULTI_PHASE session executes a SEQUENCE of phases for ONE request. A **phase** = one existing PIPELINE TABLE row (1–8) with its own `(type, complexity, plan_exists)`. Phases are strictly sequential (one phase at a time; parallel waves inside subagents are unaffected — Scope rule above). The phase plan is fixed BEFORE execution starts and is confirmed by the user. Each phase produces a Phase Result envelope (below) consumed by the next phase.
@@ -588,7 +614,7 @@ Turn 1: JSON {type: "MULTI_PHASE", state: "AWAITING_CONFIRMATION",
 
 | Situation | Resolution |
 |-----------|------------|
-| The plan collapsed to 1 phase | Degrade to a regular single-phase pipeline WITHOUT confirmation |
+| The plan collapsed to 1 phase | Degrade to a regular single-phase pipeline — the universal confirmation protocol STILL applies (a single-phase proposal, non-MULTI_PHASE shape) |
 | All phases of the same type | NOT multi-phase → SUPERCOMPLEX or one pipeline |
 | One of the phases is a plan/research deliverable | OUT OF SCOPE entirely (T0 scope-guard) |
 | Auto-DOCS hook inside multi-phase | The hook fires PER PHASE (after each BUGFIX/DEV phase), as per-pipeline today |
@@ -603,7 +629,7 @@ Turn 1: JSON {type: "MULTI_PHASE", state: "AWAITING_CONFIRMATION",
 
 ### Custom Pipeline Composition
 
-When the user explicitly requests a sequential combination (or phases are tightly coupled), the orchestrator may emit `pipeline_source_rows` (≥2 canonical row keys) alongside `pipeline` = the exact concatenation of those rows' chains; `type`/`complexity`/`plan_exists` carry the FIRST row's values. No confirmation round-trip: the explicit request is the mandate. The plugin validates the composition fail-closed (unknown row keys and any deviation from the concatenation are rejected). Boundary: MULTI_PHASE remains the structured path (phases[] + confirmation + envelopes) for 2+ distinct deliverables; the default is a single canonical row.
+When the user explicitly requests a sequential combination (or phases are tightly coupled), the orchestrator may emit `pipeline_source_rows` (≥2 canonical row keys) alongside `pipeline` = the exact concatenation of those rows' chains; `type`/`complexity`/`plan_exists` carry the FIRST row's values. The explicit request IS the mandate for composition, but the universal confirmation protocol still applies (the composed pipeline is proposed with state: "AWAITING_CONFIRMATION" before the first Task call). The plugin validates the composition fail-closed (unknown row keys and any deviation from the concatenation are rejected). Boundary: MULTI_PHASE remains the structured path (phases[] + confirmation + envelopes) for 2+ distinct deliverables; the default is a single canonical row.
 
 ### DEV SIMPLE
 
@@ -884,8 +910,9 @@ The v2 hook event natively carries an `agent` field — this is the ONLY reliabl
 | `goal` | string | one sentence description |
 | `next_agent` | string \| null | agent name from whitelist or `null` |
 | `pipeline` | string[] | array of agent names (each from the primary's whitelist — see §2 Pipeline Notation) or `[]` |
+| `state` | string \| null | `"AWAITING_CONFIRMATION"`, `"CANCELLED"`, `null`/absent (universal) |
 
-**Conditional fields (MULTI_PHASE only):** `state`, `phases`, `current_phase` — REQUIRED when `type: "MULTI_PHASE"`, ABSENT otherwise (backward compatible; the plugin enforces conditionally in validateJSONOutput).
+**Universal field:** `state` (`"AWAITING_CONFIRMATION"` \| `"CANCELLED"` \| null/absent) — present on EVERY turn (any type), per "Pipeline Confirmation Protocol". **Conditional fields (MULTI_PHASE only):** `phases`, `current_phase` — REQUIRED when `type: "MULTI_PHASE"`, ABSENT otherwise (backward compatible; the plugin enforces conditionally in validateJSONOutput).
 
 ### Multi-Phase Fields (orchestrator)
 
@@ -923,7 +950,7 @@ Conditional on `type: "MULTI_PHASE"` — absent in all other turns (backward com
 | Field | Type | Valid Values |
 |-------|------|--------------|
 | `agent` | string | `"plankestrator"` |
-| `state` | string | `"CLASSIFY"`, `"EXECUTE"`, `"REVIEW"`, `"COMPLETE"` |
+| `state` | string | `"AWAITING_CONFIRMATION"`, `"CLASSIFY"`, `"EXECUTE"`, `"REVIEW"`, `"COMPLETE"`, `"CANCELLED"` |
 | `type` | string \| null | `"PLAN"`, `"RESEARCH"`, `"RESEARCH+PLAN"`, `null` |
 | `complexity` | string \| null | `"SIMPLE"`, `"COMPLEX"`, `null` |
 | `goal` | string | one sentence description |
@@ -1263,7 +1290,7 @@ The workflow-enforcement plugin (OpenCode v2 API) implements the following lifec
 
 ### Primary Agent Workflow
 
-Primary agents (orchestrator, plankestrator) follow a two-phase workflow:
+Primary agents (orchestrator, plankestrator) follow a three-phase workflow:
 
 **Phase 1: Analysis & Classification**
 - Use `read`/`grep`/`glob` to analyze the task (understand scope, dependencies, complexity)
@@ -1271,12 +1298,11 @@ Primary agents (orchestrator, plankestrator) follow a two-phase workflow:
 - Custom pipelines allowed (e.g., BUGFIX + DEV + DEVOPS in sequence)
 - **Critical:** agent functions must NOT mix within a phase
 
-**Phase 2: JSON Output & Execution**
-- Output JSON with classification (`type`, `complexity`, `pipeline`, `goal`)
-- Call Task tool with the first agent from pipeline
-- Subsequent turns: output JSON with `next_agent`, call Task tool
+**Phase 2: Proposal & Confirmation** — output `state: "AWAITING_CONFIRMATION"`, `next_agent: null`, filled `pipeline` + human-readable description; STOP until user replies (confirmation gate blocks `task` tool calls). User may approve, edit, or reject (→ `state: "CANCELLED"`). See "Pipeline Confirmation Protocol" (§2).
 
-**Enforcement:** plugin blocks `edit`/`write`/`bash`/`patch`/`task` until JSON is emitted. Analysis tools (`read`/`grep`/`glob`) remain available throughout.
+**Phase 3: JSON Output & Execution** — executing form (`state: null`; orchestrator → `next_agent: pipeline[0]`; plankestrator → `state: "CLASSIFY"`).
+
+**Enforcement:** plugin blocks `edit`/`write`/`bash`/`patch`/`task` until JSON is emitted. Analysis tools (`read`/`grep`/`glob`) remain available throughout. Until the user confirms, `task` stays blocked; `question` remains `deny`.
 
 **Plankestrator specialization:** CLASSIFY ONLY — does not write plans itself, only classifies tasks and delegates to writer/reviewer agents.
 
